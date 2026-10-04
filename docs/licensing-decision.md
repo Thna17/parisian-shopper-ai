@@ -2,9 +2,15 @@
 
 **Project:** Parisian Shopper AI Telegram Content System  
 **Prepared:** 2026-10-04  
-**Gate status:** **BLOCKED — management/licensing decision required before application implementation**
+**Gate status:** **RESOLVED — management approved Option C on 2026-10-04**
 
 > This document is an engineering and planning analysis, not legal advice. It separates confirmed repository facts from technical interpretation and identifies issues that require management and qualified legal review.
+
+## Decision resolution
+
+Management selected **Option C — Clean-room Parisian Shopper application**. Postiz and the repositories under `/research` are research references only; their source code is not an implementation input. [ADR-001](architecture-decisions/ADR-001-open-source-foundation.md) is `SUPERSEDED`, and [ADR-002](architecture-decisions/ADR-002-clean-room-application-stack.md) records the accepted permissively licensed stack.
+
+This resolution preserves the analysis below as the historical licensing gate. Clean-room Phase 1A scaffolding may proceed after architecture review. A real Product API adapter remains gated on owner-confirmed semantics and sanitized fixtures.
 
 ## Evidence categories used in this document
 
@@ -14,7 +20,7 @@
 
 # 1. Current situation
 
-The previous research selected Postiz as the preferred **technical** foundation because it is the only reviewed project with a mature application shell, PostgreSQL, organizations and users, Temporal workflows, scheduling, analytics, media management, and broad official social integrations. That selection cannot yet be treated as a final implementation decision because the business has not accepted its license implications.
+The previous research selected Postiz as the preferred **technical** foundation because it is the only reviewed project with a mature application shell, PostgreSQL, organizations and users, Temporal workflows, scheduling, analytics, media management, and broad official social integrations. That selection was not treated as a final implementation decision before the business accepted a licensing path. Management subsequently selected the independent clean-room path described above.
 
 ## Confirmed repository licensing
 
@@ -235,14 +241,14 @@ These rules apply to every option and may not be weakened by framework or vendor
 11. Automatic publishing is disabled server-side.
 12. Reference repositories with incompatible or missing licenses may be studied but not copied.
 
-## Gate exit criteria
+## Historical gate exit criteria
 
-Implementation is safe to begin only when all of the following are recorded:
+The original gate required the following. The foundation/licensing portion is now satisfied by Option C and ADR-002; Product API items remain an integration gate rather than a Phase 1A scaffolding gate:
 
-- management selects Option A, B, C, or D;
+- management selects Option A, B, C, or D — **satisfied: Option C**;
 - legal/licensing review confirms the selected path where required;
-- ADR-001 is changed from `PROPOSED` to `ACCEPTED`, `REJECTED`, or `SUPERSEDED` as appropriate;
+- ADR-001 is changed from `PROPOSED` to `ACCEPTED`, `REJECTED`, or `SUPERSEDED` as appropriate — **satisfied: `SUPERSEDED`**;
 - for Option B, a signed alternative license is available and its scope is summarized in a confidential decision record;
 - for Option D, a named candidate has passed license, architecture, security, activity, and proof-of-concept gates;
-- the Product API owner confirms the contract fields and supplies sanitized fixtures;
-- implementation acceptance tests are specified for the twelve invariants.
+- the Product API owner confirms the contract fields and supplies sanitized fixtures — **required before real adapter integration, not before Phase 1A**;
+- implementation acceptance tests are specified for the twelve invariants — **satisfied by the MVP acceptance test plan**.

@@ -12,7 +12,7 @@ This contract defines the normalized product data the content system needs from 
 ## Classification model
 
 - **REQUIRED:** every active product response must contain a non-null valid value.
-- **OPTIONAL:** may be absent or `null`; generated content must not invent it.
+- **RECOMMENDED:** expected when the source system has a verified value because it materially improves safe content; it may be absent or `null`, and generated content must not invent it.
 - **CONDITIONAL:** required only when its stated condition is true; otherwise absent or `null`.
 - **CONTROLLED:** an authoritative marketing fact. Only the Product API or an explicitly authorized deterministic rule may set it. AI and Telegram edits cannot modify it.
 
@@ -30,14 +30,14 @@ This contract defines the normalized product data the content system needs from 
 | `currency` | string | **REQUIRED** | Yes | ISO 4217 uppercase code, for example `USD` or `KHR`; defines `price` and `promo_price` |
 | `promo_price` | decimal string or null | **CONDITIONAL** | Yes | Required when a promotion is active; same currency and precision as `price`; must be non-negative and normally not exceed `price` |
 | `discount` | object or null | **CONDITIONAL** | Yes | Required when a promotion is active or an approved discount claim is displayed; structure defined below; must reconcile deterministically with prices or carry an explicit upstream calculation method |
-| `description` | string or null | **OPTIONAL** | Yes | Approved source description; maximum agreed length; AI may use it as source context but may not treat unsupported prose as structured facts |
-| `images` | array of objects | **OPTIONAL** | Yes | Approved product assets only; each item includes HTTPS URL, role, position, and optional checksum/alt text; empty array is valid |
+| `description` | string or null | **RECOMMENDED** | Yes | Approved source description; maximum agreed length; AI may use it as source context but may not treat unsupported prose as structured facts |
+| `images` | array of objects | **RECOMMENDED** | Yes | Approved product assets only; each item includes HTTPS URL, role, position, and optional checksum/alt text; empty array is valid |
 | `stock_status` | string | **REQUIRED** | Yes | Enum: `in_stock`, `low_stock`, `out_of_stock`, `preorder`, `discontinued`, or `unknown`; never infer quantity from this field |
-| `product_url` | string or null | **OPTIONAL** | Yes | Canonical HTTPS product page URL on an approved host |
+| `product_url` | string or null | **RECOMMENDED** | Yes | Canonical HTTPS product page URL on an approved host |
 | `fragrance_notes` | object or null | **CONDITIONAL** | Yes | Required only for fragrance categories when curated note data exists; structured top/heart/base arrays; preserve source wording |
 | `concentration` | object or null | **CONDITIONAL** | Yes | Required when concentration is a defined product attribute, especially fragrances; use code plus approved label, not model inference |
 | `size` | object or null | **CONDITIONAL** | Yes | Required when the SKU represents a size/volume variant; decimal string plus controlled unit |
-| `country_of_origin` | object or null | **OPTIONAL** | Yes | ISO 3166-1 alpha-2 code plus approved display name; distinguish manufacturing origin from brand origin if both are ever added |
+| `country_of_origin` | object or null | **RECOMMENDED** | Yes | ISO 3166-1 alpha-2 code plus approved display name; distinguish manufacturing origin from brand origin if both are ever added; absence prohibits an origin claim |
 | `similarity_claims` | array of objects | **CONDITIONAL** | Yes | Present only for explicitly reviewed and approved claims; each claim needs text, approval status/source, and optional expiry; empty array means no permitted claim |
 
 ## Controlled subtypes
@@ -138,6 +138,21 @@ The field means manufacturing/product origin unless the API owner explicitly def
 
 Only entries with `status: "approved"` and no expired `expires_at` may appear in generated content. An absent or empty array expressly prohibits similarity claims.
 
+## Source metadata classification
+
+The product fields alone are insufficient to prove snapshot freshness and lifecycle. The normalized envelope also needs these fields:
+
+| Field | Presence | Controlled | Required semantics |
+|---|---|---:|---|
+| `schema_version` | **REQUIRED** | Yes | Version of this normalized contract; incompatible major versions fail closed. |
+| `source_system` | **REQUIRED** | Yes | Stable source identifier, not an environment secret. |
+| `source_record_id` | **RECOMMENDED** | Yes | Stable upstream record key distinct from a display SKU. |
+| `source_version` | **RECOMMENDED** | Yes | Monotonic or opaque change version used for evidence/freshness. |
+| `retrieved_at` | **REQUIRED** | Yes | Timestamp assigned by the adapter/content system at successful retrieval. |
+| `updated_at` | **REQUIRED** | Yes | Upstream last product modification time with documented precision/semantics. If the current API cannot supply it, integration is blocked until an equivalent version signal is agreed. |
+| `etag` | **RECOMMENDED** | Yes | Upstream entity tag for conditional reads; not a substitute for a canonical snapshot digest. |
+| `lifecycle_status` | **REQUIRED** | Yes | Controlled enum such as `active`, `discontinued`, or `deleted`; deleted records require tombstone semantics. |
+
 ## Proposed read endpoints
 
 Endpoint names are illustrative and must be aligned with the existing API rather than imposed on it.
@@ -167,6 +182,25 @@ Accept: application/json
 
 Search should return compact records containing at least `sku`, `product_name`, `brand`, `category`, `price`, `currency`, `promo_price`, `stock_status`, and the primary image when available. Selection must be confirmed by exact SKU before generation.
 
+### List new and promotional products
+
+The Telegram `/newproducts` and `/promo` commands require explicit upstream query semantics. Candidate endpoints are illustrative:
+
+```http
+GET /v1/products?created_since={timestamp}&cursor={opaque_cursor}&limit=20
+GET /v1/products?promotion_status=active&at={timestamp}&cursor={opaque_cursor}&limit=20
+```
+
+“New” must be based on an authoritative field (for example catalog publication time), not search-result order. “Active promotion” must be evaluated upstream or by the adapter from authoritative start/end timestamps and an agreed clock/timezone. These commands remain disabled until those semantics are confirmed.
+
+### Pagination and search requirements
+
+- Opaque cursor pagination with a documented stable ordering and tie-breaker; no offset pagination over a changing catalog.
+- Server-enforced maximum page size and a deterministic default.
+- Case, accent, whitespace, Khmer normalization, tokenization, and SKU exact-match precedence must be documented.
+- Search may be fuzzy for discovery, but a content request always fetches and confirms one exact SKU.
+- Results must not silently include deleted/inaccessible items; lifecycle filters and default behavior must be explicit.
+
 ## Product envelope
 
 The normalized product should be wrapped in source metadata used to create an immutable snapshot:
@@ -180,6 +214,7 @@ The normalized product should be wrapped in source metadata used to create an im
   "retrieved_at": "2026-10-04T09:30:00+07:00",
   "updated_at": "2026-10-03T16:45:00+07:00",
   "etag": "\"fictional-etag-v42\"",
+  "lifecycle_status": "active",
   "product": {
     "sku": "PS-FIC-001",
     "product_name": "Rivière de Lune",
@@ -243,7 +278,7 @@ For every generation request, the content system must store an immutable snapsho
 - retrieval timestamp;
 - canonical JSON digest such as SHA-256;
 - adapter version that performed normalization;
-- validation result and any missing optional/conditional fields;
+- validation result and any missing recommended/conditional fields;
 - request correlation ID, without storing credentials.
 
 A later product update creates a new snapshot. It never alters a snapshot already associated with a content revision or approval.
@@ -275,17 +310,35 @@ Before a content revision can enter approval:
 - Redacted structured logs and approved data-retention period.
 - Non-production sandbox or fixtures; production credentials must not be used for development.
 
+## Integration behavior that must fail closed
+
+- An unknown contract major version, malformed controlled field, duplicate exact SKU, missing `updated_at`/equivalent version signal, or inconsistent active promotion is not normalized into an approvable snapshot.
+- A discontinued item may be viewed in history but cannot create new content unless management defines an explicit exception. A deleted/tombstoned item is never silently treated as “not found” in existing audit history.
+- Stale-cache fallback is not silent. If ever allowed, the UI displays snapshot age and a policy-defined maximum; price, promotion, and stock may require a stricter no-stale rule.
+- `unknown` stock cannot be rendered as available or unavailable.
+- Expired signed image URLs are evidence references, not a reason to mutate old snapshots. Asset retention/checksum policy must preserve what was reviewed.
+
 ## Open decisions for the Product API owner
 
-1. Are `brand` and `category` guaranteed for every active SKU?
-2. Is `price` tax-inclusive, and how many decimal places are valid for each supported currency?
-3. Is `discount` authoritative, derived, or both? Which value wins if price math and label disagree?
-4. What exactly does each `stock_status` mean, and can copy say “available now” for `low_stock` or `preorder`?
-5. Are Khmer and English approved names/descriptions available as separate controlled fields? If so, add explicit locale objects rather than letting AI translate canonical names.
-6. Are fragrance notes curated per SKU or inherited from a parent product?
-7. Does `country_of_origin` mean manufacturing origin, formulation origin, brand origin, or customs origin?
-8. Who approves similarity claims, and what evidence, territory, channel, and expiry restrictions apply?
-9. Are image URLs stable, signed, expiring, or access-controlled?
-10. Can the API supply `source_version`, `updated_at`, or ETag data for snapshot freshness and change detection?
+1. **SKU uniqueness:** Is SKU globally unique, unique only within a market/channel, case-sensitive, mutable, or reusable? What happens after a merge or replacement?
+2. **Required attributes:** Are `brand` and `category` guaranteed for every active SKU, and what controlled taxonomy/version governs category?
+3. **Price representation:** Is `price` tax-inclusive, which decimal scale is valid per currency, can zero be valid, and are market/customer-list prices possible?
+4. **Currency representation:** Is one ISO 4217 currency guaranteed per SKU/market, and are KHR rounding/display rules supplied by the source?
+5. **Promotion lifecycle:** Is `promo_price` authoritative? Which timezone/clock controls activation and expiry? Are start/end inclusive, and can promotions overlap or be channel-specific?
+6. **Discount reconciliation:** Is `discount` authoritative, derived, or both? Which value wins if price math, type, and display label disagree?
+7. **Stock semantics:** What does every status mean? Can copy say “available now” for `low_stock` or `preorder`? Are quantities deliberately unavailable, and how fresh must stock be?
+8. **Image representation:** Are URLs stable, signed, expiring, or protected? Which MIME types, sizes, roles, hostnames, ordering, checksums, and asset-retention guarantees apply?
+9. **Fragrance notes:** Are notes strings or controlled IDs? Are they curated per SKU, variant, or inherited parent? Can a tier be empty, and are localized approved labels available?
+10. **Product update signal:** Does `updated_at` cover price, inventory, promotion, assets, and descriptive attributes? Can the API supply a source version and/or strong ETag?
+11. **Lifecycle:** How are deleted, discontinued, hidden, draft, and replaced products represented? Are tombstones and replacement SKU links available?
+12. **Locales:** Are Khmer and English approved names/descriptions separate controlled fields? If so, add explicit locale objects rather than asking AI to translate canonical names.
+13. **Origin:** Does `country_of_origin` mean manufacturing, formulation, brand, or customs origin? Can multiple origins apply?
+14. **Similarity governance:** Who approves claims, and what evidence, territory, channel, wording, and expiry restrictions apply?
+15. **Pagination:** What opaque cursor, stable ordering, maximum page size, snapshot-consistency behavior, and cursor expiry are supported?
+16. **Search:** Which fields are searched? What are exact-SKU precedence, typo/fuzzy behavior, case/accent/Khmer normalization, ranking stability, and lifecycle defaults?
+17. **Authentication:** Is workload identity or OAuth2 client credentials available? What scopes, rotation, test credentials, IP/mTLS restrictions, and audit ownership apply?
+18. **Rate limits and reliability:** What steady/burst limits, `Retry-After` behavior, timeout budget, availability/freshness SLOs, and maintenance windows apply?
+19. **API versioning:** How are breaking changes signaled, how long are versions supported, and what deprecation notice/contract test environment is available?
+20. **New-product semantics:** Which authoritative timestamp and window define `/newproducts`, and how are backfills/relisted products handled?
 
-The contract is structurally sufficient for architecture and test planning, but it is **not integration-ready** until the Product API owner resolves these decisions and supplies sanitized representative fixtures.
+The contract is **sufficient for Phase 1A scaffolding, domain modeling, fictional fixtures, and contract-test authoring**. It is **not sufficient for a real Product API adapter or integration exit** until the Product API owner resolves the decisions above, approves the normalized schema, and supplies sanitized representative and error fixtures.

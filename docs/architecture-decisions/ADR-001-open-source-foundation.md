@@ -1,10 +1,16 @@
 # ADR-001: Choose the open-source application foundation
 
-- **Status:** PROPOSED
+- **Status:** SUPERSEDED
 - **Originally drafted:** 2026-10-03
 - **Last updated:** 2026-10-04
 - **Decision owners:** Parisian Shopper/Auralis management, engineering, and legal/licensing reviewer
-- **Implementation gate:** Closed pending a recorded management/licensing decision
+- **Implementation gate:** Superseded by the clean-room decision in ADR-002
+
+## Supersession record
+
+On 2026-10-04, management approved **Option C — Clean-room Parisian Shopper application**. Postiz and the other repositories under `/research` remain research material only. No source code, mechanically translated implementation, or unique restricted implementation structure may be taken from them.
+
+The canonical stack and current implementation gate are defined by [ADR-002](ADR-002-clean-room-application-stack.md). The remainder of this ADR is retained unchanged as the historical record of the alternatives, licensing gate, and reasoning that led to the clean-room decision.
 
 ## Context
 
@@ -12,7 +18,7 @@ Parisian Shopper needs a production system in which staff use Telegram to find p
 
 Repository research found that Postiz is the strongest technical foundation. It supplies a mature TypeScript application, PostgreSQL/Prisma, organizations and users, Temporal workflows, media, calendar, analytics, and official social-provider integrations.
 
-Postiz is licensed under AGPL-3.0. Management has not yet decided whether the business will accept AGPL obligations, seek alternative commercial terms, build independently, or investigate another permissive foundation. Therefore the earlier conditional selection is not final.
+Postiz is licensed under AGPL-3.0. At the time this ADR was proposed, management had not yet decided whether the business would accept AGPL obligations, seek alternative commercial terms, build independently, or investigate another permissive foundation. Management subsequently selected Option C; see the supersession record above.
 
 Detailed evidence:
 
@@ -71,16 +77,16 @@ Run a time-boxed discovery and proof of concept for a named MIT/Apache/BSD candi
 - **Technical recommendation:** Option A, provided management and legal/licensing review accept and operationalize AGPL compliance. If a suitable alternative source license is actually offered, Option B may become preferable.
 - **Business/licensing-safe recommendation:** Option C while private company code and future commercialization are expected and AGPL has not been affirmatively accepted.
 
-These recommendations intentionally differ. This ADR remains `PROPOSED` until management selects an option and any required legal/licensing conditions are satisfied.
+These recommendations intentionally differed. Management selected the business/licensing-safe recommendation, Option C, so this ADR is now `SUPERSEDED`.
 
-## Non-decision
+## Historical non-decision
 
-No foundation is authorized by this ADR yet. In particular:
+While this ADR was proposed, no foundation was authorized by it. The following restrictions remain applicable to the clean-room project:
 
 - do not copy Postiz into `/app`;
 - do not create a Postiz fork for application implementation;
 - do not copy code or workflows from `research/`;
-- do not start feature implementation;
+- do not start feature implementation until ADR-002 and the architecture readiness documents are accepted;
 - do not contact or connect to the production Product API;
 - do not enable social publishing.
 
@@ -103,23 +109,25 @@ These apply regardless of which option is chosen:
 11. Automatic publishing is disabled server-side.
 12. Reference repositories with incompatible or missing licenses may be studied but not copied.
 
-## Required management record
+## Management record
 
-Management must record one of the following:
+The options presented to management were:
 
 - **A:** accept an AGPL-based Postiz derivative and authorize creation of a compliance plan;
 - **B:** authorize a Postiz commercial-license inquiry and wait for acceptable signed terms;
 - **C:** authorize a clean-room Parisian application and its higher initial engineering budget;
 - **D:** authorize a time-boxed discovery for another permissively licensed foundation.
 
-The record must also state:
+The selected record is **C**. Before production deployment, management still must identify the accountable license owner and confirm the intended deployment/commercialization model.
+
+The original decision record also requested:
 
 - expected users and deployment model;
 - whether source confidentiality is required;
 - whether external SaaS, resale, white-labeling, affiliate use, or on-premise distribution is planned;
 - the person accountable for licensing compliance.
 
-## Status transition after management decision
+## Historical status transition rules
 
 - Change this ADR to **ACCEPTED** if Option A is approved with a documented compliance plan.
 - Change it to **ACCEPTED** if Option B results in signed terms and Postiz remains the chosen foundation; reference the confidential contract decision without committing sensitive terms.
@@ -128,10 +136,10 @@ The record must also state:
 
 ## Gate exit criteria
 
-Application implementation may begin only after:
+Under this ADR, application implementation could begin only after:
 
-1. management records A, B, C, or D;
-2. required legal/licensing review is complete;
-3. the relevant ADR status is no longer `PROPOSED`;
+1. management records A, B, C, or D — **satisfied: C**;
+2. required legal/licensing review is complete — **clean-room policy recorded; ongoing dependency review remains required**;
+3. the relevant ADR status is no longer `PROPOSED` — **satisfied by ADR-002**;
 4. the Product API owner approves field semantics and supplies sanitized fixtures;
 5. the threat model and acceptance tests cover all twelve architecture invariants.
