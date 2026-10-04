@@ -1,0 +1,30 @@
+{
+  "name": "@parisian-shopper/api",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/main.ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "12.1.2",
+    "@nestjs/core": "12.1.2",
+    "@nestjs/platform-express": "12.1.2",
+    "@nestjs/swagger": "12.0.2",
+    "@parisian-shopper/application": "workspace:0.1.0",
+    "@parisian-shopper/common": "workspace:0.1.0",
+    "@parisian-shopper/config": "workspace:0.1.0",
+    "@parisian-shopper/database": "workspace:0.1.0",
+    "@parisian-shopper/jobs": "workspace:0.1.0",
+    "@parisian-shopper/logger": "workspace:0.1.0",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.15.1",
+    "express": "5.2.1",
+    "express-rate-limit": "8.7.0",
+    "helmet": "8.3.0",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
+  }
+}

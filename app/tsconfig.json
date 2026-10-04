@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/common" },
+    { "path": "packages/config" },
+    { "path": "packages/database" },
+    { "path": "packages/jobs" },
+    { "path": "packages/logger" },
+    { "path": "packages/application" },
+    { "path": "apps/api" },
+    { "path": "apps/worker" }
+  ]
+}

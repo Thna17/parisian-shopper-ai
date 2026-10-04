@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+model User {
+  id          String     @id @default(uuid()) @db.Uuid
+  displayName String     @map("display_name") @db.VarChar(200)
+  status      UserStatus @default(ACTIVE)
+  disabledAt DateTime?   @map("disabled_at") @db.Timestamptz(3)
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  roles             UserRole[] @relation("UserRoles")
+  roleAssignments   UserRole[] @relation("RoleAssignedBy")
+
+  @@index([status], map: "users_status_idx")
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique(map: "roles_code_key") @db.VarChar(64)
+  name        String   @db.VarChar(120)
+  description String?  @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  users UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId       String    @map("user_id") @db.Uuid
+  roleId       String    @map("role_id") @db.Uuid
+  assignedById String?   @map("assigned_by_id") @db.Uuid
+  assignedAt   DateTime  @default(now()) @map("assigned_at") @db.Timestamptz(3)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  user       User  @relation("UserRoles", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "user_roles_user_id_fkey")
+  role       Role  @relation(fields: [roleId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "user_roles_role_id_fkey")
+  assignedBy User? @relation("RoleAssignedBy", fields: [assignedById], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "user_roles_assigned_by_id_fkey")
+
+  @@id([userId, roleId], map: "user_roles_pkey")
+  @@index([roleId], map: "user_roles_role_id_idx")
+  @@index([assignedById], map: "user_roles_assigned_by_id_idx")
+  @@map("user_roles")
+}
+
+model OutboxEvent {
+  id             String    @id @default(uuid()) @db.Uuid
+  topic          String    @db.VarChar(160)
+  schemaVersion  Int       @default(1) @map("schema_version")
+  idempotencyKey String    @unique(map: "outbox_events_idempotency_key_key") @map("idempotency_key") @db.VarChar(200)
+  aggregateType  String?   @map("aggregate_type") @db.VarChar(100)
+  aggregateId    String?   @map("aggregate_id") @db.VarChar(100)
+  payload        Json      @db.JsonB
+  occurredAt     DateTime  @map("occurred_at") @db.Timestamptz(3)
+  availableAt    DateTime  @map("available_at") @db.Timestamptz(3)
+  claimedAt      DateTime? @map("claimed_at") @db.Timestamptz(3)
+  processedAt    DateTime? @map("processed_at") @db.Timestamptz(3)
+  attemptCount   Int       @default(0) @map("attempt_count")
+  lastErrorCode  String?   @map("last_error_code") @db.VarChar(100)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([processedAt, availableAt], map: "outbox_events_pending_idx")
+  @@index([aggregateType, aggregateId, occurredAt], map: "outbox_events_aggregate_idx")
+  @@map("outbox_events")
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@parisian-shopper/logger",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@nestjs/common": "12.1.2",
+    "@parisian-shopper/common": "workspace:0.1.0",
+    "@parisian-shopper/config": "workspace:0.1.0",
+    "pino": "10.4.0",
+    "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "pino-pretty": "13.1.3"
+  }
+}

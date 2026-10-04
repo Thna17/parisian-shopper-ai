@@ -151,3 +151,12 @@ Requirements, public protocols, official API documentation, general patterns, an
 - Exact pinned dependency/image versions will be recorded in the implementation manifest during Phase 1A.
 - Production hosting, backups, recovery targets, secret management, and observability destinations require an operations decision before deployment.
 - Any future publishing bounded context requires a new ADR and explicit management authorization; it is not activated by this ADR.
+
+## Phase 1A implementation note — 2026-10-04
+
+The accepted stack remains unchanged. Two integration-level substitutions were made without changing its boundaries:
+
+- NestJS 12 is ESM-native while the currently available `@nestjs/throttler` package loads its Nest peer through CommonJS under the test/runtime combination. Phase 1A uses MIT-licensed `express-rate-limit` at the selected Express boundary instead. A distributed authenticated-user policy is still deferred until business routes exist.
+- BullMQ is wired directly to the official Apache-2.0 Valkey GLIDE client and project-owned registries. `@nestjs/bullmq` was not retained because Phase 1A deliberately registers no production queue; adding an unused dynamic Nest queue module would create lifecycle complexity without behavior to configure.
+
+Both choices stay behind infrastructure boundaries and remain replaceable. They are recorded here so the dependency register is not mistaken for the exact Phase 1A manifest; the lockfile and dependency-license report are authoritative for exact versions.

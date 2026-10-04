@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: app
+
+env:
+  DATABASE_URL: postgresql://ci_fixture:ci_fixture@127.0.0.1:5432/not_used
+  FEATURE_AUTO_PUBLISHING: "false"
+  FEATURE_META_PUBLISHING: "false"
+  NODE_ENV: test
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: app/.nvmrc
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm license:check
+      - run: pnpm security:audit
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm db:generate
+      - run: pnpm prisma:validate
+      - run: pnpm typecheck
+      - run: pnpm test:unit
+      - run: pnpm test:e2e
+      - run: pnpm build
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: app/.nvmrc
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm test:integration

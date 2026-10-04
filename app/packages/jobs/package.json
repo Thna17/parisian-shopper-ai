@@ -1,0 +1,19 @@
+{
+  "name": "@parisian-shopper/jobs",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@nestjs/common": "12.1.2",
+    "@parisian-shopper/config": "workspace:0.1.0",
+    "@valkey/valkey-glide": "2.5.3",
+    "bullmq": "6.3.11",
+    "rxjs": "7.8.2"
+  }
+}

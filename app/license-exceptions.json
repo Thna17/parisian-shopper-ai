@@ -1,0 +1,15 @@
+{
+  "exceptions": [
+    {
+      "package": "caniuse-lite",
+      "versions": ["1.0.30001814"],
+      "license": "CC-BY-4.0",
+      "reviewer": "Phase 1A engineering review",
+      "reviewDate": "2026-10-04",
+      "reason": "Development-only transitive browser compatibility dataset required by Jest through Babel/Browserslist; it is not application source or a runtime service dependency.",
+      "evidence": "https://github.com/browserslist/caniuse-lite/blob/main/LICENSE",
+      "obligations": "Retain license and attribution through the installed dependency/lockfile and include required notices in distributed development-tool bundles if any.",
+      "reReview": "Re-review whenever the installed caniuse-lite version changes or the dependency enters a production artifact."
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "isolatedModules": true,
+    "types": ["jest", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@parisian-shopper/*": ["packages/*/src"]
+    }
+  },
+  "include": ["apps/**/*.ts", "packages/**/*.ts"]
+}
