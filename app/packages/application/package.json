@@ -12,6 +12,8 @@
   "dependencies": {
     "@nestjs/common": "12.1.2",
     "@parisian-shopper/common": "workspace:0.1.0",
-    "rxjs": "7.8.2"
+    "@parisian-shopper/config": "workspace:0.1.0",
+    "rxjs": "7.8.2",
+    "zod": "4.6.5"
   }
 }

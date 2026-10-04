@@ -8,8 +8,8 @@ The Phase 1A application is a modular monolith. API and worker are runtime entry
 
 ```text
 apps/api ───────┐
-apps/worker ────┼──> application ──> common
-                ├──> database ─────> common
+apps/worker ────┼──> application ──> config + common
+                ├──> database ─────> application ports/types + common
                 ├──> jobs ─────────> config
                 ├──> logger ───────> config + common
                 └──> config
@@ -18,11 +18,11 @@ apps/worker ────┼──> application ──> common
 - `common/domain` is framework-free and may depend only on the language/runtime.
 - `common/application` owns project interfaces such as transaction/outbox ports.
 - `application` owns feature boundaries and later orchestration. It cannot import Prisma, BullMQ, Valkey, Telegram, OpenAI, Express, database, jobs, or logger implementations.
-- `database`, `jobs`, and `logger` are infrastructure adapters.
+- `database`, `jobs`, and `logger` are infrastructure adapters. Database may implement narrowly exported application repository ports but application can never import database.
 - API controllers/middleware may call application-facing services but cannot import Prisma, BullMQ, or Valkey directly.
 - Telegram will be a transport inside its boundary, not an authorization, persistence, or workflow engine.
 
-The initial `auth`, `users`, `telegram`, `products`, `content`, `ai`, `validation`, `approvals`, `brand`, and `audit` Nest modules are intentionally empty. `jobs` and `common` are workspace packages. Empty modules express ownership without pretending Phase 1B+ behavior exists.
+The `products` module now owns normalized product types, Product Source/snapshot ports, and Phase 1B application services. Other feature modules remain empty boundaries. Environment-based source selection is confined to Nest composition; product domain/use-case files do not parse environment variables.
 
 ## Enforcement
 

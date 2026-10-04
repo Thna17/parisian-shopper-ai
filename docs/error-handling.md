@@ -13,6 +13,13 @@ Project-owned errors carry a stable code and safe public message:
 | `ConflictError` | `CONFLICT` | 409 |
 | `ExternalServiceError` | `EXTERNAL_SERVICE_ERROR` | 502 |
 | `InfrastructureError` | `INFRASTRUCTURE_ERROR` | 503 |
+| Product not found | `PRODUCT_NOT_FOUND` | 404 |
+| Invalid product data | `INVALID_PRODUCT_DATA` | 422 |
+| Product source unavailable | `PRODUCT_SOURCE_UNAVAILABLE` | 503 |
+| Product source timeout | `PRODUCT_SOURCE_TIMEOUT` | 504 |
+| Product source authentication failure | `PRODUCT_SOURCE_AUTH_FAILED` | 502 |
+| Product source rate limited | `PRODUCT_SOURCE_RATE_LIMITED` | 503 |
+| Invalid Product Source response | `PRODUCT_SOURCE_RESPONSE_INVALID` | 502 |
 
 Unexpected errors return 500 with `INTERNAL_ERROR`. Known Nest HTTP errors map to a stable `HTTP_<status>` form; request validation uses `HTTP_VALIDATION_ERROR` until application DTO error details are deliberately designed.
 

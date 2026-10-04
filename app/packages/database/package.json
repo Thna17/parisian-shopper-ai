@@ -12,6 +12,7 @@
   ],
   "dependencies": {
     "@nestjs/common": "12.1.2",
+    "@parisian-shopper/application": "workspace:0.1.0",
     "@parisian-shopper/common": "workspace:0.1.0",
     "@prisma/client": "6.19.3",
     "rxjs": "7.8.2"
@@ -20,6 +21,7 @@
     "prisma": "6.19.3"
   },
   "scripts": {
+    "prisma:format": "prisma format --schema prisma/schema.prisma",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:migrate:dev": "prisma migrate dev --schema prisma/schema.prisma",
     "prisma:migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",

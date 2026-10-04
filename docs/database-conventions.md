@@ -2,7 +2,7 @@
 
 ## Baseline
 
-PostgreSQL is the authoritative application store. Prisma provides the typed client and tracked migrations; production never uses schema push or automatic synchronization. Phase 1A defines only `User`, `Role`, `UserRole`, and the infrastructural `OutboxEvent`.
+PostgreSQL is the authoritative application store. Prisma provides the typed client and tracked migrations; production never uses schema push or automatic synchronization. The baseline contains `User`, `Role`, `UserRole`, infrastructural `OutboxEvent`, and Phase 1B's immutable `ProductSnapshot`.
 
 ## Naming and types
 
@@ -30,6 +30,7 @@ PostgreSQL is the authoritative application store. Prisma provides the typed cli
 - Isolation/locking is selected per use case and documented; future state/version allocation will use expected-state checks and row/optimistic locks.
 - Migration SQL is committed and immutable after it reaches a shared environment. Amendments use a new migration.
 - Development uses `prisma migrate dev`; CI/production use `prisma migrate deploy`.
+- `ProductSnapshot` has no update/delete repository method and a database trigger rejects both operations. Migration-owner/break-glass access is not an application mutation path.
 - Deployments run migrations as a privileged migration role. The application runtime role is least-privileged and will later deny update/delete on append-only evidence tables.
 - Backups, point-in-time recovery, RPO/RTO, and restore drills are required before production and remain an operations decision.
 

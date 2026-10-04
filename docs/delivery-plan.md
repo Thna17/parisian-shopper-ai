@@ -58,23 +58,23 @@
 
 ## Phase 1B — Product Source
 
-**Objective:** reliably normalize fictional and, only after approval, non-production Product API records into immutable snapshots.
+**Objective:** reliably normalize fictional Product Source records into immutable snapshots while preserving a fail-closed boundary for a separately approved future HTTP adapter.
 
 **Major deliverables**
 
-- Product API port and fake adapter with sanitized success/error fixtures.
-- Owner-approved REST/auth/versioning/search/pagination contract and non-production credentials.
+- Product Source port and fake adapter with fictional success/error fixtures.
+- Documented REST/auth/versioning/search/pagination decision gate; no HTTP adapter or credentials in the fixture-only Phase 1B scope.
 - Strict Zod normalized schemas, exact decimals, lifecycle and promotion evaluation, source metadata, canonical digest.
 - Product search/exact-SKU application services and immutable ProductSnapshot persistence.
-- Timeouts, bounded retry, rate-limit response, SSRF/host controls, freshness policy, and adapter contract tests.
+- Documented timeout, bounded retry, rate-limit, SSRF/host, and freshness requirements plus reusable adapter contract tests.
 
-**Dependencies:** Phase 1A; Product API owner answers; sanitized fixtures/sandbox; secret management path.
+**Dependencies:** Phase 1A and fictional contract fixtures. Product API owner answers, a sandbox, and a secret-management path remain dependencies for a later HTTP adapter.
 
 **Exit criteria**
 
-- Known/unknown SKU and search contract suites pass entirely on fixtures and approved sandbox tests.
-- Malformed, duplicate, stale/inconsistent, deleted/discontinued, rate-limited, and timeout responses fail as designed.
-- Runtime role cannot mutate/delete ProductSnapshot.
+- Known/unknown SKU, bounded search, normalized-schema, and adapter contract suites pass entirely on fictional fixtures.
+- Malformed controlled fields and invalid source responses fail closed; HTTP-specific status/timeout behavior remains unimplemented until an owner-approved raw contract exists.
+- Application repository APIs and database enforcement prevent mutation/deletion of ProductSnapshot.
 - No production API is accessed.
 
 **Risks:** upstream lacks version timestamps/tombstones; unstable search; ambiguous SKU/currency/promotion/stock; signed image retention.

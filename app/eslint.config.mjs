@@ -76,6 +76,26 @@ export default tseslint.config(
     },
   },
   {
+    files: ['packages/application/src/**/domain/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            '@nestjs/*',
+            '@prisma/*',
+            'bullmq',
+            '@valkey/*',
+            'express',
+            'grammy',
+            'openai',
+          ],
+          paths: ['@parisian-shopper/config'],
+        },
+      ],
+    },
+  },
+  {
     files: ['packages/application/src/**/*.ts'],
     rules: {
       'no-restricted-imports': ['error', { paths: infrastructureImports }],

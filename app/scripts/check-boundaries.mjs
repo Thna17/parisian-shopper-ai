@@ -7,6 +7,19 @@ const violations = [];
 
 const rules = [
   {
+    prefix: 'packages/application/src/modules/products/domain/',
+    forbidden: [
+      '@nestjs/',
+      '@parisian-shopper/config',
+      '@prisma/',
+      'bullmq',
+      '@valkey/',
+      'express',
+      'grammy',
+      'openai',
+    ],
+  },
+  {
     prefix: 'packages/common/src/domain/',
     forbidden: [
       '@nestjs/',

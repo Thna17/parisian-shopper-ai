@@ -12,16 +12,31 @@ enum UserStatus {
   DISABLED
 }
 
+enum ProductStockStatus {
+  in_stock
+  low_stock
+  out_of_stock
+  preorder
+  discontinued
+  unknown
+}
+
+enum ProductLifecycleStatus {
+  active
+  discontinued
+  deleted
+}
+
 model User {
   id          String     @id @default(uuid()) @db.Uuid
   displayName String     @map("display_name") @db.VarChar(200)
   status      UserStatus @default(ACTIVE)
-  disabledAt DateTime?   @map("disabled_at") @db.Timestamptz(3)
+  disabledAt  DateTime?  @map("disabled_at") @db.Timestamptz(3)
   createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  roles             UserRole[] @relation("UserRoles")
-  roleAssignments   UserRole[] @relation("RoleAssignedBy")
+  roles           UserRole[] @relation("UserRoles")
+  roleAssignments UserRole[] @relation("RoleAssignedBy")
 
   @@index([status], map: "users_status_idx")
   @@map("users")
@@ -76,4 +91,41 @@ model OutboxEvent {
   @@index([processedAt, availableAt], map: "outbox_events_pending_idx")
   @@index([aggregateType, aggregateId, occurredAt], map: "outbox_events_aggregate_idx")
   @@map("outbox_events")
+}
+
+model ProductSnapshot {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  sku                 String                 @db.VarChar(64)
+  productName         String                 @map("product_name") @db.VarChar(300)
+  brand               String                 @db.VarChar(120)
+  category            String                 @db.VarChar(100)
+  price               Decimal                @db.Decimal(19, 4)
+  currency            String                 @db.Char(3)
+  promoPrice          Decimal?               @map("promo_price") @db.Decimal(19, 4)
+  discount            Json?                  @db.JsonB
+  description         String?                @db.Text
+  images              Json?                  @db.JsonB
+  stockStatus         ProductStockStatus     @map("stock_status")
+  productUrl          String?                @map("product_url") @db.VarChar(2048)
+  fragranceNotes      Json?                  @map("fragrance_notes") @db.JsonB
+  concentration       Json?                  @db.JsonB
+  size                Json?                  @db.JsonB
+  countryOfOrigin     Json?                  @map("country_of_origin") @db.JsonB
+  similarityClaims    Json?                  @map("similarity_claims") @db.JsonB
+  sourceSchemaVersion String                 @map("source_schema_version") @db.VarChar(20)
+  sourceSystem        String                 @map("source_system") @db.VarChar(100)
+  sourceRecordId      String?                @map("source_record_id") @db.VarChar(200)
+  sourceVersion       String?                @map("source_version") @db.VarChar(200)
+  sourceUpdatedAt     DateTime               @map("source_updated_at") @db.Timestamptz(3)
+  retrievedAt         DateTime               @map("retrieved_at") @db.Timestamptz(3)
+  sourceEtag          String?                @map("source_etag") @db.VarChar(500)
+  lifecycleStatus     ProductLifecycleStatus @map("lifecycle_status")
+  snapshotHash        String                 @map("snapshot_hash") @db.Char(64)
+  normalizerVersion   String                 @map("normalizer_version") @db.VarChar(100)
+  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([sku, createdAt], map: "product_snapshots_sku_created_at_idx")
+  @@index([snapshotHash], map: "product_snapshots_snapshot_hash_idx")
+  @@index([sourceSystem, sourceRecordId, sourceUpdatedAt], map: "product_snapshots_source_idx")
+  @@map("product_snapshots")
 }

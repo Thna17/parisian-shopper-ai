@@ -1,6 +1,6 @@
 # Parisian Shopper application foundation
 
-This directory contains the clean-room Phase 1A modular-monolith foundation. It has an HTTP API process and a non-HTTP worker process that share application modules. It deliberately contains no Telegram commands, Product API adapter, AI generation, content workflow, factual validation, approvals, publishing, Meta integration, or image generation.
+This directory contains the clean-room modular-monolith foundation plus Phase 1B's fictional Product Source and immutable ProductSnapshot boundary. It has an HTTP API process and a non-HTTP worker process that share application modules. It deliberately contains no Telegram commands, production Product API adapter, AI generation, content workflow, factual validation, approvals, publishing, Meta integration, or image generation.
 
 ## Requirements
 
@@ -65,6 +65,7 @@ pnpm db:migrate          # development migration workflow
 pnpm db:migrate:deploy   # apply tracked migrations
 pnpm db:migrate:status
 pnpm db:studio
+pnpm prisma:format
 pnpm prisma:validate
 
 pnpm test
@@ -75,10 +76,12 @@ pnpm test:e2e
 pnpm format:check
 pnpm lint
 pnpm boundaries
+pnpm boundaries:check
 pnpm typecheck
 pnpm build
 pnpm license:check
 pnpm security:audit
+pnpm security:check
 ```
 
 Tests never contact OpenAI, Telegram, the Parisian Shopper Product API, or Meta. Integration tests use fictional data and disposable Testcontainers.
@@ -91,6 +94,7 @@ Tests never contact OpenAI, Telegram, the Parisian Shopper Product API, or Meta.
 - CORS is disabled when no origins are configured and wildcard origin is rejected in production.
 - The worker has no public HTTP server.
 - No queue is registered in production during Phase 1A. A uniquely named probe queue exists only inside the Valkey/BullMQ integration test and is closed after the test.
+- Development/test select eight fictional products while `FEATURE_PRODUCT_API=false`. Production selects a disabled source and never falls back to fixtures. No product HTTP endpoint is exposed.
 - Do not point early development at production Product API or provider accounts.
 
 See the repository `docs/` directory for boundaries, database, jobs, outbox, errors, security, and dependency-license policy.

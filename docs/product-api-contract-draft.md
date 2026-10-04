@@ -149,7 +149,7 @@ The product fields alone are insufficient to prove snapshot freshness and lifecy
 | `source_record_id` | **RECOMMENDED** | Yes | Stable upstream record key distinct from a display SKU. |
 | `source_version` | **RECOMMENDED** | Yes | Monotonic or opaque change version used for evidence/freshness. |
 | `retrieved_at` | **REQUIRED** | Yes | Timestamp assigned by the adapter/content system at successful retrieval. |
-| `updated_at` | **REQUIRED** | Yes | Upstream last product modification time with documented precision/semantics. If the current API cannot supply it, integration is blocked until an equivalent version signal is agreed. |
+| `source_updated_at` | **REQUIRED** | Yes | Upstream last product modification time with documented precision/semantics. The explicit prefix distinguishes it from local snapshot timestamps. If the current API cannot supply it, integration is blocked until an equivalent version signal is agreed. |
 | `etag` | **RECOMMENDED** | Yes | Upstream entity tag for conditional reads; not a substitute for a canonical snapshot digest. |
 | `lifecycle_status` | **REQUIRED** | Yes | Controlled enum such as `active`, `discontinued`, or `deleted`; deleted records require tombstone semantics. |
 
@@ -212,7 +212,7 @@ The normalized product should be wrapped in source metadata used to create an im
   "source_record_id": "fictional-record-10001",
   "source_version": "fictional-version-42",
   "retrieved_at": "2026-10-04T09:30:00+07:00",
-  "updated_at": "2026-10-03T16:45:00+07:00",
+  "source_updated_at": "2026-10-03T16:45:00+07:00",
   "etag": "\"fictional-etag-v42\"",
   "lifecycle_status": "active",
   "product": {
@@ -312,13 +312,13 @@ Before a content revision can enter approval:
 
 ## Integration behavior that must fail closed
 
-- An unknown contract major version, malformed controlled field, duplicate exact SKU, missing `updated_at`/equivalent version signal, or inconsistent active promotion is not normalized into an approvable snapshot.
+- An unknown contract major version, malformed controlled field, duplicate exact SKU, missing `source_updated_at`/equivalent version signal, or inconsistent active promotion is not normalized into an approvable snapshot.
 - A discontinued item may be viewed in history but cannot create new content unless management defines an explicit exception. A deleted/tombstoned item is never silently treated as “not found” in existing audit history.
 - Stale-cache fallback is not silent. If ever allowed, the UI displays snapshot age and a policy-defined maximum; price, promotion, and stock may require a stricter no-stale rule.
 - `unknown` stock cannot be rendered as available or unavailable.
 - Expired signed image URLs are evidence references, not a reason to mutate old snapshots. Asset retention/checksum policy must preserve what was reviewed.
 
-## Open decisions for the Product API owner
+## OPEN PRODUCT API QUESTIONS
 
 1. **SKU uniqueness:** Is SKU globally unique, unique only within a market/channel, case-sensitive, mutable, or reusable? What happens after a merge or replacement?
 2. **Required attributes:** Are `brand` and `category` guaranteed for every active SKU, and what controlled taxonomy/version governs category?
@@ -329,7 +329,7 @@ Before a content revision can enter approval:
 7. **Stock semantics:** What does every status mean? Can copy say “available now” for `low_stock` or `preorder`? Are quantities deliberately unavailable, and how fresh must stock be?
 8. **Image representation:** Are URLs stable, signed, expiring, or protected? Which MIME types, sizes, roles, hostnames, ordering, checksums, and asset-retention guarantees apply?
 9. **Fragrance notes:** Are notes strings or controlled IDs? Are they curated per SKU, variant, or inherited parent? Can a tier be empty, and are localized approved labels available?
-10. **Product update signal:** Does `updated_at` cover price, inventory, promotion, assets, and descriptive attributes? Can the API supply a source version and/or strong ETag?
+10. **Product update signal:** Does `source_updated_at` cover price, inventory, promotion, assets, and descriptive attributes? Can the API supply a source version and/or strong ETag?
 11. **Lifecycle:** How are deleted, discontinued, hidden, draft, and replaced products represented? Are tombstones and replacement SKU links available?
 12. **Locales:** Are Khmer and English approved names/descriptions separate controlled fields? If so, add explicit locale objects rather than asking AI to translate canonical names.
 13. **Origin:** Does `country_of_origin` mean manufacturing, formulation, brand, or customs origin? Can multiple origins apply?
@@ -341,4 +341,8 @@ Before a content revision can enter approval:
 19. **API versioning:** How are breaking changes signaled, how long are versions supported, and what deprecation notice/contract test environment is available?
 20. **New-product semantics:** Which authoritative timestamp and window define `/newproducts`, and how are backfills/relisted products handled?
 
-The contract is **sufficient for Phase 1A scaffolding, domain modeling, fictional fixtures, and contract-test authoring**. It is **not sufficient for a real Product API adapter or integration exit** until the Product API owner resolves the decisions above, approves the normalized schema, and supplies sanitized representative and error fixtures.
+## Phase 1B implementation clarification
+
+The fictional adapter canonicalizes valid decimal strings without binary floating point (`"38.00"` becomes `"38"`) and stores them as PostgreSQL `DECIMAL(19,4)`. This does not choose display precision or currency rounding rules. Images remain recommended rather than required. Promotion activity is not evaluated locally. Exact SKU lookup is case-sensitive, while fixture search is case-insensitive substring matching over SKU, name, and brand; these are conservative mock behaviors, not claims about the real API.
+
+The contract is **sufficient for Phase 1B domain modeling, fictional adapters, immutable snapshots, and reusable contract tests**. It is **not sufficient for a real Product API adapter or integration exit** until the Product API owner resolves the decisions above, approves the normalized schema, and supplies sanitized representative and error fixtures.

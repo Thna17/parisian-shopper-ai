@@ -17,6 +17,7 @@
   "scripts": {
     "build": "tsc -b --force",
     "boundaries": "node scripts/check-boundaries.mjs",
+    "boundaries:check": "pnpm boundaries",
     "db:generate": "pnpm --filter @parisian-shopper/database prisma:generate",
     "db:migrate": "pnpm --filter @parisian-shopper/database prisma:migrate:dev",
     "db:migrate:deploy": "pnpm --filter @parisian-shopper/database prisma:migrate:deploy",
@@ -31,7 +32,9 @@
     "lint": "eslint . --max-warnings 0 && pnpm boundaries",
     "lint:fix": "eslint . --fix && prettier --write .",
     "prisma:validate": "pnpm --filter @parisian-shopper/database prisma:validate",
+    "prisma:format": "pnpm --filter @parisian-shopper/database prisma:format",
     "security:audit": "pnpm audit --prod",
+    "security:check": "pnpm security:audit",
     "start:api": "node apps/api/dist/main.js",
     "start:worker": "node apps/worker/dist/main.js",
     "test": "pnpm test:unit && pnpm test:integration && pnpm test:e2e",
