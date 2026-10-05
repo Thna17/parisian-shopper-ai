@@ -32,6 +32,7 @@ function getArg(flag) {
 
 const telegramIdInput = getArg('--telegram-id') ?? getArg('-t');
 const nameInput = getArg('--name') ?? getArg('-n') ?? 'Demo Presenter';
+const usernameInput = getArg('--username') ?? getArg('-u');
 
 const prisma = new PrismaClient();
 
@@ -130,6 +131,12 @@ async function main() {
           where: { id: customIdentity.userId },
           data: { displayName: nameInput, status: 'ACTIVE' },
         });
+        if (usernameInput) {
+          await prisma.telegramIdentity.update({
+            where: { telegramUserId: targetId },
+            data: { telegramUsername: usernameInput },
+          });
+        }
         const hasRole = await prisma.userRole.findFirst({
           where: { userId: customIdentity.userId, roleId: approverRole.id },
         });
@@ -158,7 +165,8 @@ async function main() {
           data: {
             userId: user.id,
             telegramUserId: targetId,
-            telegramUsername: nameInput.toLowerCase().replace(/[^a-z0-9_]/g, '_'),
+            telegramUsername:
+              usernameInput ?? nameInput.toLowerCase().replace(/[^a-z0-9_]/g, '_'),
           },
           include: { user: true },
         });

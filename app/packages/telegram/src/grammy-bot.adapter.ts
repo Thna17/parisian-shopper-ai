@@ -27,6 +27,7 @@ export class GrammyBotAdapter implements OnModuleInit, OnModuleDestroy {
   public async onModuleInit(): Promise<void> {
     if (!this.flags.isEnabled(FeatureFlag.TELEGRAM) || this.bot === null) return;
     if (this.config.telegram.mode === 'polling') {
+      this.logger.log('Telegram polling started', { action: 'telegram_polling_started' });
       void this.bot.start({ drop_pending_updates: false }).catch((error: unknown) => {
         this.logger.error('Telegram polling failed', {
           action: 'telegram_polling_failed',

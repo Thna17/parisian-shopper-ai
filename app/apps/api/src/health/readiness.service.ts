@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InfrastructureError } from '@parisian-shopper/common';
 import { DatabaseHealthIndicator } from '@parisian-shopper/database';
 import { ValkeyConnectionService } from '@parisian-shopper/jobs';
@@ -6,8 +6,8 @@ import { ValkeyConnectionService } from '@parisian-shopper/jobs';
 @Injectable()
 export class ReadinessService {
   public constructor(
-    private readonly database: DatabaseHealthIndicator,
-    private readonly valkey: ValkeyConnectionService,
+    @Inject(DatabaseHealthIndicator) private readonly database: DatabaseHealthIndicator,
+    @Inject(ValkeyConnectionService) private readonly valkey: ValkeyConnectionService,
   ) {}
 
   public async assertReady(): Promise<void> {

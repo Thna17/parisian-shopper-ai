@@ -1,4 +1,4 @@
-import { Controller, Get, VERSION_NEUTRAL } from '@nestjs/common';
+import { Controller, Get, Inject, VERSION_NEUTRAL } from '@nestjs/common';
 import { ApiOkResponse, ApiServiceUnavailableResponse, ApiTags } from '@nestjs/swagger';
 
 import { ReadinessService } from './readiness.service.js';
@@ -10,7 +10,7 @@ interface HealthResponse {
 @ApiTags('health')
 @Controller({ path: 'health', version: VERSION_NEUTRAL })
 export class HealthController {
-  public constructor(private readonly readiness: ReadinessService) {}
+  public constructor(@Inject(ReadinessService) private readonly readiness: ReadinessService) {}
 
   @Get()
   @ApiOkResponse({ description: 'Application and required dependencies are ready' })
