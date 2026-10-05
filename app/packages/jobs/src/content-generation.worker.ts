@@ -5,6 +5,7 @@ import { type Job, UnrecoverableError, Worker } from 'bullmq';
 
 import { createBullMqConnection } from './bullmq-connection.js';
 import { type ContentGenerationJobData } from './content-generation.queue.js';
+import { ContentValidationQueue } from './content-validation.queue.js';
 import { ContentGenerationJobName, QueueName } from './queue-names.js';
 import { ValkeyConnectionService } from './valkey-connection.service.js';
 import { WorkerRegistry } from './worker.registry.js';
@@ -17,6 +18,7 @@ export class ContentGenerationWorker implements OnModuleInit {
     private readonly valkey: ValkeyConnectionService,
     private readonly registry: WorkerRegistry,
     private readonly generateContent: GenerateContentUseCase,
+    private readonly validationQueue: ContentValidationQueue,
   ) {}
 
   public async onModuleInit(): Promise<void> {
@@ -40,7 +42,8 @@ export class ContentGenerationWorker implements OnModuleInit {
       throw new UnrecoverableError('Unsupported content-generation job name');
     }
     try {
-      await this.generateContent.execute(job.data.contentJobId);
+      const version = await this.generateContent.execute(job.data.contentJobId);
+      if (version !== null) await this.validationQueue.enqueue(version.id);
     } catch (error) {
       if (error instanceof ContentGenerationError && !error.retryable) {
         throw new UnrecoverableError(error.publicMessage);

@@ -3,7 +3,11 @@ import { ApplicationModule } from '@parisian-shopper/application';
 import { AIProvidersModule } from '@parisian-shopper/ai-providers';
 import { AppConfigModule } from '@parisian-shopper/config';
 import { DatabaseModule } from '@parisian-shopper/database';
-import { ContentGenerationWorkerModule, JobsModule } from '@parisian-shopper/jobs';
+import {
+  ContentGenerationWorkerModule,
+  ContentValidationWorkerModule,
+  JobsModule,
+} from '@parisian-shopper/jobs';
 import { LoggerModule } from '@parisian-shopper/logger';
 
 @Module({
@@ -15,6 +19,7 @@ import { LoggerModule } from '@parisian-shopper/logger';
     ApplicationModule,
     JobsModule,
     ContentGenerationWorkerModule,
+    ContentValidationWorkerModule,
   ],
 })
 export class WorkerModule {}

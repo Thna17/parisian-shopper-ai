@@ -87,7 +87,10 @@ export class GenerateContentUseCase {
       promptVersion: PROMPT_CONTEXT_VERSION,
       staleAfterMs: this.policy.attemptStaleAfterMs,
     });
-    if (started.disposition === 'ALREADY_COMPLETE') return null;
+    if (started.disposition === 'ALREADY_COMPLETE') {
+      const versions = await this.repository.findVersionsByJobId(contentJobId);
+      return versions.at(-1) ?? null;
+    }
     if (started.disposition === 'ALREADY_RUNNING') {
       throw new ContentGenerationError({
         code: 'AI_PROVIDER_UNAVAILABLE',

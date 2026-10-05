@@ -5,3 +5,4 @@ export * from './prisma.service.js';
 export * from './brand/prisma-brand-rule.repository.js';
 export * from './content/prisma-content-generation.repository.js';
 export * from './product-snapshot/prisma-product-snapshot.repository.js';
+export * from './validation/prisma-validation.repository.js';

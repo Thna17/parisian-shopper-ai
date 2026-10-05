@@ -69,6 +69,19 @@ enum GenerationAttemptStatus {
   TIMED_OUT
 }
 
+enum ValidationSeverity {
+  INFO
+  WARNING
+  BLOCKING
+}
+
+enum FactualValidationStatus {
+  PASSED
+  PASSED_WITH_WARNINGS
+  BLOCKED
+  FAILED
+}
+
 model User {
   id          String     @id @default(uuid()) @db.Uuid
   displayName String     @map("display_name") @db.VarChar(200)
@@ -260,12 +273,53 @@ model ContentVersion {
   providerMetadata    Json?    @map("provider_metadata") @db.JsonB
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  contentJob        ContentJob        @relation(fields: [contentJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_content_job_id_fkey")
-  brandRuleVersion  BrandRuleVersion  @relation(fields: [brandRuleVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_brand_rule_version_id_fkey")
-  productSnapshot   ProductSnapshot   @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_product_snapshot_id_fkey")
-  generationAttempt GenerationAttempt @relation(fields: [generationAttemptId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_generation_attempt_id_fkey")
+  contentJob        ContentJob         @relation(fields: [contentJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_content_job_id_fkey")
+  brandRuleVersion  BrandRuleVersion   @relation(fields: [brandRuleVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_brand_rule_version_id_fkey")
+  productSnapshot   ProductSnapshot    @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_product_snapshot_id_fkey")
+  generationAttempt GenerationAttempt  @relation(fields: [generationAttemptId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_generation_attempt_id_fkey")
+  validationResults ValidationResult[]
 
   @@unique([contentJobId, versionNumber], map: "content_versions_job_version_key")
   @@index([productSnapshotId, createdAt], map: "content_versions_product_snapshot_id_created_at_idx")
   @@map("content_versions")
+}
+
+model ValidationResult {
+  id               String                  @id @default(uuid()) @db.Uuid
+  contentVersionId String                  @map("content_version_id") @db.Uuid
+  validatorVersion String                  @map("validator_version") @db.VarChar(100)
+  status           FactualValidationStatus
+  findingCount     Int                     @map("finding_count")
+  blockingCount    Int                     @map("blocking_count")
+  warningCount     Int                     @map("warning_count")
+  infoCount        Int                     @map("info_count")
+  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  contentVersion ContentVersion      @relation(fields: [contentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "validation_results_content_version_id_fkey")
+  findings       ValidationFinding[]
+
+  @@unique([contentVersionId, validatorVersion], map: "validation_results_version_validator_key")
+  @@index([contentVersionId, createdAt], map: "validation_results_content_version_created_at_idx")
+  @@map("validation_results")
+}
+
+model ValidationFinding {
+  id                 String             @id @default(uuid()) @db.Uuid
+  validationResultId String             @map("validation_result_id") @db.Uuid
+  field              String             @db.VarChar(100)
+  severity           ValidationSeverity
+  code               String             @db.VarChar(100)
+  message            String             @db.VarChar(1000)
+  expectedValue      Json?              @map("expected_value") @db.JsonB
+  actualValue        Json?              @map("actual_value") @db.JsonB
+  sourcePath         String?            @map("source_path") @db.VarChar(300)
+  contentPath        String?            @map("content_path") @db.VarChar(300)
+  metadata           Json?              @db.JsonB
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  validationResult ValidationResult @relation(fields: [validationResultId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "validation_findings_validation_result_id_fkey")
+
+  @@index([validationResultId, severity], map: "validation_findings_result_severity_idx")
+  @@index([code], map: "validation_findings_code_idx")
+  @@map("validation_findings")
 }

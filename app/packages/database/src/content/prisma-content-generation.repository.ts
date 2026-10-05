@@ -50,6 +50,11 @@ export class PrismaContentGenerationRepository implements ContentGenerationRepos
     return record === null ? null : toJob(record);
   }
 
+  public async findVersionById(id: string): Promise<ContentVersion | null> {
+    const record = await this.prisma.contentVersion.findUnique({ where: { id } });
+    return record === null ? null : toVersion(record);
+  }
+
   public async beginGeneration(input: BeginGenerationInput): Promise<BeginGenerationResult> {
     return this.prisma.$transaction(
       async (tx) => {

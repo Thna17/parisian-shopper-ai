@@ -1,5 +1,9 @@
 # Content persistence
 
+## Phase 1D validation records
+
+Each immutable `ContentVersion` can have one immutable `ValidationResult` per validator version. Findings are normalized child rows rather than an opaque status blob. Count constraints ensure the stored total equals blocking, warning, and information counts. PostgreSQL triggers reject updates and deletes for both result and finding rows. A validation transaction also creates the idempotent `CONTENT_VALIDATION_COMPLETED` outbox event.
+
 `ContentJob` links one immutable product snapshot and one brand-rule version to a content type, language, and platform. Phase 1C transitions are explicit: `REQUESTED -> GENERATING -> DRAFT`, `GENERATING -> FAILED`, and retry `FAILED -> GENERATING`. `DRAFT` is terminal in this phase.
 
 `GenerationAttempt` records every provider call: sequential attempt number, provider, model, prompt version, status, timestamps, latency, nullable token counts/cost, and sanitized failure metadata. Prompts and content are not copied into attempt telemetry.

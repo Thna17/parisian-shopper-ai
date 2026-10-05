@@ -10,7 +10,12 @@ import {
   FakeAITextProvider,
   FICTIONAL_PRODUCTS,
   GenerateContentUseCase,
+  DeterministicFactualValidator,
+  FindingCode,
+  IsContentVersionApprovalEligibleQuery,
   NoopContentMetrics,
+  type NormalizedProduct,
+  ValidateContentVersionUseCase,
   type ProductMetrics,
 } from '@parisian-shopper/application';
 import { type ApplicationLogger } from '@parisian-shopper/common';
@@ -28,6 +33,7 @@ import { PrismaBrandRuleRepository } from '../../src/brand/prisma-brand-rule.rep
 import { PrismaContentGenerationRepository } from '../../src/content/prisma-content-generation.repository.js';
 import { PrismaProductSnapshotRepository } from '../../src/product-snapshot/prisma-product-snapshot.repository.js';
 import { PrismaService } from '../../src/prisma.service.js';
+import { PrismaValidationRepository } from '../../src/validation/prisma-validation.repository.js';
 import { createBullMqConnection } from '../../../jobs/src/bullmq-connection.js';
 
 const execFileAsync = promisify(execFile);
@@ -45,6 +51,7 @@ describe('Phase 1C content generation persistence and queue', () => {
   let snapshots: PrismaProductSnapshotRepository | undefined;
   let brands: PrismaBrandRuleRepository | undefined;
   let content: PrismaContentGenerationRepository | undefined;
+  let validations: PrismaValidationRepository | undefined;
 
   beforeAll(async () => {
     [postgres, valkey] = await Promise.all([
@@ -73,6 +80,7 @@ describe('Phase 1C content generation persistence and queue', () => {
     snapshots = new PrismaProductSnapshotRepository(prisma);
     brands = new PrismaBrandRuleRepository(prisma);
     content = new PrismaContentGenerationRepository(prisma);
+    validations = new PrismaValidationRepository(prisma);
   });
 
   afterAll(async () => {
@@ -306,16 +314,187 @@ describe('Phase 1C content generation persistence and queue', () => {
     ).rejects.toThrow();
   });
 
+  it('persists a successful immutable validation once and reports approval eligibility', async () => {
+    const setup = await createJob('validation-pass', 0, {
+      size: { value: '100', unit: 'ml', display: '100 ml' },
+    });
+    const provider = outputProvider(
+      'Moonlit River Eau de Parfum is an EDP in 100ml at $38 USD. Top notes: Fictional bergamot, Fictional pear. Heart notes: Fictional jasmine. Base notes: Fictional cedar, Fictional musk.',
+    );
+    const version = await generationUseCase(provider, 1_000).execute(setup.jobId);
+    if (version === null) throw new Error('Version missing');
+    const useCase = validationUseCase();
+    const first = await useCase.execute(version.id);
+    const duplicate = await useCase.execute(version.id);
+    expect(duplicate.id).toBe(first.id);
+    expect(first.status).toMatch(/PASSED/u);
+    expect(
+      await new IsContentVersionApprovalEligibleQuery(getValidations()).execute(version.id),
+    ).toBe(true);
+    expect(
+      await getPrisma().outboxEvent.count({
+        where: { topic: 'CONTENT_VALIDATION_COMPLETED', aggregateId: version.id },
+      }),
+    ).toBe(1);
+    await expect(
+      getPrisma()
+        .$executeRaw`UPDATE validation_results SET validator_version = 'changed' WHERE id = ${first.id}::uuid`,
+    ).rejects.toThrow('append-only');
+    await expect(
+      getPrisma()
+        .$executeRaw`DELETE FROM validation_findings WHERE validation_result_id = ${first.id}::uuid`,
+    ).rejects.toThrow('append-only');
+  });
+
+  it('blocks a scent-pyramid note assigned outside the verified snapshot', async () => {
+    const setup = await createJob('validation-scent', 0, {
+      fragrance_notes: { top: ['Bergamot'], heart: ['Rose'], base: ['Cedar'] },
+    });
+    const version = await generationUseCase(
+      outputProvider('Top notes: Lemon. Heart notes: Rose. Base notes: Cedar.'),
+      1_000,
+    ).execute(setup.jobId);
+    if (version === null) throw new Error('Version missing');
+    const result = await validationUseCase().execute(version.id);
+    expect(result.status).toBe('BLOCKED');
+    expect(result.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: FindingCode.UNSUPPORTED_FRAGRANCE_NOTE,
+          actualValue: 'Lemon',
+        }),
+      ]),
+    );
+  });
+
+  it('blocks wrong price and invented origin through the persisted end-to-end path', async () => {
+    const setup = await createJob('validation-blocked');
+    const provider: AITextProvider = {
+      providerName: 'deterministic-bad-output',
+      model: 'fixture-v1',
+      generate: () =>
+        Promise.resolve({
+          provider: 'deterministic-bad-output',
+          model: 'fixture-v1',
+          output: {
+            headline: 'Fictional offer',
+            khmer_caption: 'តម្លៃ $38 USD ផលិតនៅប្រទេសកម្ពុជា',
+            english_caption: 'Now $35 USD. Made in Cambodia. Top notes: invented lemon.',
+            cta: 'Learn more',
+            hashtags: ['#Fictional'],
+            creative_brief: 'Static product card',
+            facts_used: ['$35 USD', 'Made in Cambodia'],
+            warnings: [],
+            missing_information: [],
+          },
+        }),
+    };
+    const version = await generationUseCase(provider, 1_000).execute(setup.jobId);
+    if (version === null) throw new Error('Version missing');
+    const result = await validationUseCase().execute(version.id);
+    expect(result.status).toBe('BLOCKED');
+    expect(result.findings.map((item) => item.code)).toEqual(
+      expect.arrayContaining([
+        FindingCode.PRICE_MISMATCH,
+        FindingCode.ORIGIN_MISMATCH,
+        FindingCode.UNSUPPORTED_FRAGRANCE_NOTE,
+      ]),
+    );
+    expect(
+      await new IsContentVersionApprovalEligibleQuery(getValidations()).execute(version.id),
+    ).toBe(false);
+  });
+
+  it('blocks origin and similarity hallucinations when both controlled source fields are absent', async () => {
+    const setup = await createJob('validation-hallucination', 7);
+    const provider: AITextProvider = {
+      providerName: 'deterministic-hallucination-output',
+      model: 'fixture-v1',
+      generate: () =>
+        Promise.resolve({
+          provider: 'deterministic-hallucination-output',
+          model: 'fixture-v1',
+          output: {
+            headline: 'Essential Carry Pouch',
+            khmer_caption: 'ផលិតផលប្រឌិតសម្រាប់សាកល្បង។',
+            english_caption: 'Made in France. Similar to Dior Sauvage.',
+            cta: 'Learn more',
+            hashtags: ['#Fictional'],
+            creative_brief: 'Static product card',
+            facts_used: [],
+            warnings: [],
+            missing_information: [],
+          },
+        }),
+    };
+    const version = await generationUseCase(provider, 1_000).execute(setup.jobId);
+    if (version === null) throw new Error('Version missing');
+    const result = await validationUseCase().execute(version.id);
+    expect(result.findings.map((item) => item.code)).toEqual(
+      expect.arrayContaining([
+        FindingCode.UNSUPPORTED_ORIGIN,
+        FindingCode.UNSUPPORTED_SIMILARITY_CLAIM,
+      ]),
+    );
+    expect(result.status).toBe('BLOCKED');
+  });
+
+  it('processes validation through BullMQ and remains idempotent on duplicate delivery', async () => {
+    const setup = await createJob('validation-queue');
+    const version = await generationUseCase(new FakeAITextProvider(), 1_000).execute(setup.jobId);
+    if (version === null) throw new Error('Version missing');
+    const address = valkeyAddress();
+    const queueClient = await GlideClient.createClient({ addresses: [address] });
+    const workerClient = await GlideClient.createClient({ addresses: [address] });
+    const queueName = `phase-1d-validation-${crypto.randomUUID()}`;
+    const queue = new Queue<{ contentVersionId: string }>(queueName, {
+      connection: createBullMqConnection(queueClient),
+    });
+    const worker = new Worker<{ contentVersionId: string }>(
+      queueName,
+      (job) => validationUseCase().execute(job.data.contentVersionId),
+      { connection: createBullMqConnection(workerClient) },
+    );
+    try {
+      await Promise.all([queue.waitUntilReady(), worker.waitUntilReady()]);
+      for (const suffix of ['first', 'duplicate']) {
+        const completed = new Promise<void>((resolve, reject) => {
+          worker.once('completed', () => resolve());
+          worker.once('failed', (_job, error) => reject(error));
+        });
+        await queue.add(
+          'VALIDATE_CONTENT_VERSION',
+          { contentVersionId: version.id },
+          {
+            jobId: `${suffix}-${version.id}`,
+          },
+        );
+        await completed;
+      }
+      expect(
+        await getPrisma().validationResult.count({ where: { contentVersionId: version.id } }),
+      ).toBe(1);
+    } finally {
+      await worker.close();
+      await queue.close();
+      queueClient.close();
+      workerClient.close();
+    }
+  });
+
   async function createJob(
     suffix: string,
+    fixtureIndex = 0,
+    overrides: Partial<NormalizedProduct> = {},
   ): Promise<{ jobId: string; snapshotId: string; brandRuleId: string }> {
-    const fixture = FICTIONAL_PRODUCTS[0];
+    const fixture = FICTIONAL_PRODUCTS[fixtureIndex];
     if (fixture === undefined) throw new Error('Fixture missing');
+    const product = { ...structuredClone(fixture), product: { ...fixture.product, ...overrides } };
     const snapshot = await new CreateProductSnapshotUseCase(
       getSnapshots(),
       productMetrics,
       logger,
-    ).execute(structuredClone(fixture));
+    ).execute(product);
     const brand = await getBrands().create({
       name: `Development placeholder ${suffix}`,
       version: 1,
@@ -333,6 +512,29 @@ describe('Phase 1C content generation persistence and queue', () => {
     return { jobId: job.id, snapshotId: snapshot.id, brandRuleId: brand.id };
   }
 
+  function outputProvider(englishCaption: string): AITextProvider {
+    return {
+      providerName: 'deterministic-grounded-output',
+      model: 'fixture-v1',
+      generate: () =>
+        Promise.resolve({
+          provider: 'deterministic-grounded-output',
+          model: 'fixture-v1',
+          output: {
+            headline: 'Fictional product spotlight',
+            khmer_caption: 'ផលិតផលប្រឌិតសម្រាប់ការសាកល្បង។',
+            english_caption: englishCaption,
+            cta: 'Learn more',
+            hashtags: ['#Fictional'],
+            creative_brief: 'Static product card',
+            facts_used: [],
+            warnings: [],
+            missing_information: [],
+          },
+        }),
+    };
+  }
+
   function generationUseCase(provider: AITextProvider, timeoutMs: number): GenerateContentUseCase {
     return new GenerateContentUseCase(
       getContent(),
@@ -345,6 +547,15 @@ describe('Phase 1C content generation persistence and queue', () => {
       enabledFlags,
       new ContentStrategyRegistry(),
       new AIContextBuilder(),
+    );
+  }
+
+  function validationUseCase(): ValidateContentVersionUseCase {
+    return new ValidateContentVersionUseCase(
+      getContent(),
+      getSnapshots(),
+      getValidations(),
+      new DeterministicFactualValidator(),
     );
   }
 
@@ -367,5 +578,9 @@ describe('Phase 1C content generation persistence and queue', () => {
   function getContent(): PrismaContentGenerationRepository {
     if (content === undefined) throw new Error('Content repository unavailable');
     return content;
+  }
+  function getValidations(): PrismaValidationRepository {
+    if (validations === undefined) throw new Error('Validation repository unavailable');
+    return validations;
   }
 });

@@ -96,6 +96,7 @@ export interface FailGenerationInput {
 export interface ContentGenerationRepository {
   createJob(input: CreateContentJobInput): Promise<ContentJob>;
   findJobById(id: string): Promise<ContentJob | null>;
+  findVersionById(id: string): Promise<ContentVersion | null>;
   beginGeneration(input: BeginGenerationInput): Promise<BeginGenerationResult>;
   completeGeneration(input: CompleteGenerationInput): Promise<ContentVersion>;
   failGeneration(input: FailGenerationInput): Promise<void>;
