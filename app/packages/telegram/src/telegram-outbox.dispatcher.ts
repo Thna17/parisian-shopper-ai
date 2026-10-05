@@ -38,7 +38,8 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy {
     @Inject(TELEGRAM_WORKFLOW_REPOSITORY) private readonly repository: TelegramWorkflowRepository,
     @Inject(TELEGRAM_DELIVERY_GATEWAY) private readonly gateway: TelegramDeliveryGateway,
     private readonly tokens: TelegramActionTokenService,
-    @Inject(AppConfigService) private readonly config: Pick<AppConfigService, 'telegram'>,
+    @Inject(AppConfigService)
+    private readonly config: Pick<AppConfigService, 'telegram' | 'demoMode'>,
     @Inject(FeatureFlagService) private readonly flags: Pick<FeatureFlagService, 'isEnabled'>,
     @Inject(APPLICATION_LOGGER) private readonly logger: ApplicationLogger,
   ) {}
@@ -211,7 +212,9 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy {
       buttonRows.push([{ text: '📜 Version History', callbackData: callbackData(historyToken) }]);
     }
 
-    const texts = splitTelegramMessage(formatDraft(view));
+    const texts = splitTelegramMessage(
+      formatDraft(view, { demoMode: Boolean(this.config.demoMode) }),
+    );
     const messages: TelegramMessage[] = texts.map((text, index) => ({
       text,
       ...(index !== texts.length - 1 ? {} : { buttons: buttonRows }),

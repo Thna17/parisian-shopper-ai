@@ -45,6 +45,7 @@ import {
   formatProduct,
   formatValidation,
   splitTelegramMessage,
+  type TelegramFormatOptions,
 } from './telegram-formatters.js';
 import {
   TELEGRAM_WORKFLOW_REPOSITORY,
@@ -55,6 +56,7 @@ import {
 export const TELEGRAM_WORKFLOW_POLICY = Symbol('TELEGRAM_WORKFLOW_POLICY');
 export interface TelegramWorkflowPolicy {
   actionTokenTtlSeconds: number;
+  demoMode?: boolean;
 }
 
 const ACCESS_DENIED = 'Access denied. This bot is restricted to authorized Parisian Shopper staff.';
@@ -93,6 +95,10 @@ export class TelegramCommandCenter {
     private readonly reviewState: GetContentReviewStateQuery,
     private readonly approvalStatus: GetApprovalStatusQuery,
   ) {}
+
+  private get formatOptions(): TelegramFormatOptions {
+    return { demoMode: Boolean(this.policy.demoMode) };
+  }
 
   public async handleCommand(input: TelegramCommandInput): Promise<TelegramResponse> {
     if (
@@ -347,7 +353,7 @@ export class TelegramCommandCenter {
     return {
       messages: [
         {
-          text: `${formatProduct(product)}\n\nChoose a content type:`,
+          text: `${formatProduct(product, this.formatOptions)}\n\nChoose a content type:`,
           buttons: choices.map((choice, index) => [
             { text: friendly(choice), callbackData: callbackData(required(tokenValues[index])) },
           ]),
@@ -406,7 +412,9 @@ export class TelegramCommandCenter {
     return {
       messages: [
         {
-          text: items.map((item, index) => `${index + 1}. ${formatProduct(item)}`).join('\n\n'),
+          text: items
+            .map((item, index) => `${index + 1}. ${formatProduct(item, this.formatOptions)}`)
+            .join('\n\n'),
           buttons: rows,
         },
       ],
@@ -502,7 +510,9 @@ export class TelegramCommandCenter {
     this.require(actor, Permission.VIEW_OWN_CONTENT);
     const jobs = await this.repository.listRecentJobs(actor, 10);
     return one(
-      jobs.length === 0 ? 'No recent content jobs.' : jobs.map(formatJobSummary).join('\n'),
+      jobs.length === 0
+        ? 'No recent content jobs.'
+        : jobs.map((job) => formatJobSummary(job, this.formatOptions)).join('\n'),
     );
   }
 
@@ -512,7 +522,7 @@ export class TelegramCommandCenter {
     return one(
       jobs.length === 0
         ? 'No content history found for this SKU.'
-        : jobs.map(formatJobSummary).join('\n'),
+        : jobs.map((job) => formatJobSummary(job, this.formatOptions)).join('\n'),
     );
   }
 
@@ -526,7 +536,7 @@ export class TelegramCommandCenter {
       resourceType: 'ContentJob',
       resourceId: jobId,
     });
-    return many(formatProduct(source));
+    return many(formatProduct(source, this.formatOptions));
   }
 
   private async viewValidation(actor: TelegramActor, versionId: string): Promise<TelegramResponse> {
@@ -539,7 +549,7 @@ export class TelegramCommandCenter {
       resourceType: 'ContentVersion',
       resourceId: versionId,
     });
-    return many(formatValidation(validation));
+    return many(formatValidation(validation, this.formatOptions));
   }
 
   private async selectionTokens(
@@ -763,7 +773,7 @@ export class TelegramCommandCenter {
     if (versions.length === 0) return one('No versions found for this job.');
     const draft = await this.repository.getDraftViewByVersionId(versions[0]?.id ?? '');
     const productName = draft?.productName ?? 'Product';
-    return one(formatPreviousVersions(jobId, productName, versions));
+    return one(formatPreviousVersions(jobId, productName, versions, this.formatOptions));
   }
 
   private async cancelAction(actor: TelegramActor): Promise<TelegramResponse> {

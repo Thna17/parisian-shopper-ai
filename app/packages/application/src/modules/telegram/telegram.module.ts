@@ -22,6 +22,7 @@ import {
       inject: [AppConfigService],
       useFactory: (config: AppConfigService): TelegramWorkflowPolicy => ({
         actionTokenTtlSeconds: config.telegram.actionTokenTtlSeconds,
+        demoMode: config.demoMode,
       }),
     },
   ],

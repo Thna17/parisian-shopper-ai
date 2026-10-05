@@ -45,6 +45,10 @@ export class AppConfigService {
     return this.config.get('NODE_ENV', { infer: true });
   }
 
+  public get demoMode(): boolean {
+    return this.config.get('DEMO_MODE', { infer: true });
+  }
+
   public get application(): ApplicationConfig {
     return {
       name: this.config.get('APP_NAME', { infer: true }),

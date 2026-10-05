@@ -78,6 +78,7 @@ export const environmentSchema = z
     FEATURE_AUTO_PUBLISHING: booleanFromEnvironment.default(false),
     FEATURE_META_PUBLISHING: booleanFromEnvironment.default(false),
     FEATURE_ANALYTICS: booleanFromEnvironment.default(false),
+    DEMO_MODE: booleanFromEnvironment.default(false),
   })
   .superRefine((environment, context) => {
     if (environment.AI_ATTEMPT_STALE_AFTER_MS <= environment.AI_REQUEST_TIMEOUT_MS) {

@@ -166,6 +166,15 @@ export const FICTIONAL_PRODUCTS: readonly NormalizedProductEnvelope[] = deepFree
     category: 'cosmetic',
     price: '12.75',
     currency: 'USD',
+    promo_price: '9.50',
+    discount: {
+      type: 'percentage',
+      value: '25',
+      label: '25% off',
+      calculation_method: 'upstream',
+      starts_at: '2026-10-01T00:00:00+07:00',
+      ends_at: '2026-10-31T23:59:59+07:00',
+    },
     description: 'A fictional rose-toned cosmetic test product.',
     images: [
       {

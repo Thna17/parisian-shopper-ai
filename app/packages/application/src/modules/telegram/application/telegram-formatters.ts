@@ -26,10 +26,18 @@ export function splitTelegramMessage(text: string, limit = TELEGRAM_SAFE_TEXT_LI
   return chunks;
 }
 
-export function formatProduct(product: NormalizedProductEnvelope): string {
+export interface TelegramFormatOptions {
+  readonly demoMode?: boolean;
+}
+
+export function formatProduct(
+  product: NormalizedProductEnvelope,
+  options?: TelegramFormatOptions,
+): string {
   const value = product.product;
+  const prefix = options?.demoMode ? '[DEMO] ' : '';
   return [
-    `Product: ${value.product_name}`,
+    `${prefix}Product: ${value.product_name}`,
     `Brand: ${value.brand}`,
     `SKU: ${value.sku}`,
     `Price: ${formatMoney(value.price, value.currency)}`,
@@ -42,17 +50,19 @@ export function formatProduct(product: NormalizedProductEnvelope): string {
   ].join('\n');
 }
 
-export function formatJobSummary(job: TelegramJobSummary): string {
+export function formatJobSummary(job: TelegramJobSummary, options?: TelegramFormatOptions): string {
+  const prefix = options?.demoMode ? '[DEMO] ' : '';
   const validation =
     job.validationStatus === undefined ? '' : ` / ${friendlyValidation(job.validationStatus)}`;
-  return `#${shortReference(job.jobId)} ${job.productName} — ${friendlyJobStatus(job.jobStatus)}${validation}`;
+  return `${prefix}#${shortReference(job.jobId)} ${job.productName} — ${friendlyJobStatus(job.jobStatus)}${validation}`;
 }
 
-export function formatDraft(view: TelegramDraftView): string {
+export function formatDraft(view: TelegramDraftView, options?: TelegramFormatOptions): string {
+  const prefix = options?.demoMode ? '[DEMO] ' : '';
   const status = validationBanner(view.validation);
   const output = view.output;
   return [
-    `DRAFT #${shortReference(view.jobId)} — V${String(view.versionNumber ?? 1)}`,
+    `${prefix}DRAFT #${shortReference(view.jobId)} — V${String(view.versionNumber ?? 1)}`,
     `Product: ${view.productName}`,
     `Content type: ${friendlyEnum(view.contentType)}`,
     `Language: ${friendlyEnum(view.language)}`,
@@ -67,11 +77,15 @@ export function formatDraft(view: TelegramDraftView): string {
   ].join('\n\n');
 }
 
-export function formatValidation(result: PersistedValidationResult): string {
+export function formatValidation(
+  result: PersistedValidationResult,
+  options?: TelegramFormatOptions,
+): string {
+  const prefix = options?.demoMode ? '[DEMO] ' : '';
   const findings = result.findings
     .map((finding) => `${severityIcon(finding.severity)} ${finding.code}\n${finding.message}`)
     .join('\n\n');
-  return `${validationBanner(result)}${findings.length === 0 ? '' : `\n\n${findings}`}`;
+  return `${prefix}${validationBanner(result)}${findings.length === 0 ? '' : `\n\n${findings}`}`;
 }
 
 export function validationBanner(result: PersistedValidationResult): string {
@@ -127,9 +141,11 @@ export function formatPreviousVersions(
     createdAt: Date;
     headline: string;
   }[],
+  options?: TelegramFormatOptions,
 ): string {
+  const prefix = options?.demoMode ? '[DEMO] ' : '';
   const lines = [
-    `*Version History for #${shortReference(jobId)}*`,
+    `${prefix}*Version History for #${shortReference(jobId)}*`,
     `Product: ${productName}`,
     `Total versions: ${String(versions.length)}`,
     '',

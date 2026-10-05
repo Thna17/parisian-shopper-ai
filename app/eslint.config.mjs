@@ -19,13 +19,18 @@ export default tseslint.config(
   },
   eslint.configs.recommended,
   {
-    files: ['**/*.cjs'],
+    files: ['**/*.cjs', '**/*.mjs'],
     languageOptions: {
       globals: {
         __dirname: 'readonly',
         module: 'readonly',
         process: 'readonly',
         require: 'readonly',
+        console: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
       },
     },
   },
