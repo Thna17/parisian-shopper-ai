@@ -6,5 +6,5 @@
     "rootDir": "src"
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../config" }]
+  "references": [{ "path": "../application" }, { "path": "../common" }, { "path": "../config" }]
 }

@@ -11,6 +11,8 @@
   ],
   "dependencies": {
     "@nestjs/common": "12.1.2",
+    "@parisian-shopper/application": "workspace:0.1.0",
+    "@parisian-shopper/common": "workspace:0.1.0",
     "@parisian-shopper/config": "workspace:0.1.0",
     "@valkey/valkey-glide": "2.5.3",
     "bullmq": "6.3.11",

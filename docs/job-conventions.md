@@ -8,6 +8,8 @@ All production queue names must be declared in `packages/jobs/src/queue-names.ts
 
 ## Retry policy
 
+Phase 1C registers `content-generation` / `GENERATE_CONTENT` with stable `generate-<contentJobId>` IDs, bounded attempts from `AI_MAX_RETRIES`, and exponential backoff. Permanent generation errors become BullMQ `UnrecoverableError`; only explicitly retryable provider failures consume retries. PostgreSQL state remains the idempotency authority.
+
 - Workers are idempotent and reload expected state from PostgreSQL.
 - Retries are bounded. Transient network, rate-limit, and selected 5xx failures use exponential backoff with jitter.
 - Permanent schema, authorization, invariant, or validation failures fail immediately.

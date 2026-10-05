@@ -1,7 +1,9 @@
-/**
- * All production queue names must be declared here before use.
- * Phase 1A intentionally defines no business queue.
- */
-export const QueueName = Object.freeze({});
+export const QueueName = Object.freeze({
+  CONTENT_GENERATION: 'content-generation',
+} as const);
 
-export type QueueName = string & { readonly __queueName: unique symbol };
+export type QueueName = (typeof QueueName)[keyof typeof QueueName];
+
+export const ContentGenerationJobName = Object.freeze({
+  GENERATE_CONTENT: 'GENERATE_CONTENT',
+} as const);

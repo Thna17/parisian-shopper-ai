@@ -19,6 +19,16 @@ export interface ValkeyConfig {
   password?: string;
 }
 
+export interface AIConfig {
+  provider: Environment['AI_PROVIDER'];
+  openaiApiKey?: string;
+  openaiModel?: string;
+  baseUrl?: string;
+  requestTimeoutMs: number;
+  attemptStaleAfterMs: number;
+  maxRetries: number;
+}
+
 @Injectable()
 export class AppConfigService {
   public constructor(private readonly config: ConfigService<Environment, true>) {}
@@ -57,6 +67,21 @@ export class AppConfigService {
 
   public get prettyLogs(): boolean {
     return this.config.get('LOG_PRETTY', { infer: true }) && this.nodeEnvironment !== 'production';
+  }
+
+  public get ai(): AIConfig {
+    const openaiApiKey = this.config.get('OPENAI_API_KEY', { infer: true });
+    const openaiModel = this.config.get('OPENAI_MODEL', { infer: true });
+    const baseUrl = this.config.get('AI_BASE_URL', { infer: true });
+    return {
+      provider: this.config.get('AI_PROVIDER', { infer: true }),
+      requestTimeoutMs: this.config.get('AI_REQUEST_TIMEOUT_MS', { infer: true }),
+      attemptStaleAfterMs: this.config.get('AI_ATTEMPT_STALE_AFTER_MS', { infer: true }),
+      maxRetries: this.config.get('AI_MAX_RETRIES', { infer: true }),
+      ...(openaiApiKey === undefined ? {} : { openaiApiKey }),
+      ...(openaiModel === undefined ? {} : { openaiModel }),
+      ...(baseUrl === undefined ? {} : { baseUrl }),
+    };
   }
 
   public get featureFlags(): Readonly<Record<FeatureFlag, boolean>> {

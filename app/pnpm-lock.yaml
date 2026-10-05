@@ -77,6 +77,9 @@ importers:
       '@nestjs/swagger':
         specifier: 12.0.2
         version: 12.0.2(@nestjs/common@12.1.2(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.2)(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(typescript@5.9.3)
+      '@parisian-shopper/ai-providers':
+        specifier: workspace:0.1.0
+        version: link:../../packages/ai-providers
       '@parisian-shopper/application':
         specifier: workspace:0.1.0
         version: link:../../packages/application
@@ -125,6 +128,9 @@ importers:
       '@nestjs/core':
         specifier: 12.1.2
         version: 12.1.2(@nestjs/common@12.1.2(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@12.1.2)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@parisian-shopper/ai-providers':
+        specifier: workspace:0.1.0
+        version: link:../../packages/ai-providers
       '@parisian-shopper/application':
         specifier: workspace:0.1.0
         version: link:../../packages/application
@@ -146,6 +152,27 @@ importers:
       rxjs:
         specifier: 7.8.2
         version: 7.8.2
+
+  packages/ai-providers:
+    dependencies:
+      '@nestjs/common':
+        specifier: 12.1.2
+        version: 12.1.2(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@parisian-shopper/application':
+        specifier: workspace:0.1.0
+        version: link:../application
+      '@parisian-shopper/config':
+        specifier: workspace:0.1.0
+        version: link:../config
+      openai:
+        specifier: 7.28.0
+        version: 7.28.0(undici@8.11.2)(zod@4.6.5)
+      rxjs:
+        specifier: 7.8.2
+        version: 7.8.2
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
 
   packages/application:
     dependencies:
@@ -200,6 +227,12 @@ importers:
         specifier: 7.8.2
         version: 7.8.2
     devDependencies:
+      '@valkey/valkey-glide':
+        specifier: 2.5.3
+        version: 2.5.3
+      bullmq:
+        specifier: 6.3.11
+        version: 6.3.11
       prisma:
         specifier: 6.19.3
         version: 6.19.3(typescript@5.9.3)
@@ -209,6 +242,12 @@ importers:
       '@nestjs/common':
         specifier: 12.1.2
         version: 12.1.2(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@parisian-shopper/application':
+        specifier: workspace:0.1.0
+        version: link:../application
+      '@parisian-shopper/common':
+        specifier: workspace:0.1.0
+        version: link:../common
       '@parisian-shopper/config':
         specifier: workspace:0.1.0
         version: link:../config
@@ -2722,6 +2761,30 @@ packages:
   onetime@5.1.2:
     resolution: {integrity: sha512-kbpaSSGJTWdAY5KPVeMOKXSrPtr8C8C7wodJbcsd51jRnmD+GZu8Y0VoU6Dm5Z4vWr0Ig/1NKuWRKf7j5aaYSg==}
     engines: {node: '>=6'}
+
+  openai@7.28.0:
+    resolution: {integrity: sha512-HSY4fFLflQGYe2kvO0atm6/GzhD61gpyiOZZUvO4nptMUhuB1to2K3wwFpFqc5gfEK0SxyIIFiu1yE2MtygWcA==}
+    engines: {node: '>=22.0.0'}
+    peerDependencies:
+      '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
+      '@smithy/hash-node': '>=4.3.0 <5'
+      '@smithy/signature-v4': '>=5.4.0 <6'
+      undici: '>=5 <9'
+      ws: ^8.21.0
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      '@aws-sdk/credential-provider-node':
+        optional: true
+      '@smithy/hash-node':
+        optional: true
+      '@smithy/signature-v4':
+        optional: true
+      undici:
+        optional: true
+      ws:
+        optional: true
+      zod:
+        optional: true
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -6059,6 +6122,11 @@ snapshots:
   onetime@5.1.2:
     dependencies:
       mimic-fn: 2.1.0
+
+  openai@7.28.0(undici@8.11.2)(zod@4.6.5):
+    optionalDependencies:
+      undici: 8.11.2
+      zod: 4.6.5
 
   optionator@0.9.4:
     dependencies:

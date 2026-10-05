@@ -38,6 +38,36 @@ describe('configuration validation', () => {
     expect(() => validateEnvironment(minimumEnvironment)).not.toThrow();
   });
 
+  it('allows explicitly enabled fake AI without a secret outside production', () => {
+    const configuration = validateEnvironment({
+      ...minimumEnvironment,
+      FEATURE_AI_TEXT_GENERATION: 'true',
+      AI_PROVIDER: 'fake',
+    });
+    expect(configuration.AI_PROVIDER).toBe('fake');
+  });
+
+  it('requires an OpenAI key only when enabled with the OpenAI provider', () => {
+    expect(() =>
+      validateEnvironment({
+        ...minimumEnvironment,
+        FEATURE_AI_TEXT_GENERATION: 'true',
+        AI_PROVIDER: 'openai',
+      }),
+    ).toThrow(/OPENAI_API_KEY is required|OPENAI_MODEL is required/);
+  });
+
+  it('does not silently use fake AI in production', () => {
+    expect(() =>
+      validateEnvironment({
+        ...minimumEnvironment,
+        NODE_ENV: 'production',
+        FEATURE_AI_TEXT_GENERATION: 'true',
+        AI_PROVIDER: 'fake',
+      }),
+    ).toThrow('Fake AI is prohibited');
+  });
+
   it('requires a Telegram token only when Telegram is enabled', () => {
     expect(() => validateEnvironment({ ...minimumEnvironment, FEATURE_TELEGRAM: 'true' })).toThrow(
       'TELEGRAM_BOT_TOKEN is required',

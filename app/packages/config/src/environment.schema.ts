@@ -53,7 +53,16 @@ export const environmentSchema = z
     LOG_PRETTY: booleanFromEnvironment.default(false),
 
     TELEGRAM_BOT_TOKEN: optionalSecret,
-    AI_API_KEY: optionalSecret,
+    AI_PROVIDER: z.enum(['fake', 'openai']).default('fake'),
+    OPENAI_API_KEY: optionalSecret,
+    OPENAI_MODEL: z.preprocess(
+      (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+      z.string().trim().min(1).max(200).optional(),
+    ),
+    AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
+    AI_ATTEMPT_STALE_AFTER_MS: z.coerce.number().int().min(2_000).max(300_000).default(35_000),
+    AI_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
+    AI_ALLOW_FAKE_IN_PRODUCTION: booleanFromEnvironment.default(false),
     AI_BASE_URL: optionalUrl,
     PRODUCT_API_BASE_URL: optionalUrl,
     PRODUCT_API_TOKEN: optionalSecret,
@@ -67,6 +76,13 @@ export const environmentSchema = z
     FEATURE_ANALYTICS: booleanFromEnvironment.default(false),
   })
   .superRefine((environment, context) => {
+    if (environment.AI_ATTEMPT_STALE_AFTER_MS <= environment.AI_REQUEST_TIMEOUT_MS) {
+      context.addIssue({
+        code: 'custom',
+        path: ['AI_ATTEMPT_STALE_AFTER_MS'],
+        message: 'AI_ATTEMPT_STALE_AFTER_MS must exceed AI_REQUEST_TIMEOUT_MS',
+      });
+    }
     if (environment.FEATURE_TELEGRAM && environment.TELEGRAM_BOT_TOKEN === undefined) {
       context.addIssue({
         code: 'custom',
@@ -76,13 +92,39 @@ export const environmentSchema = z
     }
 
     if (
-      (environment.FEATURE_AI_TEXT_GENERATION || environment.FEATURE_AI_IMAGE_GENERATION) &&
-      environment.AI_API_KEY === undefined
+      environment.FEATURE_AI_TEXT_GENERATION &&
+      environment.AI_PROVIDER === 'openai' &&
+      environment.OPENAI_API_KEY === undefined
     ) {
       context.addIssue({
         code: 'custom',
-        path: ['AI_API_KEY'],
-        message: 'AI_API_KEY is required when an AI feature is enabled',
+        path: ['OPENAI_API_KEY'],
+        message: 'OPENAI_API_KEY is required when AI text generation uses OpenAI',
+      });
+    }
+
+    if (
+      environment.FEATURE_AI_TEXT_GENERATION &&
+      environment.AI_PROVIDER === 'openai' &&
+      environment.OPENAI_MODEL === undefined
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['OPENAI_MODEL'],
+        message: 'OPENAI_MODEL is required when AI text generation uses OpenAI',
+      });
+    }
+
+    if (
+      environment.NODE_ENV === 'production' &&
+      environment.FEATURE_AI_TEXT_GENERATION &&
+      environment.AI_PROVIDER === 'fake' &&
+      !environment.AI_ALLOW_FAKE_IN_PRODUCTION
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['AI_PROVIDER'],
+        message: 'Fake AI is prohibited in production unless explicitly permitted',
       });
     }
 

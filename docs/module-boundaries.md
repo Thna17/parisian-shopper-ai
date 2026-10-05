@@ -26,6 +26,8 @@ The `products` module now owns normalized product types, Product Source/snapshot
 
 ## Enforcement
 
+Phase 1C adds concrete separation: AI/content/brand domain folders cannot import Nest, Prisma, BullMQ, Valkey, HTTP, Telegram, or OpenAI. `packages/ai-providers` alone imports the OpenAI SDK; `packages/database` implements repository transactions; and `packages/jobs` owns BullMQ adapters with ID-only payloads. Telegram, approval, validation, and publication modules are absent from the generation pipeline.
+
 `pnpm lint` applies type-aware `no-restricted-imports` rules. `pnpm boundaries` independently scans source imports and the workspace package graph, rejecting forbidden imports and package dependency cycles. CI runs both. Adding an alias or re-export to bypass these rules is a boundary violation.
 
 When domain/application services are introduced, their tests should import only public module interfaces. Cross-feature database access must go through an exported application port rather than another module's Prisma repository.

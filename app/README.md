@@ -1,6 +1,6 @@
 # Parisian Shopper application foundation
 
-This directory contains the clean-room modular-monolith foundation plus Phase 1B's fictional Product Source and immutable ProductSnapshot boundary. It has an HTTP API process and a non-HTTP worker process that share application modules. It deliberately contains no Telegram commands, production Product API adapter, AI generation, content workflow, factual validation, approvals, publishing, Meta integration, or image generation.
+This directory contains the clean-room modular-monolith foundation, Phase 1B's fictional Product Source/immutable ProductSnapshot boundary, and Phase 1C's provider-neutral asynchronous content-generation pipeline. It deliberately contains no Telegram commands, production Product API adapter, factual validation, approvals, publishing, Meta integration, or image generation.
 
 ## Requirements
 
@@ -18,7 +18,8 @@ app/
     api/          HTTP, health, OpenAPI, request security/error handling
     worker/       non-HTTP background-process entrypoint
   packages/
-    application/ empty feature-boundary Nest modules
+    application/ domain/application modules, product source, and content-generation ports
+    ai-providers/ optional OpenAI infrastructure adapter and provider composition
     common/       framework-free errors, domain primitives, application ports
     config/       Zod environment validation and feature flags
     database/     Prisma, PostgreSQL health, migration and outbox transaction adapter
@@ -52,6 +53,8 @@ API defaults to `http://127.0.0.1:3000`. Infrastructure endpoints are:
 - `/docs` — OpenAPI UI only when `APP_SWAGGER_ENABLED=true`.
 
 All optional integration flags default to false. Local startup needs no Telegram, OpenAI, Product API, Meta, or publishing credential. `FEATURE_AUTO_PUBLISHING=true` and `FEATURE_META_PUBLISHING=true` are rejected at startup in this MVP foundation.
+
+To exercise Phase 1C locally with fictional content, set `FEATURE_AI_TEXT_GENERATION=true` and `AI_PROVIDER=fake`. This enables the `content-generation` queue without external AI calls. It does not expose a public generation endpoint. OpenAI is opt-in with `AI_PROVIDER=openai`, `OPENAI_API_KEY`, and an explicitly selected `OPENAI_MODEL`; automated tests never call it.
 
 ## Commands
 
@@ -93,7 +96,7 @@ Tests never contact OpenAI, Telegram, the Parisian Shopper Product API, or Meta.
 - Production logs are JSON. Pretty logs are development-only and opt-in.
 - CORS is disabled when no origins are configured and wildcard origin is rejected in production.
 - The worker has no public HTTP server.
-- No queue is registered in production during Phase 1A. A uniquely named probe queue exists only inside the Valkey/BullMQ integration test and is closed after the test.
+- The business queue is registered only when AI text generation is enabled. Queue messages carry only a content-job ID; PostgreSQL remains authoritative.
 - Development/test select eight fictional products while `FEATURE_PRODUCT_API=false`. Production selects a disabled source and never falls back to fixtures. No product HTTP endpoint is exposed.
 - Do not point early development at production Product API or provider accounts.
 

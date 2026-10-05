@@ -1,0 +1,20 @@
+{
+  "name": "@parisian-shopper/ai-providers",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@nestjs/common": "12.1.2",
+    "@parisian-shopper/application": "workspace:0.1.0",
+    "@parisian-shopper/config": "workspace:0.1.0",
+    "openai": "7.28.0",
+    "rxjs": "7.8.2",
+    "zod": "4.6.5"
+  }
+}

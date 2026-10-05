@@ -27,6 +27,48 @@ enum ProductLifecycleStatus {
   deleted
 }
 
+enum BrandRuleStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum ContentType {
+  PRODUCT_SPOTLIGHT
+  PROMOTION
+  SCENT_PYRAMID
+  EDUCATIONAL
+  ENGAGEMENT
+}
+
+enum ContentLanguage {
+  KM
+  EN
+  BILINGUAL
+}
+
+enum ContentPlatform {
+  FACEBOOK
+  INSTAGRAM
+  TELEGRAM
+  GENERIC
+}
+
+enum ContentJobStatus {
+  REQUESTED
+  GENERATING
+  DRAFT
+  FAILED
+}
+
+enum GenerationAttemptStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  TIMED_OUT
+}
+
 model User {
   id          String     @id @default(uuid()) @db.Uuid
   displayName String     @map("display_name") @db.VarChar(200)
@@ -124,8 +166,106 @@ model ProductSnapshot {
   normalizerVersion   String                 @map("normalizer_version") @db.VarChar(100)
   createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
 
+  contentJobs     ContentJob[]
+  contentVersions ContentVersion[]
+
   @@index([sku, createdAt], map: "product_snapshots_sku_created_at_idx")
   @@index([snapshotHash], map: "product_snapshots_snapshot_hash_idx")
   @@index([sourceSystem, sourceRecordId, sourceUpdatedAt], map: "product_snapshots_source_idx")
   @@map("product_snapshots")
+}
+
+model BrandRuleVersion {
+  id                String          @id @default(uuid()) @db.Uuid
+  name              String          @db.VarChar(160)
+  version           Int
+  status            BrandRuleStatus
+  languageRules     Json            @map("language_rules") @db.JsonB
+  toneRules         Json            @map("tone_rules") @db.JsonB
+  ctaRules          Json            @map("cta_rules") @db.JsonB
+  promotionRules    Json            @map("promotion_rules") @db.JsonB
+  perfumeClaimRules Json            @map("perfume_claim_rules") @db.JsonB
+  platformRules     Json            @map("platform_rules") @db.JsonB
+  visualGuidance    Json            @map("visual_guidance") @db.JsonB
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  activatedAt       DateTime?       @map("activated_at") @db.Timestamptz(3)
+
+  contentJobs     ContentJob[]
+  contentVersions ContentVersion[]
+
+  @@unique([name, version], map: "brand_rule_versions_name_version_key")
+  @@index([status, createdAt], map: "brand_rule_versions_status_created_at_idx")
+  @@map("brand_rule_versions")
+}
+
+model ContentJob {
+  id                 String           @id @default(uuid()) @db.Uuid
+  productSnapshotId  String           @map("product_snapshot_id") @db.Uuid
+  brandRuleVersionId String           @map("brand_rule_version_id") @db.Uuid
+  contentType        ContentType      @map("content_type")
+  language           ContentLanguage
+  platform           ContentPlatform
+  campaignContext    String?          @map("campaign_context") @db.VarChar(2000)
+  status             ContentJobStatus @default(REQUESTED)
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  productSnapshot  ProductSnapshot     @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_product_snapshot_id_fkey")
+  brandRuleVersion BrandRuleVersion    @relation(fields: [brandRuleVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_brand_rule_version_id_fkey")
+  versions         ContentVersion[]
+  attempts         GenerationAttempt[]
+
+  @@index([status, createdAt], map: "content_jobs_status_created_at_idx")
+  @@index([productSnapshotId, createdAt], map: "content_jobs_product_snapshot_id_created_at_idx")
+  @@map("content_jobs")
+}
+
+model GenerationAttempt {
+  id               String                  @id @default(uuid()) @db.Uuid
+  contentJobId     String                  @map("content_job_id") @db.Uuid
+  attemptNumber    Int                     @map("attempt_number")
+  provider         String                  @db.VarChar(100)
+  model            String                  @db.VarChar(200)
+  promptVersion    String                  @map("prompt_version") @db.VarChar(100)
+  status           GenerationAttemptStatus @default(PENDING)
+  startedAt        DateTime                @map("started_at") @db.Timestamptz(3)
+  completedAt      DateTime?               @map("completed_at") @db.Timestamptz(3)
+  latencyMs        Int?                    @map("latency_ms")
+  inputTokenCount  Int?                    @map("input_token_count")
+  outputTokenCount Int?                    @map("output_token_count")
+  totalTokenCount  Int?                    @map("total_token_count")
+  estimatedCost    Decimal?                @map("estimated_cost") @db.Decimal(19, 6)
+  errorCode        String?                 @map("error_code") @db.VarChar(100)
+  errorMetadata    Json?                   @map("error_metadata") @db.JsonB
+
+  contentJob ContentJob      @relation(fields: [contentJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "generation_attempts_content_job_id_fkey")
+  version    ContentVersion?
+
+  @@unique([contentJobId, attemptNumber], map: "generation_attempts_job_attempt_key")
+  @@index([status, startedAt], map: "generation_attempts_status_started_at_idx")
+  @@map("generation_attempts")
+}
+
+model ContentVersion {
+  id                  String   @id @default(uuid()) @db.Uuid
+  contentJobId        String   @map("content_job_id") @db.Uuid
+  versionNumber       Int      @map("version_number")
+  brandRuleVersionId  String   @map("brand_rule_version_id") @db.Uuid
+  productSnapshotId   String   @map("product_snapshot_id") @db.Uuid
+  generationAttemptId String   @unique(map: "content_versions_generation_attempt_id_key") @map("generation_attempt_id") @db.Uuid
+  provider            String   @db.VarChar(100)
+  model               String   @db.VarChar(200)
+  promptVersion       String   @map("prompt_version") @db.VarChar(100)
+  structuredOutput    Json     @map("structured_output") @db.JsonB
+  providerMetadata    Json?    @map("provider_metadata") @db.JsonB
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  contentJob        ContentJob        @relation(fields: [contentJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_content_job_id_fkey")
+  brandRuleVersion  BrandRuleVersion  @relation(fields: [brandRuleVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_brand_rule_version_id_fkey")
+  productSnapshot   ProductSnapshot   @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_product_snapshot_id_fkey")
+  generationAttempt GenerationAttempt @relation(fields: [generationAttemptId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_generation_attempt_id_fkey")
+
+  @@unique([contentJobId, versionNumber], map: "content_versions_job_version_key")
+  @@index([productSnapshotId, createdAt], map: "content_versions_product_snapshot_id_created_at_idx")
+  @@map("content_versions")
 }

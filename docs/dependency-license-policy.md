@@ -4,6 +4,8 @@ This is an engineering compliance control, not legal advice. Exact legal interpr
 
 ## Default policy
 
+Phase 1C adds the official `openai` TypeScript package under Apache-2.0. It is isolated in the `ai-providers` infrastructure package and is allowed by this policy. No source or dependency was copied from `/research`.
+
 Dependencies are pinned and reviewed with their transitive graph. Allowed by default are MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, PostgreSQL License, and equivalently permissive licenses explicitly included in the automated allowlist. Current supporting allowlist entries such as 0BSD, BlueOak-1.0.0, CC0-1.0, Python-2.0, and Unlicense are treated as permissive engineering approvals in this policy baseline.
 
 AGPL, GPL, SSPL, unknown, and unlicensed dependencies fail automatically. LGPL, MPL, source-available, Commons Clause, custom, ambiguous, or any other non-allowlisted expression requires manual review before adoption. A permissive direct dependency does not make all transitive dependencies acceptable.

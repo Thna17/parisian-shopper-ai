@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/common" },
     { "path": "packages/config" },
+    { "path": "packages/ai-providers" },
     { "path": "packages/database" },
     { "path": "packages/jobs" },
     { "path": "packages/logger" },
