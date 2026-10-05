@@ -2,7 +2,7 @@
 
 **Status:** Proposed implementation architecture under accepted ADR-002
 
-**Scope:** MVP through exact-version approval; architecture only
+**Scope:** approved target architecture; implementation complete through Phase 1E draft review
 
 **Explicitly out of scope:** visual generation, scheduling, social publishing, analytics, campaign planning, and live-selling automation
 
@@ -119,6 +119,8 @@ Cross-module operations use exported application ports rather than reaching into
 
 ## Telegram MVP
 
+Phase 1E implements `/start`, `/help`, `/search`, `/create`, `/status`, and `/history`. `/newproducts` and `/promo` remain deferred until upstream Product API semantics exist. Approval, rejection, edit/regenerate behavior, and publishing remain unimplemented. The current draft notification offers only View Source and View Validation.
+
 ### Commands
 
 | Command | Authorized behavior |
@@ -139,13 +141,13 @@ Usernames and display names may be stored for operator convenience but never aut
 1. The adapter parses a bounded SKU string and sends the Telegram update ID as an idempotency key.
 2. The application service authenticates the numeric Telegram user ID and authorizes content creation.
 3. The Product API adapter performs an exact-SKU read with timeouts and contract validation.
-4. The product service stores an immutable normalized snapshot with a canonical digest.
-5. The bot displays product name, brand, SKU, regular price, active promotion if any, stock status, and approved image references.
-6. The user selects `PRODUCT_SPOTLIGHT`, `PROMOTION`, `SCENT_PYRAMID`, `EDUCATIONAL`, or `ENGAGEMENT` through an opaque, single-use callback token.
-7. The application creates a `ContentJob` and outbox event in one PostgreSQL transaction.
-8. The dispatcher enqueues the durable job ID. A worker generates and validates V1 asynchronously.
-9. The bot shows the structured content, validation status, and actions: Approve, Edit, Regenerate, Reject, View Source.
-10. The selected valid version may become `APPROVED`. Processing stops.
+4. The bot displays product name, brand, SKU, regular price, promotion if supplied, stock, size, and concentration.
+5. The user selects an applicable content type, language, and target platform through opaque, single-use callback tokens backed by a durable PostgreSQL flow.
+6. Only after selections are complete, the product service stores an immutable normalized snapshot with a canonical digest.
+7. The application creates a requester-owned `ContentJob` and outbox event in one PostgreSQL transaction.
+8. The application enqueues the durable job ID. A worker generates and validates V1 asynchronously.
+9. The outbox dispatcher shows structured content, validation status, View Source, and View Validation.
+10. Phase 1E stops. Phase 1F will add revision and exact-version approval behavior.
 
 `SCENT_PYRAMID` is unavailable when curated fragrance notes are absent. `PROMOTION` is unavailable when no upstream promotion is currently active. Disabling the choice is an application rule, not a prompt hint.
 

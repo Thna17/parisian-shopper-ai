@@ -29,6 +29,14 @@ export interface AIConfig {
   maxRetries: number;
 }
 
+export interface TelegramConfig {
+  mode: Environment['TELEGRAM_MODE'];
+  botToken?: string;
+  webhookUrl?: string;
+  webhookSecret?: string;
+  actionTokenTtlSeconds: number;
+}
+
 @Injectable()
 export class AppConfigService {
   public constructor(private readonly config: ConfigService<Environment, true>) {}
@@ -81,6 +89,19 @@ export class AppConfigService {
       ...(openaiApiKey === undefined ? {} : { openaiApiKey }),
       ...(openaiModel === undefined ? {} : { openaiModel }),
       ...(baseUrl === undefined ? {} : { baseUrl }),
+    };
+  }
+
+  public get telegram(): TelegramConfig {
+    const botToken = this.config.get('TELEGRAM_BOT_TOKEN', { infer: true });
+    const webhookUrl = this.config.get('TELEGRAM_WEBHOOK_URL', { infer: true });
+    const webhookSecret = this.config.get('TELEGRAM_WEBHOOK_SECRET', { infer: true });
+    return {
+      mode: this.config.get('TELEGRAM_MODE', { infer: true }),
+      actionTokenTtlSeconds: this.config.get('TELEGRAM_ACTION_TOKEN_TTL_SECONDS', { infer: true }),
+      ...(botToken === undefined ? {} : { botToken }),
+      ...(webhookUrl === undefined ? {} : { webhookUrl }),
+      ...(webhookSecret === undefined ? {} : { webhookSecret }),
     };
   }
 

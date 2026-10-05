@@ -52,6 +52,7 @@ describe('Phase 1C content generation persistence and queue', () => {
   let brands: PrismaBrandRuleRepository | undefined;
   let content: PrismaContentGenerationRepository | undefined;
   let validations: PrismaValidationRepository | undefined;
+  let requesterUserId: string | undefined;
 
   beforeAll(async () => {
     [postgres, valkey] = await Promise.all([
@@ -81,6 +82,9 @@ describe('Phase 1C content generation persistence and queue', () => {
     brands = new PrismaBrandRuleRepository(prisma);
     content = new PrismaContentGenerationRepository(prisma);
     validations = new PrismaValidationRepository(prisma);
+    requesterUserId = (
+      await prisma.user.create({ data: { displayName: 'Phase 1C integration requester' } })
+    ).id;
   });
 
   afterAll(async () => {
@@ -166,7 +170,12 @@ describe('Phase 1C content generation persistence and queue', () => {
       errorCode: 'AI_OUTPUT_INVALID',
     });
     expect(await getContent().findVersionsByJobId(setup.jobId)).toHaveLength(0);
-    expect(await getPrisma().outboxEvent.count({ where: { aggregateId: setup.jobId } })).toBe(1);
+    expect(await getPrisma().outboxEvent.count({ where: { aggregateId: setup.jobId } })).toBe(2);
+    expect(
+      await getPrisma().outboxEvent.count({
+        where: { aggregateId: setup.jobId, topic: 'CONTENT_GENERATION_FAILED' },
+      }),
+    ).toBe(1);
   });
 
   it('bounds provider timeout and never leaves the job generating', async () => {
@@ -505,6 +514,7 @@ describe('Phase 1C content generation persistence and queue', () => {
     const job = await getContent().createJob({
       productSnapshotId: snapshot.id,
       brandRuleVersionId: brand.id,
+      requesterUserId: requiredRequesterUserId(),
       contentType: 'PRODUCT_SPOTLIGHT',
       language: 'BILINGUAL',
       platform: 'FACEBOOK',
@@ -582,5 +592,9 @@ describe('Phase 1C content generation persistence and queue', () => {
   function getValidations(): PrismaValidationRepository {
     if (validations === undefined) throw new Error('Validation repository unavailable');
     return validations;
+  }
+  function requiredRequesterUserId(): string {
+    if (requesterUserId === undefined) throw new Error('Requester unavailable');
+    return requesterUserId;
   }
 });

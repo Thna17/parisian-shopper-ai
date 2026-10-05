@@ -20,6 +20,7 @@
     "@parisian-shopper/database": "workspace:0.1.0",
     "@parisian-shopper/jobs": "workspace:0.1.0",
     "@parisian-shopper/logger": "workspace:0.1.0",
+    "@parisian-shopper/telegram": "workspace:0.1.0",
     "class-transformer": "0.5.1",
     "class-validator": "0.15.1",
     "express": "5.2.1",

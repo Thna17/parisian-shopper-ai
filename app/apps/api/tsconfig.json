@@ -13,6 +13,7 @@
     { "path": "../../packages/config" },
     { "path": "../../packages/database" },
     { "path": "../../packages/jobs" },
-    { "path": "../../packages/logger" }
+    { "path": "../../packages/logger" },
+    { "path": "../../packages/telegram" }
   ]
 }

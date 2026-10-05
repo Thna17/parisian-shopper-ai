@@ -199,6 +199,19 @@ export class PrismaContentGenerationRepository implements ContentGenerationRepos
         if (job.status === 'GENERATING') {
           assertContentJobTransition(job.status, 'FAILED');
           await tx.contentJob.update({ where: { id: job.id }, data: { status: 'FAILED' } });
+          const occurredAt = new Date();
+          await tx.outboxEvent.create({
+            data: {
+              topic: 'CONTENT_GENERATION_FAILED',
+              schemaVersion: 1,
+              idempotencyKey: `content-job:${job.id}:generation-failed:${attempt.id}`,
+              aggregateType: 'ContentJob',
+              aggregateId: job.id,
+              payload: { contentJobId: job.id, errorCode: input.errorCode },
+              occurredAt,
+              availableAt: occurredAt,
+            },
+          });
         }
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -233,6 +246,10 @@ function toJob(record: PrismaContentJob): ContentJob {
     id: record.id,
     productSnapshotId: record.productSnapshotId,
     brandRuleVersionId: record.brandRuleVersionId,
+    requesterUserId: record.requesterUserId,
+    ...(record.telegramCreateFlowId === null
+      ? {}
+      : { telegramCreateFlowId: record.telegramCreateFlowId }),
     contentType: record.contentType,
     language: record.language,
     platform: record.platform,

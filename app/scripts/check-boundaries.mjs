@@ -46,6 +46,19 @@ const rules = [
     ],
   },
   {
+    prefix: 'packages/application/src/modules/telegram/domain/',
+    forbidden: [
+      '@nestjs/',
+      '@parisian-shopper/config',
+      '@prisma/',
+      'bullmq',
+      '@valkey/',
+      'express',
+      'grammy',
+      'openai',
+    ],
+  },
+  {
     prefix: 'packages/application/src/modules/products/domain/',
     forbidden: [
       '@nestjs/',

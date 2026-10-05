@@ -37,6 +37,14 @@ export class PrismaBrandRuleRepository implements BrandRuleRepository {
     const record = await this.prisma.brandRuleVersion.findUnique({ where: { id } });
     return record === null ? null : toDomain(record);
   }
+
+  public async findActive(): Promise<BrandRuleVersion | null> {
+    const record = await this.prisma.brandRuleVersion.findFirst({
+      where: { status: 'ACTIVE' },
+      orderBy: [{ activatedAt: 'desc' }, { createdAt: 'desc' }],
+    });
+    return record === null ? null : toDomain(record);
+  }
 }
 
 function toDomain(record: PrismaBrandRuleVersion): BrandRuleVersion {

@@ -23,4 +23,5 @@ export interface CreateBrandRuleVersionInput {
 export interface BrandRuleRepository {
   create(input: CreateBrandRuleVersionInput): Promise<BrandRuleVersion>;
   findById(id: string): Promise<BrandRuleVersion | null>;
+  findActive(): Promise<BrandRuleVersion | null>;
 }

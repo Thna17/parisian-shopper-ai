@@ -12,6 +12,8 @@ export interface ContentJob {
   id: string;
   productSnapshotId: string;
   brandRuleVersionId: string;
+  requesterUserId: string;
+  telegramCreateFlowId?: string;
   contentType: ContentType;
   language: ContentLanguage;
   platform: ContentPlatform;
@@ -51,6 +53,8 @@ export interface ContentVersion {
 export interface CreateContentJobInput {
   productSnapshotId: string;
   brandRuleVersionId: string;
+  requesterUserId: string;
+  telegramCreateFlowId?: string;
   contentType: ContentType;
   language: ContentLanguage;
   platform: ContentPlatform;

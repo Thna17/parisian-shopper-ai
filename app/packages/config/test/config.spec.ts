@@ -74,6 +74,37 @@ describe('configuration validation', () => {
     );
   });
 
+  it('requires webhook URL and a strong secret when Telegram webhook mode is enabled', () => {
+    expect(() =>
+      validateEnvironment({
+        ...minimumEnvironment,
+        FEATURE_TELEGRAM: 'true',
+        TELEGRAM_BOT_TOKEN: 'fictional-test-token',
+      }),
+    ).toThrow(/TELEGRAM_WEBHOOK_URL|TELEGRAM_WEBHOOK_SECRET/u);
+    expect(() =>
+      validateEnvironment({
+        ...minimumEnvironment,
+        FEATURE_TELEGRAM: 'true',
+        TELEGRAM_BOT_TOKEN: 'fictional-test-token',
+        TELEGRAM_MODE: 'webhook',
+        TELEGRAM_WEBHOOK_URL: 'https://example.invalid/telegram/webhook',
+        TELEGRAM_WEBHOOK_SECRET: 'a'.repeat(32),
+      }),
+    ).not.toThrow();
+  });
+
+  it('permits explicit local polling without webhook settings', () => {
+    expect(() =>
+      validateEnvironment({
+        ...minimumEnvironment,
+        FEATURE_TELEGRAM: 'true',
+        TELEGRAM_BOT_TOKEN: 'fictional-test-token',
+        TELEGRAM_MODE: 'polling',
+      }),
+    ).not.toThrow();
+  });
+
   it.each(['FEATURE_AUTO_PUBLISHING', 'FEATURE_META_PUBLISHING'] as const)(
     'refuses to enable %s during Phase 1A',
     (flag) => {

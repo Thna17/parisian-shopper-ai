@@ -1,6 +1,6 @@
 # Parisian Shopper application foundation
 
-This directory contains the clean-room modular-monolith foundation, Phase 1B's fictional Product Source/immutable ProductSnapshot boundary, and Phase 1C's provider-neutral asynchronous content-generation pipeline. It deliberately contains no Telegram commands, production Product API adapter, factual validation, approvals, publishing, Meta integration, or image generation.
+This directory contains the clean-room modular monolith through Phase 1E: the foundation, fictional Product Source and immutable snapshots, provider-neutral AI generation, deterministic validation, and a secure grammY staff draft workflow. It deliberately contains no production Product API adapter, approval/reject behavior, publishing, Meta integration, scheduling, analytics, or image generation.
 
 ## Requirements
 
@@ -25,6 +25,7 @@ app/
     database/     Prisma, PostgreSQL health, migration and outbox transaction adapter
     jobs/         Valkey connection and BullMQ queue/worker registries
     logger/       Pino, redaction and request correlation
+    telegram/     grammY transport, webhook/polling adapter, notification gateway
   scripts/        boundary and dependency-license policy checks
 ```
 
@@ -55,6 +56,8 @@ API defaults to `http://127.0.0.1:3000`. Infrastructure endpoints are:
 All optional integration flags default to false. Local startup needs no Telegram, OpenAI, Product API, Meta, or publishing credential. `FEATURE_AUTO_PUBLISHING=true` and `FEATURE_META_PUBLISHING=true` are rejected at startup in this MVP foundation.
 
 To exercise Phase 1C locally with fictional content, set `FEATURE_AI_TEXT_GENERATION=true` and `AI_PROVIDER=fake`. This enables the `content-generation` queue without external AI calls. It does not expose a public generation endpoint. OpenAI is opt-in with `AI_PROVIDER=openai`, `OPENAI_API_KEY`, and an explicitly selected `OPENAI_MODEL`; automated tests never call it.
+
+Telegram remains opt-in. For safe local polling set `FEATURE_TELEGRAM=true`, `TELEGRAM_MODE=polling`, and provide `TELEGRAM_BOT_TOKEN`; webhook mode additionally requires `TELEGRAM_WEBHOOK_URL` and a random `TELEGRAM_WEBHOOK_SECRET` of at least 32 characters. Staff must already have an active numeric-ID `TelegramIdentity` and internal role. See `docs/telegram-bot.md`; tests always use the fake gateway.
 
 ## Commands
 

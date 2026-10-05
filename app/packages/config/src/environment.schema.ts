@@ -53,6 +53,10 @@ export const environmentSchema = z
     LOG_PRETTY: booleanFromEnvironment.default(false),
 
     TELEGRAM_BOT_TOKEN: optionalSecret,
+    TELEGRAM_MODE: z.enum(['webhook', 'polling']).default('webhook'),
+    TELEGRAM_WEBHOOK_URL: optionalUrl,
+    TELEGRAM_WEBHOOK_SECRET: optionalSecret,
+    TELEGRAM_ACTION_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3_600).default(900),
     AI_PROVIDER: z.enum(['fake', 'openai']).default('fake'),
     OPENAI_API_KEY: optionalSecret,
     OPENAI_MODEL: z.preprocess(
@@ -88,6 +92,29 @@ export const environmentSchema = z
         code: 'custom',
         path: ['TELEGRAM_BOT_TOKEN'],
         message: 'TELEGRAM_BOT_TOKEN is required when FEATURE_TELEGRAM=true',
+      });
+    }
+    if (
+      environment.FEATURE_TELEGRAM &&
+      environment.TELEGRAM_MODE === 'webhook' &&
+      environment.TELEGRAM_WEBHOOK_URL === undefined
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['TELEGRAM_WEBHOOK_URL'],
+        message: 'TELEGRAM_WEBHOOK_URL is required when Telegram webhook mode is enabled',
+      });
+    }
+    if (
+      environment.FEATURE_TELEGRAM &&
+      environment.TELEGRAM_MODE === 'webhook' &&
+      (environment.TELEGRAM_WEBHOOK_SECRET === undefined ||
+        environment.TELEGRAM_WEBHOOK_SECRET.length < 32)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['TELEGRAM_WEBHOOK_SECRET'],
+        message: 'TELEGRAM_WEBHOOK_SECRET of at least 32 characters is required in webhook mode',
       });
     }
 

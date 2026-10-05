@@ -7,6 +7,7 @@
     { "path": "packages/database" },
     { "path": "packages/jobs" },
     { "path": "packages/logger" },
+    { "path": "packages/telegram" },
     { "path": "packages/application" },
     { "path": "apps/api" },
     { "path": "apps/worker" }

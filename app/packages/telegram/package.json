@@ -1,0 +1,21 @@
+{
+  "name": "@parisian-shopper/telegram",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@nestjs/common": "12.1.2",
+    "@nestjs/swagger": "12.0.2",
+    "@parisian-shopper/application": "workspace:0.1.0",
+    "@parisian-shopper/common": "workspace:0.1.0",
+    "@parisian-shopper/config": "workspace:0.1.0",
+    "grammy": "1.46.0",
+    "rxjs": "7.8.2"
+  }
+}

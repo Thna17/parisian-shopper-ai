@@ -82,6 +82,20 @@ enum FactualValidationStatus {
   FAILED
 }
 
+enum TelegramCreateFlowStatus {
+  SELECTING_CONTENT_TYPE
+  SELECTING_LANGUAGE
+  SELECTING_PLATFORM
+  COMPLETED
+  EXPIRED
+}
+
+enum TelegramNotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 model User {
   id          String     @id @default(uuid()) @db.Uuid
   displayName String     @map("display_name") @db.VarChar(200)
@@ -90,8 +104,11 @@ model User {
   createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  roles           UserRole[] @relation("UserRoles")
-  roleAssignments UserRole[] @relation("RoleAssignedBy")
+  roles                UserRole[]         @relation("UserRoles")
+  roleAssignments      UserRole[]         @relation("RoleAssignedBy")
+  telegramIdentities   TelegramIdentity[]
+  requestedContentJobs ContentJob[]       @relation("ContentJobRequester")
+  auditEvents          AuditEvent[]
 
   @@index([status], map: "users_status_idx")
   @@map("users")
@@ -142,6 +159,8 @@ model OutboxEvent {
   attemptCount   Int       @default(0) @map("attempt_count")
   lastErrorCode  String?   @map("last_error_code") @db.VarChar(100)
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  telegramDeliveries TelegramNotificationDelivery[]
 
   @@index([processedAt, availableAt], map: "outbox_events_pending_idx")
   @@index([aggregateType, aggregateId, occurredAt], map: "outbox_events_aggregate_idx")
@@ -212,25 +231,148 @@ model BrandRuleVersion {
 }
 
 model ContentJob {
-  id                 String           @id @default(uuid()) @db.Uuid
-  productSnapshotId  String           @map("product_snapshot_id") @db.Uuid
-  brandRuleVersionId String           @map("brand_rule_version_id") @db.Uuid
-  contentType        ContentType      @map("content_type")
-  language           ContentLanguage
-  platform           ContentPlatform
-  campaignContext    String?          @map("campaign_context") @db.VarChar(2000)
-  status             ContentJobStatus @default(REQUESTED)
-  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                   String           @id @default(uuid()) @db.Uuid
+  productSnapshotId    String           @map("product_snapshot_id") @db.Uuid
+  brandRuleVersionId   String           @map("brand_rule_version_id") @db.Uuid
+  requesterUserId      String           @map("requester_user_id") @db.Uuid
+  telegramCreateFlowId String?          @unique(map: "content_jobs_telegram_create_flow_id_key") @map("telegram_create_flow_id") @db.Uuid
+  contentType          ContentType      @map("content_type")
+  language             ContentLanguage
+  platform             ContentPlatform
+  campaignContext      String?          @map("campaign_context") @db.VarChar(2000)
+  status               ContentJobStatus @default(REQUESTED)
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  productSnapshot  ProductSnapshot     @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_product_snapshot_id_fkey")
-  brandRuleVersion BrandRuleVersion    @relation(fields: [brandRuleVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_brand_rule_version_id_fkey")
-  versions         ContentVersion[]
-  attempts         GenerationAttempt[]
+  productSnapshot    ProductSnapshot     @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_product_snapshot_id_fkey")
+  brandRuleVersion   BrandRuleVersion    @relation(fields: [brandRuleVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_brand_rule_version_id_fkey")
+  requester          User                @relation("ContentJobRequester", fields: [requesterUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_requester_user_id_fkey")
+  telegramCreateFlow TelegramCreateFlow? @relation(fields: [telegramCreateFlowId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_telegram_create_flow_id_fkey")
+  versions           ContentVersion[]
+  attempts           GenerationAttempt[]
 
   @@index([status, createdAt], map: "content_jobs_status_created_at_idx")
   @@index([productSnapshotId, createdAt], map: "content_jobs_product_snapshot_id_created_at_idx")
+  @@index([requesterUserId, createdAt], map: "content_jobs_requester_user_id_created_at_idx")
   @@map("content_jobs")
+}
+
+model TelegramIdentity {
+  id               String    @id @default(uuid()) @db.Uuid
+  telegramUserId   BigInt    @unique(map: "telegram_identities_telegram_user_id_key") @map("telegram_user_id")
+  userId           String    @map("user_id") @db.Uuid
+  telegramUsername String?   @map("telegram_username") @db.VarChar(64)
+  displayName      String?   @map("display_name") @db.VarChar(200)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt       DateTime? @map("last_seen_at") @db.Timestamptz(3)
+  disabledAt       DateTime? @map("disabled_at") @db.Timestamptz(3)
+
+  user                   User                           @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_identities_user_id_fkey")
+  createFlows            TelegramCreateFlow[]
+  actionTokens           TelegramActionToken[]
+  notificationDeliveries TelegramNotificationDelivery[]
+  rateLimitBuckets       TelegramRateLimitBucket[]
+  auditEvents            AuditEvent[]
+
+  @@index([userId], map: "telegram_identities_user_id_idx")
+  @@map("telegram_identities")
+}
+
+model InboundTelegramUpdate {
+  id               String   @id @default(uuid()) @db.Uuid
+  telegramUpdateId BigInt   @unique(map: "inbound_telegram_updates_update_id_key") @map("telegram_update_id")
+  telegramUserId   BigInt?  @map("telegram_user_id")
+  updateType       String   @map("update_type") @db.VarChar(40)
+  receivedAt       DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  @@index([receivedAt], map: "inbound_telegram_updates_received_at_idx")
+  @@map("inbound_telegram_updates")
+}
+
+model TelegramCreateFlow {
+  id                 String                   @id @default(uuid()) @db.Uuid
+  telegramIdentityId String                   @map("telegram_identity_id") @db.Uuid
+  productData        Json                     @map("product_data") @db.JsonB
+  status             TelegramCreateFlowStatus @default(SELECTING_CONTENT_TYPE)
+  contentType        ContentType?             @map("content_type")
+  language           ContentLanguage?
+  platform           ContentPlatform?
+  expiresAt          DateTime                 @map("expires_at") @db.Timestamptz(3)
+  completedAt        DateTime?                @map("completed_at") @db.Timestamptz(3)
+  createdAt          DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  telegramIdentity TelegramIdentity @relation(fields: [telegramIdentityId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_create_flows_identity_id_fkey")
+  contentJob       ContentJob?
+
+  @@index([telegramIdentityId, createdAt], map: "telegram_create_flows_identity_created_at_idx")
+  @@index([status, expiresAt], map: "telegram_create_flows_status_expires_at_idx")
+  @@map("telegram_create_flows")
+}
+
+model TelegramActionToken {
+  id                 String    @id @default(uuid()) @db.Uuid
+  tokenHash          String    @unique(map: "telegram_action_tokens_token_hash_key") @map("token_hash") @db.Char(64)
+  telegramIdentityId String    @map("telegram_identity_id") @db.Uuid
+  action             String    @db.VarChar(80)
+  resourceId         String    @map("resource_id") @db.VarChar(200)
+  singleUse          Boolean   @default(true) @map("single_use")
+  metadata           Json?     @db.JsonB
+  expiresAt          DateTime  @map("expires_at") @db.Timestamptz(3)
+  consumedAt         DateTime? @map("consumed_at") @db.Timestamptz(3)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  telegramIdentity TelegramIdentity @relation(fields: [telegramIdentityId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_action_tokens_identity_id_fkey")
+
+  @@index([telegramIdentityId, expiresAt], map: "telegram_action_tokens_identity_expires_at_idx")
+  @@map("telegram_action_tokens")
+}
+
+model TelegramNotificationDelivery {
+  id                 String                     @id @default(uuid()) @db.Uuid
+  outboxEventId      String                     @unique(map: "telegram_notification_deliveries_outbox_event_id_key") @map("outbox_event_id") @db.Uuid
+  telegramIdentityId String                     @map("telegram_identity_id") @db.Uuid
+  status             TelegramNotificationStatus @default(PENDING)
+  attemptCount       Int                        @default(0) @map("attempt_count")
+  lastErrorCode      String?                    @map("last_error_code") @db.VarChar(100)
+  sentAt             DateTime?                  @map("sent_at") @db.Timestamptz(3)
+  createdAt          DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  outboxEvent      OutboxEvent      @relation(fields: [outboxEventId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_notification_deliveries_outbox_event_id_fkey")
+  telegramIdentity TelegramIdentity @relation(fields: [telegramIdentityId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_notification_deliveries_identity_id_fkey")
+
+  @@index([status, updatedAt], map: "telegram_notification_deliveries_status_updated_at_idx")
+  @@map("telegram_notification_deliveries")
+}
+
+model TelegramRateLimitBucket {
+  telegramIdentityId String   @map("telegram_identity_id") @db.Uuid
+  action             String   @db.VarChar(80)
+  windowStart        DateTime @map("window_start") @db.Timestamptz(3)
+  count              Int      @default(0)
+
+  telegramIdentity TelegramIdentity @relation(fields: [telegramIdentityId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_rate_limit_buckets_identity_id_fkey")
+
+  @@id([telegramIdentityId, action, windowStart], map: "telegram_rate_limit_buckets_pkey")
+  @@map("telegram_rate_limit_buckets")
+}
+
+model AuditEvent {
+  id                 String   @id @default(uuid()) @db.Uuid
+  actorUserId        String?  @map("actor_user_id") @db.Uuid
+  telegramIdentityId String?  @map("telegram_identity_id") @db.Uuid
+  action             String   @db.VarChar(120)
+  resourceType       String?  @map("resource_type") @db.VarChar(100)
+  resourceId         String?  @map("resource_id") @db.VarChar(200)
+  metadata           Json?    @db.JsonB
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  actorUser        User?             @relation(fields: [actorUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "audit_events_actor_user_id_fkey")
+  telegramIdentity TelegramIdentity? @relation(fields: [telegramIdentityId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "audit_events_telegram_identity_id_fkey")
+
+  @@index([actorUserId, createdAt], map: "audit_events_actor_user_id_created_at_idx")
+  @@index([action, createdAt], map: "audit_events_action_created_at_idx")
+  @@map("audit_events")
 }
 
 model GenerationAttempt {

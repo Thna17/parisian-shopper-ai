@@ -1,5 +1,6 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { AppConfigService, FeatureFlag, FeatureFlagService } from '@parisian-shopper/config';
+import { type ContentGenerationEnqueuer } from '@parisian-shopper/application';
 import { Queue } from 'bullmq';
 
 import { createBullMqConnection } from './bullmq-connection.js';
@@ -12,7 +13,7 @@ export interface ContentGenerationJobData {
 }
 
 @Injectable()
-export class ContentGenerationQueue implements OnModuleInit {
+export class ContentGenerationQueue implements OnModuleInit, ContentGenerationEnqueuer {
   public constructor(
     private readonly flags: FeatureFlagService,
     private readonly config: AppConfigService,
