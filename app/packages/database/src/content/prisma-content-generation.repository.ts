@@ -61,7 +61,14 @@ export class PrismaContentGenerationRepository implements ContentGenerationRepos
         await lockJob(tx, input.contentJobId);
         const job = await tx.contentJob.findUnique({ where: { id: input.contentJobId } });
         if (job === null) throw notFound();
-        if (job.status === 'DRAFT') return { disposition: 'ALREADY_COMPLETE', job: toJob(job) };
+        if (
+          job.status === 'DRAFT' ||
+          job.status === 'UNDER_REVIEW' ||
+          job.status === 'APPROVED' ||
+          job.status === 'REJECTED'
+        ) {
+          return { disposition: 'ALREADY_COMPLETE', job: toJob(job) };
+        }
         let sourceStatus = job.status;
         if (job.status === 'GENERATING') {
           const activeAttempt = await tx.generationAttempt.findFirst({
@@ -87,6 +94,10 @@ export class PrismaContentGenerationRepository implements ContentGenerationRepos
           sourceStatus = 'FAILED';
         }
         assertContentJobTransition(sourceStatus, 'GENERATING');
+        const activeRevision = await tx.revisionRequest.findFirst({
+          where: { contentJobId: job.id, status: 'PENDING' },
+          orderBy: { createdAt: 'desc' },
+        });
         const aggregate = await tx.generationAttempt.aggregate({
           where: { contentJobId: job.id },
           _max: { attemptNumber: true },
@@ -106,7 +117,23 @@ export class PrismaContentGenerationRepository implements ContentGenerationRepos
           where: { id: job.id },
           data: { status: 'GENERATING' },
         });
-        return { disposition: 'STARTED', job: toJob(updated), attempt: toAttempt(attempt) };
+        return {
+          disposition: 'STARTED',
+          job: toJob(updated),
+          attempt: toAttempt(attempt),
+          ...(activeRevision === null
+            ? {}
+            : {
+                activeRevision: {
+                  id: activeRevision.id,
+                  type: activeRevision.type,
+                  sourceContentVersionId: activeRevision.sourceContentVersionId,
+                  ...(activeRevision.instruction === null
+                    ? {}
+                    : { instruction: activeRevision.instruction }),
+                },
+              }),
+        };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -126,6 +153,10 @@ export class PrismaContentGenerationRepository implements ContentGenerationRepos
             publicMessage: 'The generation attempt is no longer active.',
           });
         }
+        const pendingRevision = await tx.revisionRequest.findFirst({
+          where: { contentJobId: job.id, status: 'PENDING' },
+          orderBy: { createdAt: 'desc' },
+        });
         const aggregate = await tx.contentVersion.aggregate({
           where: { contentJobId: job.id },
           _max: { versionNumber: true },
@@ -137,6 +168,7 @@ export class PrismaContentGenerationRepository implements ContentGenerationRepos
             brandRuleVersionId: job.brandRuleVersionId,
             productSnapshotId: job.productSnapshotId,
             generationAttemptId: attempt.id,
+            revisionRequestId: pendingRevision?.id ?? null,
             provider: input.provider,
             model: input.model,
             promptVersion: input.promptVersion,
@@ -145,6 +177,15 @@ export class PrismaContentGenerationRepository implements ContentGenerationRepos
               input.providerMetadata === undefined ? Prisma.DbNull : toJson(input.providerMetadata),
           },
         });
+        if (pendingRevision !== null) {
+          await tx.revisionRequest.update({
+            where: { id: pendingRevision.id },
+            data: {
+              status: 'COMPLETED',
+              resultingContentVersionId: version.id,
+            },
+          });
+        }
         await tx.generationAttempt.update({
           where: { id: attempt.id },
           data: {
@@ -195,6 +236,10 @@ export class PrismaContentGenerationRepository implements ContentGenerationRepos
             errorMetadata:
               input.errorMetadata === undefined ? Prisma.DbNull : toJson(input.errorMetadata),
           },
+        });
+        await tx.revisionRequest.updateMany({
+          where: { contentJobId: job.id, status: 'PENDING' },
+          data: { status: 'FAILED' },
         });
         if (job.status === 'GENERATING') {
           assertContentJobTransition(job.status, 'FAILED');
@@ -283,6 +328,7 @@ function toVersion(record: PrismaContentVersion): ContentVersion {
     brandRuleVersionId: record.brandRuleVersionId,
     productSnapshotId: record.productSnapshotId,
     generationAttemptId: record.generationAttemptId,
+    ...(record.revisionRequestId === null ? {} : { revisionRequestId: record.revisionRequestId }),
     provider: record.provider,
     model: record.model,
     promptVersion: record.promptVersion,

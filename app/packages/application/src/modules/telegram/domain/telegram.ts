@@ -8,6 +8,13 @@ export const TelegramAction = {
   VIEW_SOURCE: 'VIEW_SOURCE',
   VIEW_VALIDATION: 'VIEW_VALIDATION',
   SEARCH_PAGE: 'SEARCH_PAGE',
+  REQUEST_EDIT: 'REQUEST_EDIT',
+  REQUEST_REGENERATE: 'REQUEST_REGENERATE',
+  APPROVE_PROMPT: 'APPROVE_PROMPT',
+  CONFIRM_APPROVE: 'CONFIRM_APPROVE',
+  REJECT_PROMPT: 'REJECT_PROMPT',
+  VIEW_PREVIOUS: 'VIEW_PREVIOUS',
+  CANCEL_ACTION: 'CANCEL_ACTION',
 } as const;
 export type TelegramAction = (typeof TelegramAction)[keyof typeof TelegramAction];
 
@@ -41,7 +48,7 @@ export interface TelegramResponse {
 }
 
 export interface ParsedTelegramCommand {
-  name: 'start' | 'help' | 'create' | 'search' | 'status' | 'history' | 'unknown';
+  name: 'start' | 'help' | 'create' | 'search' | 'status' | 'history' | 'cancel' | 'unknown';
   argument: string;
 }
 
@@ -52,7 +59,7 @@ export function parseTelegramCommand(text: string): ParsedTelegramCommand {
   const command = match[1]?.toLowerCase() ?? '';
   const argument = match[2]?.trim() ?? '';
   return {
-    name: ['start', 'help', 'create', 'search', 'status', 'history'].includes(command)
+    name: ['start', 'help', 'create', 'search', 'status', 'history', 'cancel'].includes(command)
       ? (command as ParsedTelegramCommand['name'])
       : 'unknown',
     argument,

@@ -108,9 +108,41 @@ function friendlyJobStatus(value: string): string {
     REQUESTED: 'Requested',
     GENERATING: 'Generating',
     DRAFT: 'Draft',
+    UNDER_REVIEW: 'Under review',
+    REVISION_REQUESTED: 'Revision requested',
+    APPROVED: 'Approved',
+    REJECTED: 'Rejected',
     FAILED: 'Failed',
   };
   return map[value] ?? 'Unknown';
+}
+
+export function formatPreviousVersions(
+  jobId: string,
+  productName: string,
+  versions: readonly {
+    id: string;
+    versionNumber: number;
+    validationStatus?: string;
+    createdAt: Date;
+    headline: string;
+  }[],
+): string {
+  const lines = [
+    `*Version History for #${shortReference(jobId)}*`,
+    `Product: ${productName}`,
+    `Total versions: ${String(versions.length)}`,
+    '',
+  ];
+  for (const v of versions) {
+    const val =
+      v.validationStatus === undefined ? '' : ` [${friendlyValidation(v.validationStatus)}]`;
+    lines.push(`• *V${String(v.versionNumber)}* (${v.createdAt.toISOString().slice(0, 10)})${val}`);
+    if (v.headline.length > 0) {
+      lines.push(`  "${v.headline}"`);
+    }
+  }
+  return lines.join('\n');
 }
 
 function friendlyValidation(value: string): string {

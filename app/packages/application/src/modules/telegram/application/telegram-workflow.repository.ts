@@ -61,6 +61,7 @@ export interface TelegramJobSummary {
 export interface TelegramDraftView extends TelegramJobSummary {
   requesterTelegramUserId: string;
   telegramIdentityId: string;
+  requesterRoles?: readonly string[];
   output: {
     headline: string;
     khmerCaption: string | null;
@@ -69,6 +70,13 @@ export interface TelegramDraftView extends TelegramJobSummary {
     hashtags: readonly string[];
   };
   validation: PersistedValidationResult;
+  allVersions?: readonly {
+    id: string;
+    versionNumber: number;
+    validationStatus?: string;
+    createdAt: Date;
+    headline: string;
+  }[];
 }
 
 export interface TelegramFailureView {
@@ -158,6 +166,36 @@ export interface TelegramWorkflowRepository {
     terminal: boolean,
   ): Promise<void>;
   markOutboxProcessed(outboxEventId: string, now: Date): Promise<void>;
+  createPendingInteraction(input: {
+    telegramIdentityId: string;
+    contentJobId: string;
+    contentVersionId: string;
+    action: 'EDIT' | 'REJECT';
+    expiresAt: Date;
+  }): Promise<void>;
+  findActivePendingInteraction(
+    telegramIdentityId: string,
+    now: Date,
+  ): Promise<{
+    id: string;
+    contentJobId: string;
+    contentVersionId: string;
+    action: 'EDIT' | 'REJECT';
+  } | null>;
+  completePendingInteraction(id: string, now: Date): Promise<void>;
+  cancelPendingInteraction(id: string, now: Date): Promise<void>;
+  getPreviousVersions(
+    actor: TelegramActor,
+    jobId: string,
+  ): Promise<
+    readonly {
+      id: string;
+      versionNumber: number;
+      validationStatus?: string;
+      createdAt: Date;
+      headline: string;
+    }[]
+  >;
   appendAudit(input: {
     actor?: TelegramActor;
     action: string;

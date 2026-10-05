@@ -256,7 +256,10 @@ export class PrismaTelegramWorkflowRepository implements TelegramWorkflowReposit
           include: {
             productSnapshot: true,
             requester: {
-              include: { telegramIdentities: { where: { disabledAt: null }, take: 1 } },
+              include: {
+                telegramIdentities: { where: { disabledAt: null }, take: 1 },
+                roles: { where: { revokedAt: null }, include: { role: true } },
+              },
             },
           },
         },
@@ -271,6 +274,31 @@ export class PrismaTelegramWorkflowRepository implements TelegramWorkflowReposit
     const validation = version?.validationResults[0];
     if (version === null || identity === undefined || validation === undefined) return null;
     const output = aiContentOutputSchema.parse(version.structuredOutput);
+
+    const allVersionsRecords = await this.prisma.contentVersion.findMany({
+      where: { contentJobId: version.contentJobId },
+      orderBy: { versionNumber: 'desc' },
+      include: {
+        validationResults: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    const allVersions = allVersionsRecords.map((v) => {
+      const parsed = aiContentOutputSchema.safeParse(v.structuredOutput);
+      return {
+        id: v.id,
+        versionNumber: v.versionNumber,
+        ...(v.validationResults[0] !== undefined
+          ? { validationStatus: v.validationResults[0].status }
+          : {}),
+        createdAt: v.createdAt,
+        headline: parsed.success ? parsed.data.headline : '',
+      };
+    });
+
     return {
       jobId: version.contentJobId,
       sku: version.contentJob.productSnapshot.sku,
@@ -285,6 +313,7 @@ export class PrismaTelegramWorkflowRepository implements TelegramWorkflowReposit
       createdAt: version.createdAt,
       requesterTelegramUserId: identity.telegramUserId.toString(),
       telegramIdentityId: identity.id,
+      requesterRoles: version.contentJob.requester.roles.map((r) => r.role.code),
       output: {
         headline: output.headline,
         khmerCaption: output.khmer_caption,
@@ -293,6 +322,7 @@ export class PrismaTelegramWorkflowRepository implements TelegramWorkflowReposit
         hashtags: output.hashtags,
       },
       validation: toValidation(validation),
+      allVersions,
     };
   }
 
@@ -393,6 +423,120 @@ export class PrismaTelegramWorkflowRepository implements TelegramWorkflowReposit
     await this.prisma.outboxEvent.update({
       where: { id: outboxEventId },
       data: { processedAt: now, claimedAt: null, lastErrorCode: null },
+    });
+  }
+
+  public async createPendingInteraction(input: {
+    telegramIdentityId: string;
+    contentJobId: string;
+    contentVersionId: string;
+    action: 'EDIT' | 'REJECT';
+    expiresAt: Date;
+  }): Promise<void> {
+    await this.prisma.telegramPendingReviewInteraction.updateMany({
+      where: {
+        telegramIdentityId: input.telegramIdentityId,
+        completedAt: null,
+        cancelledAt: null,
+      },
+      data: {
+        cancelledAt: new Date(),
+      },
+    });
+
+    await this.prisma.telegramPendingReviewInteraction.create({
+      data: {
+        telegramIdentityId: input.telegramIdentityId,
+        contentJobId: input.contentJobId,
+        contentVersionId: input.contentVersionId,
+        action: input.action,
+        expiresAt: input.expiresAt,
+      },
+    });
+  }
+
+  public async findActivePendingInteraction(
+    telegramIdentityId: string,
+    now: Date,
+  ): Promise<{
+    id: string;
+    contentJobId: string;
+    contentVersionId: string;
+    action: 'EDIT' | 'REJECT';
+  } | null> {
+    const record = await this.prisma.telegramPendingReviewInteraction.findFirst({
+      where: {
+        telegramIdentityId,
+        completedAt: null,
+        cancelledAt: null,
+        expiresAt: { gt: now },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (record === null) return null;
+    return {
+      id: record.id,
+      contentJobId: record.contentJobId,
+      contentVersionId: record.contentVersionId,
+      action: record.action,
+    };
+  }
+
+  public async completePendingInteraction(id: string, now: Date): Promise<void> {
+    await this.prisma.telegramPendingReviewInteraction.update({
+      where: { id },
+      data: { completedAt: now },
+    });
+  }
+
+  public async cancelPendingInteraction(id: string, now: Date): Promise<void> {
+    await this.prisma.telegramPendingReviewInteraction.update({
+      where: { id },
+      data: { cancelledAt: now },
+    });
+  }
+
+  public async getPreviousVersions(
+    actor: TelegramActor,
+    jobId: string,
+  ): Promise<
+    readonly {
+      id: string;
+      versionNumber: number;
+      validationStatus?: string;
+      createdAt: Date;
+      headline: string;
+    }[]
+  > {
+    const job = await this.prisma.contentJob.findFirst({
+      where: {
+        id: jobId,
+        ...accessFilter(actor),
+      },
+      include: {
+        versions: {
+          orderBy: { versionNumber: 'desc' },
+          include: {
+            validationResults: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    if (job === null) return [];
+    return job.versions.map((v) => {
+      const parsed = aiContentOutputSchema.safeParse(v.structuredOutput);
+      return {
+        id: v.id,
+        versionNumber: v.versionNumber,
+        ...(v.validationResults[0] !== undefined
+          ? { validationStatus: v.validationResults[0].status }
+          : {}),
+        createdAt: v.createdAt,
+        headline: parsed.success ? parsed.data.headline : '',
+      };
     });
   }
 

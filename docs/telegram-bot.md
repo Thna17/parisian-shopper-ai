@@ -1,21 +1,34 @@
 # Telegram bot
 
-**Status:** Phase 1E implemented
+**Status:** Phase 1F implemented
 
 The Telegram integration is a transport over the existing application services. grammY is confined to `app/packages/telegram`; command routing, permissions, durable flows, token semantics, and formatting use project-owned types in the application package. Telegram never queries Prisma, calls an AI provider, or mutates product facts directly.
 
 ## Commands
 
-| Command | Phase 1E behavior |
-|---|---|
-| `/start` | Authenticates the numeric Telegram ID and shows role-aware commands. |
-| `/help` | Shows only commands the actor may use and the human-review warning. |
-| `/search <keyword>` | Validates input, searches SKU/name/brand through `SearchProductsUseCase`, and shows five results per page with opaque selection tokens. |
-| `/create <SKU>` | Validates and retrieves a product, shows verified facts, then collects content type, language, and platform before snapshot/job creation. |
-| `/status` | Shows up to ten authorized recent jobs with generation and validation state. |
-| `/history <SKU>` | Validates the SKU and shows up to ten authorized jobs for it. |
+| Command             | Behavior                                                                                                                                  |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `/start`            | Authenticates the numeric Telegram ID and shows role-aware commands.                                                                      |
+| `/help`             | Shows only commands the actor may use and the human-review warning.                                                                       |
+| `/search <keyword>` | Validates input, searches SKU/name/brand through `SearchProductsUseCase`, and shows five results per page with opaque selection tokens.   |
+| `/create <SKU>`     | Validates and retrieves a product, shows verified facts, then collects content type, language, and platform before snapshot/job creation. |
+| `/status`           | Shows up to ten authorized recent jobs with generation and validation state.                                                              |
+| `/history <SKU>`    | Validates the SKU and shows up to ten authorized jobs for it.                                                                             |
+| `/cancel`           | Cancels any active pending review interaction (edit instructions or rejection comment).                                                   |
 
-There are no approve, reject, publish, schedule, or image-generation commands in Phase 1E.
+## Review & Approval Actions
+
+When a draft is ready for review (`UNDER_REVIEW`), the outbox dispatcher delivers the draft with role-gated action buttons:
+
+- **View Source:** Inspect canonical facts from the pinned snapshot.
+- **View Validation:** Inspect deterministic factual validation findings.
+- **Request Edit:** Initiates a pending interaction awaiting revision instructions (requires `EDIT_CONTENT`).
+- **Regenerate:** Triggers fresh draft generation using original pinned snapshot and brand rules (requires `REGENERATE_CONTENT`).
+- **Approve:** Two-step confirmation (`APPROVE_PROMPT` -> `CONFIRM_APPROVE`). Blocked drafts hide this button (requires `APPROVE_CONTENT`).
+- **Reject:** Initiates a pending interaction awaiting a rejection comment (requires `REJECT_CONTENT`).
+- **Previous Versions:** Lists past draft headlines on V2+ content.
+
+Publishing, scheduling, Meta APIs, and image generation remain explicitly out of scope.
 
 ## Create workflow
 
@@ -31,9 +44,9 @@ flowchart TD
     H --> I[Enqueue stable job ID in BullMQ]
     I --> J[AI worker]
     J --> K[Deterministic validation worker]
-    K --> L[Validation completion outbox event]
+    K --> L[Job moves to UNDER_REVIEW + outbox event]
     L --> M[Telegram outbox dispatcher]
-    M --> N[Draft plus View Source / View Validation]
+    M --> N[Draft plus Review Actions: Edit / Regenerate / Approve / Reject]
 ```
 
 `PROMOTION` appears only when source promotion data exists. `SCENT_PYRAMID` appears only when verified fragrance notes exist. The selection is enforced again by the existing content strategy before provider execution.
@@ -59,4 +72,3 @@ For webhook mode, also set the public HTTPS callback URL and a random secret of 
 - Product fixtures remain fictional while the Product API feature is disabled.
 - Notification dispatch is a single-process PostgreSQL outbox poller with a five-minute lease. Horizontal deployment is safe through `SKIP LOCKED`, but operational metrics and dead-letter tooling remain Phase 1G work.
 - A provider request that times out can still have incurred cost upstream; the existing stable queue job ID and generation lease prevent application-level duplicates but cannot provide a vendor guarantee.
-

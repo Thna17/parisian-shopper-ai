@@ -43,6 +43,7 @@ export interface ContentVersion {
   brandRuleVersionId: string;
   productSnapshotId: string;
   generationAttemptId: string;
+  revisionRequestId?: string;
   provider: string;
   model: string;
   promptVersion: string;
@@ -69,8 +70,20 @@ export interface BeginGenerationInput {
   staleAfterMs: number;
 }
 
+export interface ActiveRevisionContext {
+  id: string;
+  type: 'EDIT' | 'REGENERATE';
+  sourceContentVersionId: string;
+  instruction?: string;
+}
+
 export type BeginGenerationResult =
-  | { disposition: 'STARTED'; job: ContentJob; attempt: GenerationAttempt }
+  | {
+      disposition: 'STARTED';
+      job: ContentJob;
+      attempt: GenerationAttempt;
+      activeRevision?: ActiveRevisionContext;
+    }
   | { disposition: 'ALREADY_COMPLETE'; job: ContentJob }
   | { disposition: 'ALREADY_RUNNING'; job: ContentJob };
 

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppConfigService } from '@parisian-shopper/config';
 
+import { ApprovalsModule } from '../approvals/approvals.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { ContentModule } from '../content/content.module.js';
 import { ProductsModule } from '../products/products.module.js';
@@ -12,7 +13,7 @@ import {
 } from './application/telegram-command-center.js';
 
 @Module({
-  imports: [AuthModule, ProductsModule, ContentModule],
+  imports: [AuthModule, ProductsModule, ContentModule, ApprovalsModule],
   providers: [
     TelegramActionTokenService,
     TelegramCommandCenter,

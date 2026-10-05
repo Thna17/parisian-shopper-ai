@@ -1,6 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ForbiddenError } from '@parisian-shopper/common';
 
+import { ApproveContentVersionUseCase } from '../../approvals/application/approve-content-version.use-case.js';
+import { GetApprovalStatusQuery } from '../../approvals/application/get-approval-status.query.js';
+import { GetContentReviewStateQuery } from '../../approvals/application/get-content-review-state.query.js';
+import { RejectContentVersionUseCase } from '../../approvals/application/reject-content-version.use-case.js';
+import { RequestContentEditUseCase } from '../../approvals/application/request-content-edit.use-case.js';
+import { RequestContentRegenerationUseCase } from '../../approvals/application/request-content-regeneration.use-case.js';
 import { Permission, PermissionService } from '../../auth/domain/permissions.js';
 import {
   BRAND_RULE_REPOSITORY,
@@ -35,6 +41,7 @@ import { telegramSafeError } from './telegram-error-mapper.js';
 import {
   callbackData,
   formatJobSummary,
+  formatPreviousVersions,
   formatProduct,
   formatValidation,
   splitTelegramMessage,
@@ -79,6 +86,12 @@ export class TelegramCommandCenter {
     @Inject(CONTENT_GENERATION_ENQUEUER) private readonly generation: ContentGenerationEnqueuer,
     private readonly tokens: TelegramActionTokenService,
     @Inject(TELEGRAM_WORKFLOW_POLICY) private readonly policy: TelegramWorkflowPolicy,
+    private readonly requestContentEdit: RequestContentEditUseCase,
+    private readonly requestContentRegeneration: RequestContentRegenerationUseCase,
+    private readonly approveContent: ApproveContentVersionUseCase,
+    private readonly rejectContent: RejectContentVersionUseCase,
+    private readonly reviewState: GetContentReviewStateQuery,
+    private readonly approvalStatus: GetApprovalStatusQuery,
   ) {}
 
   public async handleCommand(input: TelegramCommandInput): Promise<TelegramResponse> {
@@ -96,7 +109,78 @@ export class TelegramCommandCenter {
       await this.repository.recordDeniedAccess(input.profile);
       return one(ACCESS_DENIED);
     }
+
     const command = parseTelegramCommand(input.text);
+    const now = new Date();
+    const pending = await this.repository.findActivePendingInteraction(actor.identityId, now);
+
+    if (pending !== null) {
+      if (command.name === 'cancel' || input.text.trim().toLowerCase() === '/cancel') {
+        await this.repository.cancelPendingInteraction(pending.id, now);
+        await this.repository.appendAudit({
+          actor,
+          action: 'TELEGRAM_PENDING_ACTION_CANCELLED',
+          resourceType: 'ContentJob',
+          resourceId: pending.contentJobId,
+        });
+        return one('Action cancelled.');
+      }
+
+      if (pending.action === 'EDIT') {
+        try {
+          const revision = await this.requestContentEdit.execute({
+            contentJobId: pending.contentJobId,
+            contentVersionId: pending.contentVersionId,
+            actorUserId: actor.internalUserId,
+            actorRoles: actor.roles,
+            instruction: input.text.trim(),
+          });
+          await this.repository.completePendingInteraction(pending.id, now);
+          await this.repository.appendAudit({
+            actor,
+            action: 'TELEGRAM_CONTENT_EDIT_REQUESTED',
+            resourceType: 'RevisionRequest',
+            resourceId: revision.id,
+            metadata: { contentJobId: pending.contentJobId, instruction: input.text.trim() },
+          });
+          return one(
+            `✏️ Revision requested with instructions:\n"${input.text.trim()}"\n\nA new draft is being generated. You will be notified when it is ready.`,
+          );
+        } catch (error) {
+          return one(telegramSafeError(error));
+        }
+      }
+
+      if (pending.action === 'REJECT') {
+        try {
+          const approval = await this.rejectContent.execute({
+            contentJobId: pending.contentJobId,
+            contentVersionId: pending.contentVersionId,
+            approverUserId: actor.internalUserId,
+            approverRoles: actor.roles,
+            comment: input.text.trim(),
+          });
+          await this.repository.completePendingInteraction(pending.id, now);
+          await this.repository.appendAudit({
+            actor,
+            action: 'TELEGRAM_CONTENT_REJECTED',
+            resourceType: 'ApprovalEvent',
+            resourceId: approval.id,
+            metadata: { contentJobId: pending.contentJobId, comment: input.text.trim() },
+          });
+          return one(
+            `❌ Draft rejected.\nReason: "${input.text.trim()}".\nContent job #${short(pending.contentJobId)} is now REJECTED.`,
+          );
+        } catch (error) {
+          return one(telegramSafeError(error));
+        }
+      }
+    }
+
+    if (command.name === 'cancel') {
+      return one('There is no active pending action to cancel.');
+    }
+
     try {
       switch (command.name) {
         case 'start':
@@ -193,6 +277,41 @@ export class TelegramCommandCenter {
           return {
             ...(await this.searchFromToken(actor, token.metadata)),
             callbackNotice: 'Page loaded.',
+          };
+        case TelegramAction.REQUEST_EDIT:
+          return {
+            ...(await this.promptEdit(actor, token.resourceId, token.metadata)),
+            callbackNotice: 'Awaiting edit instructions...',
+          };
+        case TelegramAction.REQUEST_REGENERATE:
+          return {
+            ...(await this.requestRegenerate(actor, token.resourceId, token.metadata)),
+            callbackNotice: 'Regeneration started.',
+          };
+        case TelegramAction.APPROVE_PROMPT:
+          return {
+            ...(await this.promptApprove(actor, token.resourceId, token.metadata)),
+            callbackNotice: 'Confirmation required.',
+          };
+        case TelegramAction.CONFIRM_APPROVE:
+          return {
+            ...(await this.confirmApprove(actor, token.resourceId, token.metadata)),
+            callbackNotice: 'Draft approved!',
+          };
+        case TelegramAction.REJECT_PROMPT:
+          return {
+            ...(await this.promptReject(actor, token.resourceId, token.metadata)),
+            callbackNotice: 'Awaiting rejection reason...',
+          };
+        case TelegramAction.VIEW_PREVIOUS:
+          return {
+            ...(await this.viewPrevious(actor, token.resourceId)),
+            callbackNotice: 'Previous versions loaded.',
+          };
+        case TelegramAction.CANCEL_ACTION:
+          return {
+            ...(await this.cancelAction(actor)),
+            callbackNotice: 'Cancelled.',
           };
       }
     } catch (error) {
@@ -434,6 +553,230 @@ export class TelegramCommandCenter {
       values.map((value) => ({ action, resourceId: flow.id, metadata: { value } })),
       flow.expiresAt,
     );
+  }
+
+  private async promptEdit(
+    actor: TelegramActor,
+    versionId: string,
+    metadata?: Readonly<Record<string, unknown>>,
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.EDIT_CONTENT);
+    const jobId =
+      (metadata?.contentJobId as string | undefined) ?? (await this.getJobIdByVersion(versionId));
+    if (jobId === undefined) return one('Content job not found.');
+
+    const review = await this.reviewState.execute(jobId);
+    if (review === null) return one('Content job not found.');
+    if (review.jobStatus === 'APPROVED')
+      return one('This job is already approved and cannot be edited.');
+    if (review.jobStatus === 'REJECTED') return one('This job is rejected and cannot be edited.');
+    if (review.activeRevision !== undefined)
+      return one('A revision is already in progress for this job.');
+
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1_000);
+    await this.repository.createPendingInteraction({
+      telegramIdentityId: actor.identityId,
+      contentJobId: jobId,
+      contentVersionId: versionId,
+      action: 'EDIT',
+      expiresAt,
+    });
+
+    const [cancelToken] = await this.tokens.create(
+      actor.identityId,
+      [{ action: TelegramAction.CANCEL_ACTION, resourceId: jobId, singleUse: true }],
+      expiresAt,
+    );
+
+    return {
+      messages: [
+        {
+          text: `✏️ *Request Revision for #${short(jobId)}*\n\nPlease reply with your instructions for the revision (e.g. "Shorten the caption and emphasize fragrance notes").\n\nType /cancel to abort.`,
+          buttons: [[{ text: '❌ Cancel', callbackData: callbackData(required(cancelToken)) }]],
+        },
+      ],
+    };
+  }
+
+  private async requestRegenerate(
+    actor: TelegramActor,
+    versionId: string,
+    metadata?: Readonly<Record<string, unknown>>,
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.REGENERATE_CONTENT);
+    const jobId =
+      (metadata?.contentJobId as string | undefined) ?? (await this.getJobIdByVersion(versionId));
+    if (jobId === undefined) return one('Content job not found.');
+
+    const revision = await this.requestContentRegeneration.execute({
+      contentJobId: jobId,
+      contentVersionId: versionId,
+      actorUserId: actor.internalUserId,
+      actorRoles: actor.roles,
+    });
+
+    await this.repository.appendAudit({
+      actor,
+      action: 'TELEGRAM_CONTENT_REGENERATE_REQUESTED',
+      resourceType: 'RevisionRequest',
+      resourceId: revision.id,
+      metadata: { contentJobId: jobId },
+    });
+
+    return one(
+      `🔄 Regeneration requested for #${short(jobId)}.\nGenerating a fresh draft. You will be notified when it is ready.`,
+    );
+  }
+
+  private async promptApprove(
+    actor: TelegramActor,
+    versionId: string,
+    metadata?: Readonly<Record<string, unknown>>,
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.APPROVE_CONTENT);
+    const jobId =
+      (metadata?.contentJobId as string | undefined) ?? (await this.getJobIdByVersion(versionId));
+    if (jobId === undefined) return one('Content job not found.');
+
+    const review = await this.reviewState.execute(jobId);
+    if (review === null) return one('Content job not found.');
+    if (review.jobStatus === 'APPROVED') return one('This job is already approved.');
+    if (review.jobStatus === 'REJECTED') return one('This job is rejected.');
+    if (review.activeRevision !== undefined)
+      return one('Cannot approve while a revision is in progress.');
+    const targetVersion = review.versions.find((v) => v.id === versionId) ?? review.versions[0];
+    if (targetVersion?.approvalEligible === false) {
+      return one('❌ This draft has blocking factual issues and cannot be approved.');
+    }
+
+    const versionNumber =
+      (metadata?.versionNumber as number | undefined) ?? review.currentVersionNumber ?? 1;
+    const expiresAt = this.expiry();
+    const [confirmToken, cancelToken] = await this.tokens.create(
+      actor.identityId,
+      [
+        {
+          action: TelegramAction.CONFIRM_APPROVE,
+          resourceId: versionId,
+          metadata: { contentJobId: jobId, versionNumber },
+          singleUse: true,
+        },
+        {
+          action: TelegramAction.CANCEL_ACTION,
+          resourceId: jobId,
+          singleUse: true,
+        },
+      ],
+      expiresAt,
+    );
+
+    return {
+      messages: [
+        {
+          text: `⚠️ *Confirm Approval*\n\nAre you sure you want to approve version V${String(versionNumber)} for #${short(jobId)}?\n\nOnce approved, this job is marked as APPROVED (final). This action cannot be undone.`,
+          buttons: [
+            [
+              { text: '✅ Confirm Approve', callbackData: callbackData(required(confirmToken)) },
+              { text: '❌ Cancel', callbackData: callbackData(required(cancelToken)) },
+            ],
+          ],
+        },
+      ],
+    };
+  }
+
+  private async confirmApprove(
+    actor: TelegramActor,
+    versionId: string,
+    metadata?: Readonly<Record<string, unknown>>,
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.APPROVE_CONTENT);
+    const jobId =
+      (metadata?.contentJobId as string | undefined) ?? (await this.getJobIdByVersion(versionId));
+    if (jobId === undefined) return one('Content job not found.');
+
+    const approval = await this.approveContent.execute({
+      contentJobId: jobId,
+      contentVersionId: versionId,
+      approverUserId: actor.internalUserId,
+      approverRoles: actor.roles,
+    });
+
+    await this.repository.appendAudit({
+      actor,
+      action: 'TELEGRAM_CONTENT_APPROVED',
+      resourceType: 'ApprovalEvent',
+      resourceId: approval.id,
+      metadata: { contentJobId: jobId, contentVersionId: versionId },
+    });
+
+    const versionNumber = (metadata?.versionNumber as number | undefined) ?? 1;
+    return one(
+      `✅ *Version V${String(versionNumber)} Approved*\n\nApproved by ${actor.displayName}.\nContent job #${short(jobId)} is now APPROVED.`,
+    );
+  }
+
+  private async promptReject(
+    actor: TelegramActor,
+    versionId: string,
+    metadata?: Readonly<Record<string, unknown>>,
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.REJECT_CONTENT);
+    const jobId =
+      (metadata?.contentJobId as string | undefined) ?? (await this.getJobIdByVersion(versionId));
+    if (jobId === undefined) return one('Content job not found.');
+
+    const review = await this.reviewState.execute(jobId);
+    if (review === null) return one('Content job not found.');
+    if (review.jobStatus === 'APPROVED')
+      return one('This job is already approved and cannot be rejected.');
+    if (review.jobStatus === 'REJECTED') return one('This job is already rejected.');
+
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1_000);
+    await this.repository.createPendingInteraction({
+      telegramIdentityId: actor.identityId,
+      contentJobId: jobId,
+      contentVersionId: versionId,
+      action: 'REJECT',
+      expiresAt,
+    });
+
+    const [cancelToken] = await this.tokens.create(
+      actor.identityId,
+      [{ action: TelegramAction.CANCEL_ACTION, resourceId: jobId, singleUse: true }],
+      expiresAt,
+    );
+
+    return {
+      messages: [
+        {
+          text: `❌ *Reject Draft #${short(jobId)}*\n\nPlease reply with a comment explaining why this draft is rejected.\n\nType /cancel to abort.`,
+          buttons: [[{ text: '❌ Cancel', callbackData: callbackData(required(cancelToken)) }]],
+        },
+      ],
+    };
+  }
+
+  private async viewPrevious(actor: TelegramActor, jobId: string): Promise<TelegramResponse> {
+    this.require(actor, Permission.VIEW_OWN_CONTENT);
+    const versions = await this.repository.getPreviousVersions(actor, jobId);
+    if (versions.length === 0) return one('No versions found for this job.');
+    const draft = await this.repository.getDraftViewByVersionId(versions[0]?.id ?? '');
+    const productName = draft?.productName ?? 'Product';
+    return one(formatPreviousVersions(jobId, productName, versions));
+  }
+
+  private async cancelAction(actor: TelegramActor): Promise<TelegramResponse> {
+    const active = await this.repository.findActivePendingInteraction(actor.identityId, new Date());
+    if (active !== null) {
+      await this.repository.cancelPendingInteraction(active.id, new Date());
+    }
+    return one('Action cancelled.');
+  }
+
+  private async getJobIdByVersion(versionId: string): Promise<string | undefined> {
+    const draft = await this.repository.getDraftViewByVersionId(versionId);
+    return draft?.jobId;
   }
 
   private require(actor: TelegramActor, permission: Permission): void {

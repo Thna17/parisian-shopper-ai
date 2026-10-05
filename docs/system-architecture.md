@@ -2,7 +2,7 @@
 
 **Status:** Proposed implementation architecture under accepted ADR-002
 
-**Scope:** approved target architecture; implementation complete through Phase 1E draft review
+**Scope:** approved target architecture; implementation complete through Phase 1F human review, revisions, and approvals
 
 **Explicitly out of scope:** visual generation, scheduling, social publishing, analytics, campaign planning, and live-selling automation
 
@@ -83,20 +83,20 @@ flowchart LR
 
 The paths below describe responsibilities, not generated source. Each feature module may contain `domain`, `application`, and `infrastructure` folders where useful; small modules should not add ceremonial layers.
 
-| Module | Responsibility | May depend on | Must not own |
-|---|---|---|---|
-| `auth` | Resolve actor identity, authorization policies, role checks | users, common | Telegram presentation, content generation |
-| `users` | Internal users, Telegram identity mapping, role assignment/status | common | Workflow state |
-| `telegram` | Commands, callbacks, message rendering, update deduplication | application-facing ports, auth | Domain transitions, prompt construction, direct Prisma/AI calls |
-| `products` | Product gateway, normalized contract validation, immutable snapshot creation | common, audit | AI enrichment of facts |
-| `content` | Content jobs, versions, content types, workflow state machine | products, brand, validation ports | Telegram-specific behavior |
-| `ai` | `AITextProvider`/future `AIImageProvider` ports, provider adapters, strict response parsing | common | Approval decisions, product mutations |
-| `validation` | Deterministic factual and structural rules, severities, approval eligibility | content/product read models | AI calls or transport behavior |
-| `approvals` | Exact-version approve/reject/revision events and permission/concurrency checks | content, auth, audit | Publication |
-| `brand` | Immutable versioned brand rules and content strategies | common | Canonical product facts |
-| `jobs` | BullMQ adapter, outbox dispatcher, worker orchestration, retries and dead-job operations | application ports, audit | Domain truth in queue payloads |
-| `audit` | Append-only security and business audit events with redaction | common | Mutable operational state |
-| `common` | IDs, clocks, errors, transaction abstractions, telemetry contracts | none of the feature modules | Feature-specific rules |
+| Module       | Responsibility                                                                              | May depend on                     | Must not own                                                    |
+| ------------ | ------------------------------------------------------------------------------------------- | --------------------------------- | --------------------------------------------------------------- |
+| `auth`       | Resolve actor identity, authorization policies, role checks                                 | users, common                     | Telegram presentation, content generation                       |
+| `users`      | Internal users, Telegram identity mapping, role assignment/status                           | common                            | Workflow state                                                  |
+| `telegram`   | Commands, callbacks, message rendering, update deduplication                                | application-facing ports, auth    | Domain transitions, prompt construction, direct Prisma/AI calls |
+| `products`   | Product gateway, normalized contract validation, immutable snapshot creation                | common, audit                     | AI enrichment of facts                                          |
+| `content`    | Content jobs, versions, content types, workflow state machine                               | products, brand, validation ports | Telegram-specific behavior                                      |
+| `ai`         | `AITextProvider`/future `AIImageProvider` ports, provider adapters, strict response parsing | common                            | Approval decisions, product mutations                           |
+| `validation` | Deterministic factual and structural rules, severities, approval eligibility                | content/product read models       | AI calls or transport behavior                                  |
+| `approvals`  | Exact-version approve/reject/revision events and permission/concurrency checks              | content, auth, audit              | Publication                                                     |
+| `brand`      | Immutable versioned brand rules and content strategies                                      | common                            | Canonical product facts                                         |
+| `jobs`       | BullMQ adapter, outbox dispatcher, worker orchestration, retries and dead-job operations    | application ports, audit          | Domain truth in queue payloads                                  |
+| `audit`      | Append-only security and business audit events with redaction                               | common                            | Mutable operational state                                       |
+| `common`     | IDs, clocks, errors, transaction abstractions, telemetry contracts                          | none of the feature modules       | Feature-specific rules                                          |
 
 A conceptual source layout is:
 
@@ -123,16 +123,16 @@ Phase 1E implements `/start`, `/help`, `/search`, `/create`, `/status`, and `/hi
 
 ### Commands
 
-| Command | Authorized behavior |
-|---|---|
-| `/start` | Resolve numeric Telegram ID, show authorization result and concise onboarding. Unknown/disabled IDs receive no catalog data. |
-| `/help` | Show commands allowed for the actor's roles. |
-| `/create <SKU>` | Resolve exact SKU, create immutable snapshot, show verified facts/images, then request a content type. |
-| `/search <keyword>` | Return a bounded, paginated product list. Exact SKU confirmation is required before generation. |
-| `/newproducts` | Query an API capability defined by the Product API owner; disabled until its ordering/window semantics exist. |
-| `/promo` | Query only active promotions according to upstream timestamps; never calculate or activate promotions in the bot. |
-| `/status` | Show the actor's recent content jobs and current states. |
-| `/history <SKU>` | Show authorized job/version/approval history for the exact SKU without exposing raw prompts or secrets. |
+| Command             | Authorized behavior                                                                                                          |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `/start`            | Resolve numeric Telegram ID, show authorization result and concise onboarding. Unknown/disabled IDs receive no catalog data. |
+| `/help`             | Show commands allowed for the actor's roles.                                                                                 |
+| `/create <SKU>`     | Resolve exact SKU, create immutable snapshot, show verified facts/images, then request a content type.                       |
+| `/search <keyword>` | Return a bounded, paginated product list. Exact SKU confirmation is required before generation.                              |
+| `/newproducts`      | Query an API capability defined by the Product API owner; disabled until its ordering/window semantics exist.                |
+| `/promo`            | Query only active promotions according to upstream timestamps; never calculate or activate promotions in the bot.            |
+| `/status`           | Show the actor's recent content jobs and current states.                                                                     |
+| `/history <SKU>`    | Show authorized job/version/approval history for the exact SKU without exposing raw prompts or secrets.                      |
 
 Usernames and display names may be stored for operator convenience but never authorize an action. Every command and callback resolves the numeric Telegram user ID to one active internal `User`, then evaluates role policy.
 
@@ -197,17 +197,17 @@ These sections are not concatenated from a single mutable string and are version
 
 The initial logical schema is:
 
-| Field | Shape | Rule |
-|---|---|---|
-| `headline` | string | Marketing headline; cannot introduce unsupported facts. |
-| `khmer_caption` | string | Khmer caption; official product/brand names follow brand rules. |
-| `english_caption` | string | English caption. |
-| `cta` | string | Approved, non-publishing call to action. |
-| `hashtags` | string array | Bounded count and length; facts in hashtags are validated too. |
-| `creative_brief` | structured object | Textual art direction only in MVP; not sent to an image model. |
-| `facts_used` | typed references array | Snapshot field paths and rendered values claimed by the model; useful evidence, never trusted as validation. |
-| `warnings` | string array | Model-reported uncertainties; cannot downgrade deterministic findings. |
-| `missing_information` | field-path array | Facts intentionally omitted because the snapshot lacks them. |
+| Field                 | Shape                  | Rule                                                                                                         |
+| --------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `headline`            | string                 | Marketing headline; cannot introduce unsupported facts.                                                      |
+| `khmer_caption`       | string                 | Khmer caption; official product/brand names follow brand rules.                                              |
+| `english_caption`     | string                 | English caption.                                                                                             |
+| `cta`                 | string                 | Approved, non-publishing call to action.                                                                     |
+| `hashtags`            | string array           | Bounded count and length; facts in hashtags are validated too.                                               |
+| `creative_brief`      | structured object      | Textual art direction only in MVP; not sent to an image model.                                               |
+| `facts_used`          | typed references array | Snapshot field paths and rendered values claimed by the model; useful evidence, never trusted as validation. |
+| `warnings`            | string array           | Model-reported uncertainties; cannot downgrade deterministic findings.                                       |
+| `missing_information` | field-path array       | Facts intentionally omitted because the snapshot lacks them.                                                 |
 
 Unknown properties are rejected. Text and array limits are enforced before persistence. The exact Zod/OpenAPI schema will be versioned during Phase 1C.
 
@@ -217,11 +217,11 @@ Validation receives only a `ProductSnapshot`, a candidate structured output, ver
 
 ### Severity semantics
 
-| Severity | Meaning | Approval effect |
-|---|---|---|
-| `INFO` | Traceable observation, such as a controlled field not used | No block |
-| `WARNING` | Review-worthy style/coverage issue that is not a factual contradiction | No automatic block; visible to reviewer |
-| `BLOCKING` | Contradiction, invented protected fact, invalid schema, or unverifiable prohibited claim | Version cannot be approved |
+| Severity   | Meaning                                                                                  | Approval effect                         |
+| ---------- | ---------------------------------------------------------------------------------------- | --------------------------------------- |
+| `INFO`     | Traceable observation, such as a controlled field not used                               | No block                                |
+| `WARNING`  | Review-worthy style/coverage issue that is not a factual contradiction                   | No automatic block; visible to reviewer |
+| `BLOCKING` | Contradiction, invented protected fact, invalid schema, or unverifiable prohibited claim | Version cannot be approved              |
 
 ### Protected facts and rule examples
 
@@ -260,18 +260,18 @@ stateDiagram-v2
     REJECTED --> [*]
 ```
 
-| From | To | Preconditions/effect |
-|---|---|---|
-| `REQUESTED` | `GENERATING` | Durable job and outbox exist; worker atomically claims expected state. |
-| `REQUESTED` | `FAILED` | Enqueue is permanently unrecoverable after reconciliation/operations decision. |
-| `GENERATING` | `DRAFT` | New immutable version and completed deterministic validation are committed. Blocking findings may exist but make the draft ineligible for approval. |
-| `GENERATING` | `FAILED` | Permanent error or retry budget exhausted; sanitized failure is recorded. |
-| `DRAFT` | `UNDER_REVIEW` | Review notification outbox event is committed/dispatched; current version identified. |
-| `UNDER_REVIEW` | `REVISION_REQUESTED` | Authorized edit/regenerate targets the latest version; request event appended. |
-| `REVISION_REQUESTED` | `GENERATING` | Worker claims request and reserves the next version number. |
-| `UNDER_REVIEW` | `APPROVED` | Actor has approval permission; target is latest version; no blocking failure; optimistic lock succeeds; approval event appended in same transaction. |
-| `UNDER_REVIEW` | `REJECTED` | Actor is authorized; immutable rejection event/reason is appended. |
-| `FAILED` | `GENERATING` | Explicit authorized retry with a new `GenerationAttempt`; never an invisible infinite retry. |
+| From                 | To                   | Preconditions/effect                                                                                                                                 |
+| -------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REQUESTED`          | `GENERATING`         | Durable job and outbox exist; worker atomically claims expected state.                                                                               |
+| `REQUESTED`          | `FAILED`             | Enqueue is permanently unrecoverable after reconciliation/operations decision.                                                                       |
+| `GENERATING`         | `DRAFT`              | New immutable version and completed deterministic validation are committed. Blocking findings may exist but make the draft ineligible for approval.  |
+| `GENERATING`         | `FAILED`             | Permanent error or retry budget exhausted; sanitized failure is recorded.                                                                            |
+| `DRAFT`              | `UNDER_REVIEW`       | Review notification outbox event is committed/dispatched; current version identified.                                                                |
+| `UNDER_REVIEW`       | `REVISION_REQUESTED` | Authorized edit/regenerate targets the latest version; request event appended.                                                                       |
+| `REVISION_REQUESTED` | `GENERATING`         | Worker claims request and reserves the next version number.                                                                                          |
+| `UNDER_REVIEW`       | `APPROVED`           | Actor has approval permission; target is latest version; no blocking failure; optimistic lock succeeds; approval event appended in same transaction. |
+| `UNDER_REVIEW`       | `REJECTED`           | Actor is authorized; immutable rejection event/reason is appended.                                                                                   |
+| `FAILED`             | `GENERATING`         | Explicit authorized retry with a new `GenerationAttempt`; never an invisible infinite retry.                                                         |
 
 `APPROVED` is terminal in the MVP. `REJECTED` is also terminal for that job; a new request creates a new job. Future `SCHEDULED` and `PUBLISHED` values may be reserved in design documentation but must not be accepted by the MVP transition service.
 
@@ -290,24 +290,24 @@ All transitions use an expected current state and optimistic `lock_version`, ins
 
 ### Entities and constraints
 
-| Entity | Responsibility and key fields | Relationships, constraints, and indexes |
-|---|---|---|
-| `User` | Internal staff identity: `id`, display name, status, `disabled_at`, timestamps | PK `id`; index status. No hard delete after any authored event. |
-| `TelegramIdentity` | Numeric Telegram mapping plus informational username/name and `last_seen_at` | PK; FK `user_id`; `telegram_user_id bigint UNIQUE`; normally `user_id UNIQUE` for one identity per MVP user. Username is not unique or authoritative. |
-| `Role` | Stable permission bundle named `VIEWER`, `EDITOR`, `APPROVER`, or `ADMIN` | PK; `code UNIQUE`. Seeded/configuration-controlled, not free-form Telegram input. |
-| `UserRole` | Many-to-many role assignment with assigning actor/time | Composite unique `(user_id, role_id)`; FKs to User/Role; no deletion if historical assignment evidence is required—revoke with timestamp. This table exists because users may need multiple roles. |
-| `ProductSnapshot` | Immutable facts used by one or more jobs: source metadata, typed protected fields, exact normalized envelope, adapter/schema versions, digest | PK; no update/delete application grant; index `(sku, retrieved_at DESC)`; index `source_record_id`; optional unique `(source_system, sku, canonical_digest)` to reuse byte-identical snapshots. JSONB envelope preserves validated source fidelity while typed protected columns support constraints/querying. |
-| `ContentJob` | Workflow aggregate: snapshot, requester, content type, state, strategy/rule versions, next version, optimistic lock, failure classification | PK; FKs snapshot/requester/brand-rule; unique `idempotency_key`; indexes `(requested_by, created_at DESC)`, `(state, updated_at)`, and snapshot; `next_version_number >= 1`; state changes only through transition service. |
-| `ContentVersion` | Append-only Vn: structured content, parent, origin, content/schema hashes, generation attempt | PK; FK job; nullable self-FK parent; `UNIQUE(job_id, version_number)`; immutable; index `(job_id, version_number DESC)`. Captions/headline/CTA are typed text columns; bounded arrays/creative brief/facts-used use schema-versioned JSONB. |
-| `ValidationResult` | Immutable rule outcome for a version: validator/rule version, field path, occurrence, severity, outcome, expected/actual normalized evidence, message | PK; FK version; unique `(content_version_id, rule_code, field_path, occurrence)`; index `(content_version_id, severity, outcome)`. Approval checks for no `BLOCKING`/`FAIL`. Sensitive full source payloads are not duplicated. |
-| `ApprovalEvent` | Immutable exact-version action: approve, reject, edit requested, or regenerate requested; actor, reason/instruction, source action ID | PK; FKs job/version/actor; `source_action_id UNIQUE` for callback idempotency; indexes job/time and version/action. An `APPROVE` event must reference that job's latest eligible version and is created with state transition. |
-| `BrandRuleVersion` | Immutable brand-rule text/structure, schema version, checksum, effective/retired metadata | PK; unique `(brand_key, version)`; index effective state. Never edit a version referenced by a job. Activation is a separate administrative action. |
-| `ContentType` | Implemented as a code enum and versioned strategy definition, not a mutable table, for the five fixed MVP types | `ContentJob.content_type` constrained to the enum and records `content_strategy_version`. A table is deferred until business users truly need runtime-defined types. |
-| `GenerationAttempt` | Each provider execution/retry: job, base/target version, provider/model, template/context hashes, status, timings, error class, token counts, estimated cost | PK; FK job and optional produced version; unique `execution_id`; index job/attempt and status/time. Raw credentials and unrestricted prompts/responses are not stored. This separates operational attempts from immutable editorial versions. |
-| `AuditEvent` | Append-only security/administrative evidence: actor, action, aggregate, request/correlation IDs, redacted metadata | PK; index `(aggregate_type, aggregate_id, created_at)` and actor/time; no update/delete application grant. JSONB metadata follows an allowlisted schema and excludes secrets/content blobs. |
-| `InboundTelegramUpdate` | Durable deduplication and processing status for Telegram delivery | PK; `telegram_update_id bigint UNIQUE`; payload hash, type, received/processed timestamps, sanitized error; short policy-driven retention after audit linkage. Added because retries are normal and audit logs alone cannot coordinate processing. |
-| `TelegramActionToken` | Opaque callback reference, expected user/job/version/action, expiry and one-time consumption | PK random token ID (callback carries opaque ID); unique token hash; indexes expiry/consumption. Added to prevent forged or replayed state-bearing callback data. |
-| `OutboxEvent` | Transactional bridge from PostgreSQL state to BullMQ or Telegram notification | PK; topic, aggregate ID, payload schema/reference, available/claimed/published timestamps, attempts; index unpublished/available. Added because PostgreSQL and BullMQ/Telegram cannot participate in one transaction. |
+| Entity                  | Responsibility and key fields                                                                                                                                | Relationships, constraints, and indexes                                                                                                                                                                                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `User`                  | Internal staff identity: `id`, display name, status, `disabled_at`, timestamps                                                                               | PK `id`; index status. No hard delete after any authored event.                                                                                                                                                                                                                                                |
+| `TelegramIdentity`      | Numeric Telegram mapping plus informational username/name and `last_seen_at`                                                                                 | PK; FK `user_id`; `telegram_user_id bigint UNIQUE`; normally `user_id UNIQUE` for one identity per MVP user. Username is not unique or authoritative.                                                                                                                                                          |
+| `Role`                  | Stable permission bundle named `VIEWER`, `EDITOR`, `APPROVER`, or `ADMIN`                                                                                    | PK; `code UNIQUE`. Seeded/configuration-controlled, not free-form Telegram input.                                                                                                                                                                                                                              |
+| `UserRole`              | Many-to-many role assignment with assigning actor/time                                                                                                       | Composite unique `(user_id, role_id)`; FKs to User/Role; no deletion if historical assignment evidence is required—revoke with timestamp. This table exists because users may need multiple roles.                                                                                                             |
+| `ProductSnapshot`       | Immutable facts used by one or more jobs: source metadata, typed protected fields, exact normalized envelope, adapter/schema versions, digest                | PK; no update/delete application grant; index `(sku, retrieved_at DESC)`; index `source_record_id`; optional unique `(source_system, sku, canonical_digest)` to reuse byte-identical snapshots. JSONB envelope preserves validated source fidelity while typed protected columns support constraints/querying. |
+| `ContentJob`            | Workflow aggregate: snapshot, requester, content type, state, strategy/rule versions, next version, optimistic lock, failure classification                  | PK; FKs snapshot/requester/brand-rule; unique `idempotency_key`; indexes `(requested_by, created_at DESC)`, `(state, updated_at)`, and snapshot; `next_version_number >= 1`; state changes only through transition service.                                                                                    |
+| `ContentVersion`        | Append-only Vn: structured content, parent, origin, content/schema hashes, generation attempt                                                                | PK; FK job; nullable self-FK parent; `UNIQUE(job_id, version_number)`; immutable; index `(job_id, version_number DESC)`. Captions/headline/CTA are typed text columns; bounded arrays/creative brief/facts-used use schema-versioned JSONB.                                                                    |
+| `ValidationResult`      | Immutable rule outcome for a version: validator/rule version, field path, occurrence, severity, outcome, expected/actual normalized evidence, message        | PK; FK version; unique `(content_version_id, rule_code, field_path, occurrence)`; index `(content_version_id, severity, outcome)`. Approval checks for no `BLOCKING`/`FAIL`. Sensitive full source payloads are not duplicated.                                                                                |
+| `ApprovalEvent`         | Immutable exact-version action: approve, reject, edit requested, or regenerate requested; actor, reason/instruction, source action ID                        | PK; FKs job/version/actor; `source_action_id UNIQUE` for callback idempotency; indexes job/time and version/action. An `APPROVE` event must reference that job's latest eligible version and is created with state transition.                                                                                 |
+| `BrandRuleVersion`      | Immutable brand-rule text/structure, schema version, checksum, effective/retired metadata                                                                    | PK; unique `(brand_key, version)`; index effective state. Never edit a version referenced by a job. Activation is a separate administrative action.                                                                                                                                                            |
+| `ContentType`           | Implemented as a code enum and versioned strategy definition, not a mutable table, for the five fixed MVP types                                              | `ContentJob.content_type` constrained to the enum and records `content_strategy_version`. A table is deferred until business users truly need runtime-defined types.                                                                                                                                           |
+| `GenerationAttempt`     | Each provider execution/retry: job, base/target version, provider/model, template/context hashes, status, timings, error class, token counts, estimated cost | PK; FK job and optional produced version; unique `execution_id`; index job/attempt and status/time. Raw credentials and unrestricted prompts/responses are not stored. This separates operational attempts from immutable editorial versions.                                                                  |
+| `AuditEvent`            | Append-only security/administrative evidence: actor, action, aggregate, request/correlation IDs, redacted metadata                                           | PK; index `(aggregate_type, aggregate_id, created_at)` and actor/time; no update/delete application grant. JSONB metadata follows an allowlisted schema and excludes secrets/content blobs.                                                                                                                    |
+| `InboundTelegramUpdate` | Durable deduplication and processing status for Telegram delivery                                                                                            | PK; `telegram_update_id bigint UNIQUE`; payload hash, type, received/processed timestamps, sanitized error; short policy-driven retention after audit linkage. Added because retries are normal and audit logs alone cannot coordinate processing.                                                             |
+| `TelegramActionToken`   | Opaque callback reference, expected user/job/version/action, expiry and one-time consumption                                                                 | PK random token ID (callback carries opaque ID); unique token hash; indexes expiry/consumption. Added to prevent forged or replayed state-bearing callback data.                                                                                                                                               |
+| `OutboxEvent`           | Transactional bridge from PostgreSQL state to BullMQ or Telegram notification                                                                                | PK; topic, aggregate ID, payload schema/reference, available/claimed/published timestamps, attempts; index unpublished/available. Added because PostgreSQL and BullMQ/Telegram cannot participate in one transaction.                                                                                          |
 
 `AIUsageRecord` is not a separate MVP table because generation token/cost usage belongs to `GenerationAttempt`. It may be introduced later only if invoices, budgets, or cross-attempt aggregation require an immutable billing ledger.
 

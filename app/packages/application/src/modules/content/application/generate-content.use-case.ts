@@ -99,11 +99,25 @@ export class GenerateContentUseCase {
       });
     }
 
+    let reviewerInstruction: string | undefined;
+    let previousDraft: unknown;
+    if (started.activeRevision !== undefined) {
+      const prevVersion = await this.repository.findVersionById(
+        started.activeRevision.sourceContentVersionId,
+      );
+      previousDraft = prevVersion?.structuredOutput;
+      if (started.activeRevision.type === 'EDIT') {
+        reviewerInstruction = started.activeRevision.instruction;
+      }
+    }
+
     const context = this.contextBuilder.build({
       job: started.job,
       productSnapshot: snapshot,
       brandRuleVersion,
       strategy,
+      ...(reviewerInstruction === undefined ? {} : { reviewerInstruction }),
+      ...(previousDraft === undefined ? {} : { previousDraft }),
     });
     const startedAt = Date.now();
     this.metrics.record('generation_requested', 1, { provider: this.provider.providerName });

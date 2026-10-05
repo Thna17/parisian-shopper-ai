@@ -5,7 +5,11 @@ import {
   TelegramActionTokenService,
   callbackData,
   formatDraft,
+  hasAnyRolePermission,
   splitTelegramMessage,
+  Permission,
+  type CreateTelegramActionInput,
+  type TelegramButton,
   type TelegramMessage,
   type TelegramWorkflowRepository,
 } from '@parisian-shopper/application';
@@ -18,7 +22,12 @@ import {
   type TelegramDeliveryGateway,
 } from './telegram-delivery.gateway.js';
 
-const TOPICS = ['CONTENT_VALIDATION_COMPLETED', 'CONTENT_GENERATION_FAILED'] as const;
+const TOPICS = [
+  'CONTENT_VALIDATION_COMPLETED',
+  'CONTENT_GENERATION_FAILED',
+  'CONTENT_APPROVED',
+  'CONTENT_REJECTED',
+] as const;
 
 @Injectable()
 export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy {
@@ -63,6 +72,8 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy {
   }): Promise<void> {
     try {
       if (event.topic === 'CONTENT_VALIDATION_COMPLETED') await this.sendDraft(event);
+      else if (event.topic === 'CONTENT_APPROVED') await this.sendApproval(event);
+      else if (event.topic === 'CONTENT_REJECTED') await this.sendRejection(event);
       else await this.sendFailure(event);
       await this.repository.markOutboxProcessed(event.id, new Date());
     } catch (error) {
@@ -104,29 +115,150 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy {
     )
       return;
     const expiresAt = new Date(Date.now() + this.config.telegram.actionTokenTtlSeconds * 1_000);
-    const [sourceToken, validationToken] = await this.tokens.create(
-      view.telegramIdentityId,
+
+    const roles = view.requesterRoles ?? [];
+    const canEdit = hasAnyRolePermission(roles, Permission.EDIT_CONTENT);
+    const canRegenerate = hasAnyRolePermission(roles, Permission.REGENERATE_CONTENT);
+    const canApprove =
+      hasAnyRolePermission(roles, Permission.APPROVE_CONTENT) &&
+      view.validation.status !== 'BLOCKED' &&
+      view.validation.status !== 'FAILED';
+    const canReject = hasAnyRolePermission(roles, Permission.REJECT_CONTENT);
+    const hasHistory = (view.allVersions?.length ?? 1) > 1;
+
+    const tokenDefs: CreateTelegramActionInput[] = [
+      { action: TelegramAction.VIEW_SOURCE, resourceId: view.jobId, singleUse: false },
+      { action: TelegramAction.VIEW_VALIDATION, resourceId: versionId, singleUse: false },
+    ];
+
+    if (canEdit) {
+      tokenDefs.push({
+        action: TelegramAction.REQUEST_EDIT,
+        resourceId: versionId,
+        metadata: { contentJobId: view.jobId, versionNumber: view.versionNumber },
+        singleUse: false,
+      });
+    }
+    if (canRegenerate) {
+      tokenDefs.push({
+        action: TelegramAction.REQUEST_REGENERATE,
+        resourceId: versionId,
+        metadata: { contentJobId: view.jobId, versionNumber: view.versionNumber },
+        singleUse: false,
+      });
+    }
+    if (canApprove) {
+      tokenDefs.push({
+        action: TelegramAction.APPROVE_PROMPT,
+        resourceId: versionId,
+        metadata: { contentJobId: view.jobId, versionNumber: view.versionNumber },
+        singleUse: false,
+      });
+    }
+    if (canReject) {
+      tokenDefs.push({
+        action: TelegramAction.REJECT_PROMPT,
+        resourceId: versionId,
+        metadata: { contentJobId: view.jobId, versionNumber: view.versionNumber },
+        singleUse: false,
+      });
+    }
+    if (hasHistory) {
+      tokenDefs.push({
+        action: TelegramAction.VIEW_PREVIOUS,
+        resourceId: view.jobId,
+        metadata: { versionId },
+        singleUse: false,
+      });
+    }
+
+    const createdTokens = await this.tokens.create(view.telegramIdentityId, tokenDefs, expiresAt);
+    let tokenIndex = 0;
+    const sourceToken = createdTokens[tokenIndex++];
+    const validationToken = createdTokens[tokenIndex++];
+    const editToken = canEdit ? createdTokens[tokenIndex++] : undefined;
+    const regenerateToken = canRegenerate ? createdTokens[tokenIndex++] : undefined;
+    const approveToken = canApprove ? createdTokens[tokenIndex++] : undefined;
+    const rejectToken = canReject ? createdTokens[tokenIndex++] : undefined;
+    const historyToken = hasHistory ? createdTokens[tokenIndex] : undefined;
+
+    const buttonRows: TelegramButton[][] = [
       [
-        { action: TelegramAction.VIEW_SOURCE, resourceId: view.jobId, singleUse: false },
-        { action: TelegramAction.VIEW_VALIDATION, resourceId: versionId, singleUse: false },
+        { text: 'View Source', callbackData: callbackData(required(sourceToken)) },
+        { text: 'View Validation', callbackData: callbackData(required(validationToken)) },
       ],
-      expiresAt,
-    );
+    ];
+
+    const editRow: TelegramButton[] = [];
+    if (editToken !== undefined) {
+      editRow.push({ text: '✏️ Request Edit', callbackData: callbackData(editToken) });
+    }
+    if (regenerateToken !== undefined) {
+      editRow.push({ text: '🔄 Regenerate', callbackData: callbackData(regenerateToken) });
+    }
+    if (editRow.length > 0) buttonRows.push(editRow);
+
+    const reviewRow: TelegramButton[] = [];
+    if (approveToken !== undefined) {
+      reviewRow.push({ text: '✅ Approve', callbackData: callbackData(approveToken) });
+    }
+    if (rejectToken !== undefined) {
+      reviewRow.push({ text: '❌ Reject', callbackData: callbackData(rejectToken) });
+    }
+    if (reviewRow.length > 0) buttonRows.push(reviewRow);
+
+    if (historyToken !== undefined) {
+      buttonRows.push([{ text: '📜 Version History', callbackData: callbackData(historyToken) }]);
+    }
+
     const texts = splitTelegramMessage(formatDraft(view));
     const messages: TelegramMessage[] = texts.map((text, index) => ({
       text,
-      ...(index !== texts.length - 1
-        ? {}
-        : {
-            buttons: [
-              [
-                { text: 'View Source', callbackData: callbackData(required(sourceToken)) },
-                { text: 'View Validation', callbackData: callbackData(required(validationToken)) },
-              ],
-            ],
-          }),
+      ...(index !== texts.length - 1 ? {} : { buttons: buttonRows }),
     }));
     await this.gateway.sendMessages(view.requesterTelegramUserId, messages);
+    await this.repository.markNotificationSent(event.id, new Date());
+  }
+
+  private async sendApproval(event: {
+    id: string;
+    payload: Readonly<Record<string, unknown>>;
+  }): Promise<void> {
+    const versionId = stringPayload(event.payload, 'contentVersionId');
+    const view = await this.repository.getDraftViewByVersionId(versionId);
+    if (view === null) throw new PermanentTelegramDeliveryError('APPROVAL_RECIPIENT_NOT_FOUND');
+    if (
+      (await this.repository.beginNotificationDelivery(event.id, view.telegramIdentityId)) ===
+      'ALREADY_SENT'
+    )
+      return;
+    await this.gateway.sendMessages(view.requesterTelegramUserId, [
+      {
+        text: `✅ Content job #${short(view.jobId)} (V${String(view.versionNumber ?? 1)}) for ${view.productName} has been APPROVED.`,
+      },
+    ]);
+    await this.repository.markNotificationSent(event.id, new Date());
+  }
+
+  private async sendRejection(event: {
+    id: string;
+    payload: Readonly<Record<string, unknown>>;
+  }): Promise<void> {
+    const versionId = stringPayload(event.payload, 'contentVersionId');
+    const view = await this.repository.getDraftViewByVersionId(versionId);
+    if (view === null) throw new PermanentTelegramDeliveryError('REJECTION_RECIPIENT_NOT_FOUND');
+    if (
+      (await this.repository.beginNotificationDelivery(event.id, view.telegramIdentityId)) ===
+      'ALREADY_SENT'
+    )
+      return;
+    const comment =
+      typeof event.payload.comment === 'string' ? `\nReason: "${event.payload.comment}"` : '';
+    await this.gateway.sendMessages(view.requesterTelegramUserId, [
+      {
+        text: `❌ Content job #${short(view.jobId)} (V${String(view.versionNumber ?? 1)}) for ${view.productName} was REJECTED.${comment}`,
+      },
+    ]);
     await this.repository.markNotificationSent(event.id, new Date());
   }
 

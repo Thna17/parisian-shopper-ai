@@ -11,6 +11,10 @@ export const Permission = {
   VIEW_OWN_CONTENT: 'VIEW_OWN_CONTENT',
   VIEW_ALL_CONTENT: 'VIEW_ALL_CONTENT',
   CREATE_CONTENT: 'CREATE_CONTENT',
+  EDIT_CONTENT: 'EDIT_CONTENT',
+  REGENERATE_CONTENT: 'REGENERATE_CONTENT',
+  APPROVE_CONTENT: 'APPROVE_CONTENT',
+  REJECT_CONTENT: 'REJECT_CONTENT',
 } as const;
 export type Permission = (typeof Permission)[keyof typeof Permission];
 
@@ -20,17 +24,27 @@ const ROLE_PERMISSIONS: Readonly<Record<RoleCode, readonly Permission[]>> = {
     Permission.VIEW_PRODUCTS,
     Permission.VIEW_OWN_CONTENT,
     Permission.CREATE_CONTENT,
+    Permission.EDIT_CONTENT,
+    Permission.REGENERATE_CONTENT,
   ],
   MARKETING_APPROVER: [
     Permission.VIEW_PRODUCTS,
     Permission.VIEW_OWN_CONTENT,
     Permission.CREATE_CONTENT,
+    Permission.EDIT_CONTENT,
+    Permission.REGENERATE_CONTENT,
+    Permission.APPROVE_CONTENT,
+    Permission.REJECT_CONTENT,
   ],
   ADMIN: [
     Permission.VIEW_PRODUCTS,
     Permission.VIEW_OWN_CONTENT,
     Permission.VIEW_ALL_CONTENT,
     Permission.CREATE_CONTENT,
+    Permission.EDIT_CONTENT,
+    Permission.REGENERATE_CONTENT,
+    Permission.APPROVE_CONTENT,
+    Permission.REJECT_CONTENT,
   ],
 };
 

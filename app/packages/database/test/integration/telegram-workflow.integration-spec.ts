@@ -242,6 +242,8 @@ describe('Phase 1E durable Telegram workflow', () => {
     expect(notification?.buttons?.flat().map((item) => item.text)).toEqual([
       'View Source',
       'View Validation',
+      '✏️ Request Edit',
+      '🔄 Regenerate',
     ]);
     expect(notification?.text).not.toContain('Approve');
 

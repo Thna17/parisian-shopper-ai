@@ -5,7 +5,12 @@ import {
   type PersistedValidationResult,
   type ValidationRepository,
 } from '@parisian-shopper/application';
-import { FindingCode, FindingSeverity, ValidationStatus } from '@parisian-shopper/application';
+import {
+  assertContentJobTransition,
+  FindingCode,
+  FindingSeverity,
+  ValidationStatus,
+} from '@parisian-shopper/application';
 import { Prisma, type ValidationFinding, type ValidationResult } from '@prisma/client';
 
 import { PrismaService } from '../prisma.service.js';
@@ -57,6 +62,35 @@ export class PrismaValidationRepository implements ValidationRepository {
           },
           include: { findings: { orderBy: { createdAt: 'asc' } } },
         });
+        const version = await tx.contentVersion.findUnique({
+          where: { id: input.contentVersionId },
+          include: { contentJob: true },
+        });
+        if (version !== null && version.contentJob.status === 'DRAFT') {
+          assertContentJobTransition(version.contentJob.status, 'UNDER_REVIEW');
+          await tx.contentJob.update({
+            where: { id: version.contentJob.id },
+            data: { status: 'UNDER_REVIEW' },
+          });
+          await tx.outboxEvent.create({
+            data: {
+              topic: 'CONTENT_VERSION_READY_FOR_REVIEW',
+              schemaVersion: 1,
+              idempotencyKey: `content-version:${version.id}:ready-for-review`,
+              aggregateType: 'ContentJob',
+              aggregateId: version.contentJob.id,
+              payload: {
+                contentJobId: version.contentJob.id,
+                contentVersionId: version.id,
+                versionNumber: version.versionNumber,
+                validationResultId: created.id,
+                validationStatus: created.status,
+              },
+              occurredAt: created.createdAt,
+              availableAt: created.createdAt,
+            },
+          });
+        }
         await tx.outboxEvent.create({
           data: {
             topic: 'CONTENT_VALIDATION_COMPLETED',

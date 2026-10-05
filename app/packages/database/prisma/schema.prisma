@@ -58,7 +58,33 @@ enum ContentJobStatus {
   REQUESTED
   GENERATING
   DRAFT
+  UNDER_REVIEW
+  REVISION_REQUESTED
+  APPROVED
+  REJECTED
   FAILED
+}
+
+enum RevisionRequestType {
+  EDIT
+  REGENERATE
+}
+
+enum RevisionRequestStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+}
+
+enum PendingReviewAction {
+  EDIT
+  REJECT
 }
 
 enum GenerationAttemptStatus {
@@ -108,6 +134,8 @@ model User {
   roleAssignments      UserRole[]         @relation("RoleAssignedBy")
   telegramIdentities   TelegramIdentity[]
   requestedContentJobs ContentJob[]       @relation("ContentJobRequester")
+  revisionRequests     RevisionRequest[]  @relation("UserRevisionRequests")
+  approvalEvents       ApprovalEvent[]
   auditEvents          AuditEvent[]
 
   @@index([status], map: "users_status_idx")
@@ -244,12 +272,15 @@ model ContentJob {
   createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  productSnapshot    ProductSnapshot     @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_product_snapshot_id_fkey")
-  brandRuleVersion   BrandRuleVersion    @relation(fields: [brandRuleVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_brand_rule_version_id_fkey")
-  requester          User                @relation("ContentJobRequester", fields: [requesterUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_requester_user_id_fkey")
-  telegramCreateFlow TelegramCreateFlow? @relation(fields: [telegramCreateFlowId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_telegram_create_flow_id_fkey")
-  versions           ContentVersion[]
-  attempts           GenerationAttempt[]
+  productSnapshot           ProductSnapshot                    @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_product_snapshot_id_fkey")
+  brandRuleVersion          BrandRuleVersion                   @relation(fields: [brandRuleVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_brand_rule_version_id_fkey")
+  requester                 User                               @relation("ContentJobRequester", fields: [requesterUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_requester_user_id_fkey")
+  telegramCreateFlow        TelegramCreateFlow?                @relation(fields: [telegramCreateFlowId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_telegram_create_flow_id_fkey")
+  versions                  ContentVersion[]
+  attempts                  GenerationAttempt[]
+  revisionRequests          RevisionRequest[]                  @relation("ContentJobRevisionRequests")
+  approvalEvents            ApprovalEvent[]
+  pendingReviewInteractions TelegramPendingReviewInteraction[]
 
   @@index([status, createdAt], map: "content_jobs_status_created_at_idx")
   @@index([productSnapshotId, createdAt], map: "content_jobs_product_snapshot_id_created_at_idx")
@@ -267,12 +298,13 @@ model TelegramIdentity {
   lastSeenAt       DateTime? @map("last_seen_at") @db.Timestamptz(3)
   disabledAt       DateTime? @map("disabled_at") @db.Timestamptz(3)
 
-  user                   User                           @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_identities_user_id_fkey")
-  createFlows            TelegramCreateFlow[]
-  actionTokens           TelegramActionToken[]
-  notificationDeliveries TelegramNotificationDelivery[]
-  rateLimitBuckets       TelegramRateLimitBucket[]
-  auditEvents            AuditEvent[]
+  user                      User                               @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_identities_user_id_fkey")
+  createFlows               TelegramCreateFlow[]
+  actionTokens              TelegramActionToken[]
+  notificationDeliveries    TelegramNotificationDelivery[]
+  rateLimitBuckets          TelegramRateLimitBucket[]
+  pendingReviewInteractions TelegramPendingReviewInteraction[]
+  auditEvents               AuditEvent[]
 
   @@index([userId], map: "telegram_identities_user_id_idx")
   @@map("telegram_identities")
@@ -408,6 +440,7 @@ model ContentVersion {
   brandRuleVersionId  String   @map("brand_rule_version_id") @db.Uuid
   productSnapshotId   String   @map("product_snapshot_id") @db.Uuid
   generationAttemptId String   @unique(map: "content_versions_generation_attempt_id_key") @map("generation_attempt_id") @db.Uuid
+  revisionRequestId   String?  @map("revision_request_id") @db.Uuid
   provider            String   @db.VarChar(100)
   model               String   @db.VarChar(200)
   promptVersion       String   @map("prompt_version") @db.VarChar(100)
@@ -415,14 +448,20 @@ model ContentVersion {
   providerMetadata    Json?    @map("provider_metadata") @db.JsonB
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  contentJob        ContentJob         @relation(fields: [contentJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_content_job_id_fkey")
-  brandRuleVersion  BrandRuleVersion   @relation(fields: [brandRuleVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_brand_rule_version_id_fkey")
-  productSnapshot   ProductSnapshot    @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_product_snapshot_id_fkey")
-  generationAttempt GenerationAttempt  @relation(fields: [generationAttemptId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_generation_attempt_id_fkey")
-  validationResults ValidationResult[]
+  contentJob                ContentJob                         @relation(fields: [contentJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_content_job_id_fkey")
+  brandRuleVersion          BrandRuleVersion                   @relation(fields: [brandRuleVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_brand_rule_version_id_fkey")
+  productSnapshot           ProductSnapshot                    @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_product_snapshot_id_fkey")
+  generationAttempt         GenerationAttempt                  @relation(fields: [generationAttemptId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_generation_attempt_id_fkey")
+  revisionRequest           RevisionRequest?                   @relation("ContentVersionOriginatingRevision", fields: [revisionRequestId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_revision_request_id_fkey")
+  validationResults         ValidationResult[]
+  sourceRevisionRequests    RevisionRequest[]                  @relation("SourceContentVersionRevisions")
+  resultingRevisionRequest  RevisionRequest?                   @relation("ResultingContentVersionRevision")
+  approvalEvents            ApprovalEvent[]
+  pendingReviewInteractions TelegramPendingReviewInteraction[]
 
   @@unique([contentJobId, versionNumber], map: "content_versions_job_version_key")
   @@index([productSnapshotId, createdAt], map: "content_versions_product_snapshot_id_created_at_idx")
+  @@index([revisionRequestId], map: "content_versions_revision_request_id_idx")
   @@map("content_versions")
 }
 
@@ -439,6 +478,7 @@ model ValidationResult {
 
   contentVersion ContentVersion      @relation(fields: [contentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "validation_results_content_version_id_fkey")
   findings       ValidationFinding[]
+  approvalEvents ApprovalEvent[]
 
   @@unique([contentVersionId, validatorVersion], map: "validation_results_version_validator_key")
   @@index([contentVersionId, createdAt], map: "validation_results_content_version_created_at_idx")
@@ -464,4 +504,65 @@ model ValidationFinding {
   @@index([validationResultId, severity], map: "validation_findings_result_severity_idx")
   @@index([code], map: "validation_findings_code_idx")
   @@map("validation_findings")
+}
+
+model RevisionRequest {
+  id                        String                @id @default(uuid()) @db.Uuid
+  contentJobId              String                @map("content_job_id") @db.Uuid
+  sourceContentVersionId    String                @map("source_content_version_id") @db.Uuid
+  requestedByUserId         String                @map("requested_by_user_id") @db.Uuid
+  instruction               String?               @db.VarChar(1000)
+  type                      RevisionRequestType
+  status                    RevisionRequestStatus @default(PENDING)
+  resultingContentVersionId String?               @unique(map: "revision_requests_resulting_version_key") @map("resulting_content_version_id") @db.Uuid
+  createdAt                 DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  contentJob              ContentJob       @relation("ContentJobRevisionRequests", fields: [contentJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "revision_requests_content_job_id_fkey")
+  sourceContentVersion    ContentVersion   @relation("SourceContentVersionRevisions", fields: [sourceContentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "revision_requests_source_version_id_fkey")
+  requestedByUser         User             @relation("UserRevisionRequests", fields: [requestedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "revision_requests_requested_by_user_id_fkey")
+  resultingContentVersion ContentVersion?  @relation("ResultingContentVersionRevision", fields: [resultingContentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "revision_requests_resulting_version_id_fkey")
+  originatingVersions     ContentVersion[] @relation("ContentVersionOriginatingRevision")
+
+  @@index([contentJobId, createdAt], map: "revision_requests_job_created_at_idx")
+  @@index([status, createdAt], map: "revision_requests_status_created_at_idx")
+  @@map("revision_requests")
+}
+
+model ApprovalEvent {
+  id                 String           @id @default(uuid()) @db.Uuid
+  contentJobId       String           @map("content_job_id") @db.Uuid
+  contentVersionId   String           @map("content_version_id") @db.Uuid
+  approverUserId     String           @map("approver_user_id") @db.Uuid
+  decision           ApprovalDecision
+  comment            String?          @db.VarChar(1000)
+  validationResultId String?          @map("validation_result_id") @db.Uuid
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  contentJob       ContentJob        @relation(fields: [contentJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "approval_events_content_job_id_fkey")
+  contentVersion   ContentVersion    @relation(fields: [contentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "approval_events_content_version_id_fkey")
+  approverUser     User              @relation(fields: [approverUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "approval_events_approver_user_id_fkey")
+  validationResult ValidationResult? @relation(fields: [validationResultId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "approval_events_validation_result_id_fkey")
+
+  @@index([contentJobId, createdAt], map: "approval_events_job_created_at_idx")
+  @@index([contentVersionId, createdAt], map: "approval_events_version_created_at_idx")
+  @@map("approval_events")
+}
+
+model TelegramPendingReviewInteraction {
+  id                 String              @id @default(uuid()) @db.Uuid
+  telegramIdentityId String              @map("telegram_identity_id") @db.Uuid
+  contentJobId       String              @map("content_job_id") @db.Uuid
+  contentVersionId   String              @map("content_version_id") @db.Uuid
+  action             PendingReviewAction
+  expiresAt          DateTime            @map("expires_at") @db.Timestamptz(3)
+  completedAt        DateTime?           @map("completed_at") @db.Timestamptz(3)
+  cancelledAt        DateTime?           @map("cancelled_at") @db.Timestamptz(3)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  telegramIdentity TelegramIdentity @relation(fields: [telegramIdentityId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_pending_review_interactions_identity_id_fkey")
+  contentJob       ContentJob       @relation(fields: [contentJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_pending_review_interactions_job_id_fkey")
+  contentVersion   ContentVersion   @relation(fields: [contentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_pending_review_interactions_version_id_fkey")
+
+  @@index([telegramIdentityId, expiresAt], map: "telegram_pending_review_interactions_identity_expires_idx")
+  @@map("telegram_pending_review_interactions")
 }
