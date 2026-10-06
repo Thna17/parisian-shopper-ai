@@ -37,6 +37,13 @@ export interface TelegramConfig {
   actionTokenTtlSeconds: number;
 }
 
+export interface CreativeConfig {
+  provider: Environment['CREATIVE_PROVIDER'];
+  storageRoot: string;
+  maxBytes: number;
+  allowFakeInProduction: boolean;
+}
+
 @Injectable()
 export class AppConfigService {
   public constructor(private readonly config: ConfigService<Environment, true>) {}
@@ -109,10 +116,20 @@ export class AppConfigService {
     };
   }
 
+  public get creative(): CreativeConfig {
+    return {
+      provider: this.config.get('CREATIVE_PROVIDER', { infer: true }),
+      storageRoot: this.config.get('CREATIVE_ASSET_STORAGE_ROOT', { infer: true }),
+      maxBytes: this.config.get('CREATIVE_ASSET_MAX_BYTES', { infer: true }),
+      allowFakeInProduction: this.config.get('CREATIVE_ALLOW_FAKE_IN_PRODUCTION', { infer: true }),
+    };
+  }
+
   public get featureFlags(): Readonly<Record<FeatureFlag, boolean>> {
     return Object.freeze({
       AI_TEXT_GENERATION: this.config.get('FEATURE_AI_TEXT_GENERATION', { infer: true }),
       AI_IMAGE_GENERATION: this.config.get('FEATURE_AI_IMAGE_GENERATION', { infer: true }),
+      CREATIVE_GENERATION: this.config.get('FEATURE_CREATIVE_GENERATION', { infer: true }),
       TELEGRAM: this.config.get('FEATURE_TELEGRAM', { infer: true }),
       PRODUCT_API: this.config.get('FEATURE_PRODUCT_API', { infer: true }),
       AUTO_PUBLISHING: this.config.get('FEATURE_AUTO_PUBLISHING', { infer: true }),

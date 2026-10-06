@@ -73,6 +73,11 @@ export const environmentSchema = z
 
     FEATURE_AI_TEXT_GENERATION: booleanFromEnvironment.default(false),
     FEATURE_AI_IMAGE_GENERATION: booleanFromEnvironment.default(false),
+    FEATURE_CREATIVE_GENERATION: booleanFromEnvironment.default(false),
+    CREATIVE_PROVIDER: z.enum(['fake']).default('fake'),
+    CREATIVE_ASSET_STORAGE_ROOT: z.string().trim().min(1).default('.data/assets'),
+    CREATIVE_ASSET_MAX_BYTES: z.coerce.number().int().min(1024).max(50_000_000).default(10_485_760),
+    CREATIVE_ALLOW_FAKE_IN_PRODUCTION: booleanFromEnvironment.default(false),
     FEATURE_TELEGRAM: booleanFromEnvironment.default(false),
     FEATURE_PRODUCT_API: booleanFromEnvironment.default(false),
     FEATURE_AUTO_PUBLISHING: booleanFromEnvironment.default(false),
@@ -153,6 +158,19 @@ export const environmentSchema = z
         code: 'custom',
         path: ['AI_PROVIDER'],
         message: 'Fake AI is prohibited in production unless explicitly permitted',
+      });
+    }
+
+    if (
+      environment.NODE_ENV === 'production' &&
+      environment.FEATURE_CREATIVE_GENERATION &&
+      environment.CREATIVE_PROVIDER === 'fake' &&
+      !environment.CREATIVE_ALLOW_FAKE_IN_PRODUCTION
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['CREATIVE_PROVIDER'],
+        message: 'Fake creative provider is prohibited in production unless explicitly permitted',
       });
     }
 

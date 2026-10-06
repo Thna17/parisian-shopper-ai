@@ -11,12 +11,13 @@ describe('configuration validation', () => {
 
     expect(configuration.FEATURE_AI_TEXT_GENERATION).toBe(false);
     expect(configuration.FEATURE_AI_IMAGE_GENERATION).toBe(false);
+    expect(configuration.FEATURE_CREATIVE_GENERATION).toBe(false);
     expect(configuration.FEATURE_TELEGRAM).toBe(false);
     expect(configuration.FEATURE_PRODUCT_API).toBe(false);
     expect(configuration.FEATURE_AUTO_PUBLISHING).toBe(false);
     expect(configuration.FEATURE_META_PUBLISHING).toBe(false);
     expect(configuration.FEATURE_ANALYTICS).toBe(false);
-    expect(Object.values(FeatureFlag)).toHaveLength(7);
+    expect(Object.values(FeatureFlag)).toHaveLength(8);
   });
 
   it('parses the string false as false', () => {
@@ -66,6 +67,17 @@ describe('configuration validation', () => {
         AI_PROVIDER: 'fake',
       }),
     ).toThrow('Fake AI is prohibited');
+  });
+
+  it('does not silently use fake creative provider in production', () => {
+    expect(() =>
+      validateEnvironment({
+        ...minimumEnvironment,
+        NODE_ENV: 'production',
+        FEATURE_CREATIVE_GENERATION: 'true',
+        CREATIVE_PROVIDER: 'fake',
+      }),
+    ).toThrow('Fake creative provider is prohibited');
   });
 
   it('requires a Telegram token only when Telegram is enabled', () => {

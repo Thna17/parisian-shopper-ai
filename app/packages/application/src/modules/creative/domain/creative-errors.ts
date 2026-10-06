@@ -89,3 +89,97 @@ export class CreativeAssetConflictError extends ApplicationError {
     });
   }
 }
+
+export class CreativeBriefValidationError extends ApplicationError {
+  public constructor(message: string, details?: Readonly<Record<string, unknown>>) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Creative brief validation failed: ${message}`,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}
+
+export class CreativeProviderProductionGuardError extends ApplicationError {
+  public constructor(
+    message = 'Fake creative provider is prohibited in production without explicit permission',
+  ) {
+    super({
+      code: 'FORBIDDEN',
+      publicMessage: message,
+    });
+  }
+}
+
+export class FakeCreativeProviderError extends ApplicationError {
+  public constructor(
+    message = 'Fake creative provider simulated failure',
+    details?: Readonly<Record<string, unknown>>,
+  ) {
+    super({
+      code: 'EXTERNAL_SERVICE_ERROR',
+      publicMessage: message,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}
+
+export class FakeCreativeProviderTimeoutError extends ApplicationError {
+  public constructor(timeoutMs: number) {
+    super({
+      code: 'EXTERNAL_SERVICE_ERROR',
+      publicMessage: `Fake creative provider timed out after ${timeoutMs}ms`,
+      details: { timeoutMs },
+    });
+  }
+}
+
+export class AssetDigestMismatchError extends ApplicationError {
+  public constructor(expected: string, actual: string) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Asset SHA-256 digest mismatch. Expected: ${expected}, Actual: ${actual}`,
+      details: { expected, actual },
+    });
+  }
+}
+
+export class AssetOversizedError extends ApplicationError {
+  public constructor(byteSize: number, maxBytes: number) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Asset size (${byteSize} bytes) exceeds maximum permitted limit of ${maxBytes} bytes`,
+      details: { byteSize, maxBytes },
+    });
+  }
+}
+
+export class InvalidStorageKeyError extends ApplicationError {
+  public constructor(storageKey: string, reason?: string) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Invalid asset storage key format: ${storageKey}${reason !== undefined ? ` (${reason})` : ''}`,
+      details: { storageKey, ...(reason !== undefined ? { reason } : {}) },
+    });
+  }
+}
+
+export class AssetPathTraversalError extends ApplicationError {
+  public constructor(pathAttempt: string) {
+    super({
+      code: 'FORBIDDEN',
+      publicMessage: `Potential path traversal or directory escape detected: ${pathAttempt}`,
+      details: { pathAttempt },
+    });
+  }
+}
+
+export class AssetNotFoundError extends ApplicationError {
+  public constructor(storageKey: string) {
+    super({
+      code: 'NOT_FOUND',
+      publicMessage: `Asset not found in storage: ${storageKey}`,
+      details: { storageKey },
+    });
+  }
+}

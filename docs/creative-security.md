@@ -102,6 +102,11 @@ Processing untrusted image binaries with high-performance native engines (`libvi
 3. **Storage Immutability & Privileged Retention:**
    - Normal application `AssetStoragePort` provides NO deletion methods. Assets participate in the tamper-evident audit chain and cannot be casually deleted.
    - Any future legal compliance or GDPR/retention purges must occur through a separate privileged port (`AssetRetentionPort` / `AssetAdministrationPort`) requiring administrative privileges and immutable audit logging.
+4. **Atomic Staging & Symlink Defenses:**
+   - Writes stage to `.tmp/${uuid}.tmp` with mode `0o600`, followed by `fsync` and atomic `rename`.
+   - Symlinks are strictly rejected via `lstat` checks to prevent escape.
+   - Reads re-verify the full SHA-256 digest against the key to detect bitrot or out-of-band disk tampering.
+   - See detailed CAS architecture in [`creative-local-storage.md`](/docs/creative-local-storage.md).
 
 ---
 

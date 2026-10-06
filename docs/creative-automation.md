@@ -266,7 +266,9 @@ export interface AssetStoragePort {
 }
 ```
 
-- **Content Addressing:** Derived strictly from `sha256(imageBytes)`. Deduplication operates on cryptographic byte hashes, never filenames.
+- **Content Addressing:** Derived strictly from `sha256(imageBytes)`. Deduplication operates on cryptographic byte hashes, never filenames. For full details, see [`creative-local-storage.md`](/docs/creative-local-storage.md).
+- **Disk Implementation (`DiskAssetStorageAdapter`):** Implements atomic staging via `.tmp/`, `fsync`, rename, sidecar metadata (`.meta.json`), path traversal defense, symlink rejection, and SHA-256 integrity verification on read.
+- **Fake Creative Provider (`FakeCreativeProvider`):** Implements `CreativeProvider` for background generation only. Uses pure Node.js built-ins (`node:zlib`) to generate deterministic PNGs without external native dependencies. Fails closed in production unless `CREATIVE_ALLOW_FAKE_IN_PRODUCTION=true`.
 - **Role Isolation:** Every asset records its explicit `AssetRole` (`CANONICAL_PRODUCT`, `GENERATED_BACKGROUND`, `COMPOSITED_CREATIVE`, `PREVIEW`).
 - **Audit Preservation & Immutability:** Normal application `AssetStoragePort` provides NO deletion method. Historical assets participate in the audit chain and must not be casually deleted. Any future retention or legal compliance purge must be modeled as a separate privileged operational port (e.g., `AssetRetentionPort` or `AssetAdministrationPort`).
 
