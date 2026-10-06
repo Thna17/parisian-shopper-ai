@@ -2,8 +2,8 @@
 
 **Document:** `/docs/creative-automation.md`  
 **Phase:** Phase 2A (Creative / Visual Automation Foundation)  
-**Status:** Architecture Complete — Feature Code Deferred Pending Business Confirmation  
-**Related Documents:** [ADR-003](architecture-decisions/ADR-003-creative-automation-architecture.md), [Creative Business Rules](creative-business-rules.md)  
+**Status:** Architectural Specification (PROPOSED — Implementation-Ready Pending Business & Legal Sign-off)  
+**Related Documents:** [ADR-003](architecture-decisions/ADR-003-creative-automation-architecture.md), [Creative Business Rules](creative-business-rules.md), [Creative Security](creative-security.md), [Creative License Review](creative-license-review.md)  
 
 ---
 
@@ -11,21 +11,46 @@
 
 Phase 2A introduces **Creative / Image Automation** to the Parisian Shopper AI Telegram Content System. The system converts approved or reviewable marketing copy and immutable product snapshots into high-resolution, on-brand visual creatives formatted for social platforms.
 
-### Core Philosophy
-1. **Never Hallucinate Product Packaging:** Authentic product photography from verified catalog snapshots is preserved and composited; AI generates ambient luxury environments, never the product bottle or packaging itself.
-2. **Never Hallucinate Factual Overlays:** Text-on-image elements (price, discounts, names) are rendered deterministically through code templates using verified snapshot data, never by diffusion models.
-3. **Decoupled Architecture:** Visual generation runs asynchronously downstream from copy creation. It does not block text drafting or approval.
-4. **Mandatory Human Governance:** Visual assets require explicit human sign-off via Telegram before reaching the terminal `CREATIVE_APPROVED` state.
-5. **Strict Scope Discipline:** Zero social network publishing (Facebook/Instagram), scheduling, Meta Graph API calls, or auto-posting is implemented.
+### Core Architecture Invariants
+1. **Hero Preservation Invariant:** Authentic product photography from verified catalog snapshots is preserved and composited; AI generates ambient luxury environments, never the product bottle, box, watch dial, or packaging itself.
+2. **Deterministic Typography Invariant:** Diffusion models must never render authoritative marketing text. The Phase 2A baseline enforces `TEXT_ON_IMAGE=false`. If typography overlays are enabled later, they are rendered deterministically through vector SVG templates using verified snapshot data.
+3. **Decoupled Workflow:** Creative generation runs downstream and is pinned to an **exact `ContentVersion`**. It does not block text generation or approval. If marketing edits copy and creates `ContentVersion V2`, the V1 visual is not automatically approved for V2.
+4. **Validation Boundary Separation:** Deterministic mathematical/format verification (`DeterministicVisualValidator`) is strictly separated from heuristic safety scanning (`VisualSafetyScanner`). OCR is treated as a heuristic, never a mathematical certainty.
+5. **Mandatory Human Governance:** Visual assets require explicit human sign-off via Telegram targeting the exact `VisualAsset` version before reaching terminal `CREATIVE_APPROVED`.
+6. **Strict Scope Discipline:** Zero social network publishing (Facebook/Instagram), scheduling, Meta Graph API calls, or auto-posting is implemented.
 
 ---
 
-## 2. End-to-End Creative Pipeline Flow
+## 2. Package Structure & Repository Alignment
+
+The architecture strictly respects the existing Phase 1 modular monolith. **No `@parisian-shopper/domain` package is created.**
+
+```
+app/packages/
+├── application/
+│   └── src/modules/creative/
+│       ├── domain/                  # CreativeJob, VisualAsset entities, state transitions, validation rules
+│       ├── application/             # Use cases, query handlers, ports (CreativeProvider, AssetStoragePort)
+│       └── infrastructure/          # FakeCreativeProvider, LocalDiskAssetStorage, Sharp compositor adapter
+├── database/
+│   ├── prisma/schema.prisma         # CreativeJob, VisualAsset, VisualValidationResult models
+│   └── src/creative/                # Prisma repository implementations
+├── jobs/
+│   └── src/                         # creative-generation.queue.ts and worker module
+├── common/
+│   └── src/                         # Common error types, base identifiers, outbox event payloads
+└── telegram/
+    └── src/                         # Telegram outbox dispatcher for high-resolution visual cards
+```
+
+---
+
+## 3. End-to-End Creative Pipeline Flow
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│  Stage 1: Input Trigger                                │
-│  - Target ContentVersion (UNDER_REVIEW or APPROVED)    │
+│  Stage 1: Input Trigger & Pinning                      │
+│  - Target ContentVersion (exact version ID)            │
 │  - Immutable ProductSnapshot (verified catalog facts)  │
 │  - Active BrandRuleVersion (visual guidance rules)     │
 └──────────────────────────┬─────────────────────────────┘
@@ -33,42 +58,41 @@ Phase 2A introduces **Creative / Image Automation** to the Parisian Shopper AI T
                            ▼
 ┌────────────────────────────────────────────────────────┐
 │  Stage 2: Creative Brief Builder                       │
-│  - Derives structured lighting, mood, scene prompt     │
-│  - Enforces Olfactory Note grounding in background     │
+│  - Synthesizes structured ambient prompt               │
+│  - Injects olfactory notes into atmospheric scene      │
 │  - Selects platform aspect ratio (1:1, 4:5, 9:16)      │
 └──────────────────────────┬─────────────────────────────┘
                            │
                            ▼
 ┌────────────────────────────────────────────────────────┐
 │  Stage 3: CreativeProvider Port (AI Generation)        │
-│  - Provider-neutral request to AI engine               │
-│  - Generates ambient luxury scene (Parisian atelier)   │
-│  - Returns high-resolution background buffer           │
+│  - In PR 2A-2: FakeCreativeProvider (fixtures)         │
+│  - In PR 2A-5: Deferred single real provider           │
+│  - Generates ambient luxury scene (pedestal center)    │
 └──────────────────────────┬─────────────────────────────┘
                            │
                            ▼
 ┌────────────────────────────────────────────────────────┐
-│  Stage 4: Deterministic Hero Compositor                │
-│  - Sharp / libvips image composition                   │
-│  - Extracts & places authentic catalog hero product    │
-│  - Applies contact shadows, lighting blending          │
-│  - (Optional) Deterministic SVG typography overlay     │
+│  Stage 4: Deterministic Hero Compositor (Sharp)        │
+│  - Canonical product image extracted & safely ingested │
+│  - Scaled to 35%–60% canvas height                     │
+│  - Composited onto pedestal with soft contact shadow   │
+│  - Zero generative alteration of product pixels        │
 └──────────────────────────┬─────────────────────────────┘
                            │
                            ▼
 ┌────────────────────────────────────────────────────────┐
 │  Stage 5: Content-Addressable Asset Storage            │
-│  - SHA-256 digest computation & deduplication          │
-│  - Persists image to storage (local disk / S3 MinIO)   │
+│  - Computes SHA-256 byte digest: sha256(imageBytes)    │
+│  - Persists assets with distinct AssetRole             │
 │  - Records VisualAsset in PostgreSQL                   │
 └──────────────────────────┬─────────────────────────────┘
                            │
                            ▼
 ┌────────────────────────────────────────────────────────┐
-│  Stage 6: Deterministic Visual Validator               │
-│  - Verifies exact pixel dimensions & aspect ratio      │
-│  - Checks file size, format, color space bounds        │
-│  - Programmatic OCR check for unauthorized text        │
+│  Stage 6: Two-Tier Visual Validation                   │
+│  - Tier 1: DeterministicVisualValidator (format/bounds)│
+│  - Tier 2: VisualSafetyScanner (heuristic OCR scan)    │
 └──────────────────────────┬─────────────────────────────┘
                            │
                            ▼
@@ -76,15 +100,15 @@ Phase 2A introduces **Creative / Image Automation** to the Parisian Shopper AI T
 │  Stage 7: Transactional Outbox & Telegram Delivery     │
 │  - CREATIVE_VALIDATION_COMPLETED outbox event          │
 │  - Dispatches high-res photo card to Telegram          │
-│  - Renders inline review buttons                       │
+│  - Renders inline review buttons with action tokens    │
 └──────────────────────────┬─────────────────────────────┘
                            │
                            ▼
 ┌────────────────────────────────────────────────────────┐
 │  Stage 8: Human Review & Decision                      │
-│  - Approve Visual (Two-step confirmation)              │
+│  - Approve Visual (Targets exact VisualAsset version)  │
 │  - Request Visual Edit (Conversational instructions)   │
-│  - Regenerate Visual (Fresh background seed)           │
+│  - Regenerate Visual (Fresh seed / new candidate)      │
 │  - Reject Visual (Mandatory feedback reason)           │
 │  - TERMINAL: CREATIVE_APPROVED (Zero auto-publish)     │
 └────────────────────────────────────────────────────────┘
@@ -92,9 +116,9 @@ Phase 2A introduces **Creative / Image Automation** to the Parisian Shopper AI T
 
 ---
 
-## 3. Provider-Neutral Port Specification
+## 4. Provider-Neutral Port Specification
 
-The domain layer depends exclusively on the `CreativeProvider` port defined in `packages/application/src/modules/creative/domain/creative-provider.port.ts`:
+Defined in `@parisian-shopper/application` (`src/modules/creative/application/creative-provider.port.ts`):
 
 ```typescript
 export type AspectRatio = '1:1' | '4:5' | '9:16' | '16:9';
@@ -104,21 +128,19 @@ export interface ImageDimensions {
   readonly height: number;
 }
 
-export interface CreativeJobRequest {
+export interface GenerateSceneRequest {
   readonly creativeJobId: string;
   readonly contentVersionId: string;
-  readonly productSnapshot: NormalizedProductEnvelope;
   readonly creativeBrief: string;
   readonly stylePrompt: string;
   readonly negativePrompt?: string;
   readonly dimensions: ImageDimensions;
   readonly aspectRatio: AspectRatio;
-  readonly heroProductImageUrl?: string;
   readonly seed?: number;
   readonly timeoutMs?: number;
 }
 
-export interface CreativeJobResult {
+export interface GenerateSceneResult {
   readonly imageBuffer: Buffer;
   readonly mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
   readonly width: number;
@@ -128,7 +150,7 @@ export interface CreativeJobResult {
   readonly seed?: number;
   readonly metadata: Readonly<Record<string, unknown>>;
   readonly latencyMs: number;
-  readonly estimatedCost?: number;
+  readonly estimatedCostUsd?: number;
 }
 
 export const CREATIVE_PROVIDER = Symbol('CREATIVE_PROVIDER');
@@ -136,134 +158,147 @@ export const CREATIVE_PROVIDER = Symbol('CREATIVE_PROVIDER');
 export interface CreativeProvider {
   readonly providerName: string;
   readonly defaultModel: string;
-  generateScene(request: CreativeJobRequest): Promise<CreativeJobResult>;
+  generateScene(request: GenerateSceneRequest): Promise<GenerateSceneResult>;
 }
 ```
 
-### Pluggable Adapters
-1. **`FakeCreativeProvider`:** Deterministic local fixture generator for unit and integration testing. Returns valid PNG buffers with zero network calls or vendor costs.
-2. **`OpenAICreativeProvider`:** Generates high-resolution scenes via OpenAI Images API (`dall-e-3` or `gpt-image-preview`).
-3. **`StabilityCreativeProvider`:** Generates photorealistic scenes via Stability AI API (`stable-diffusion-3.5-large` / `core`).
-4. **`LocalFluxCreativeProvider` (Future Enterprise):** Connects to internal company-hosted FLUX / ComfyUI worker nodes for maximum data privacy and zero per-call API cost.
+### Provider Implementation Strategy:
+1. **`FakeCreativeProvider` (Mandatory First Provider — PR 2A-2):** Deterministic local fixture generator for unit, integration, and CI test suites. Zero network overhead, zero API cost.
+2. **Single Real Provider Experiment (Deferred — PR 2A-5):** At most ONE real provider adapter (e.g. `OpenAICreativeProvider`) implemented behind a disabled-by-default feature flag (`ENABLE_REAL_CREATIVE_PROVIDER=false`).
+3. **Legal Separation:** Procurement and legal terms (copyright indemnification, commercial output rights) are marked `TODO_LEGAL_CONFIRMATION` and are not hardcoded engineering prerequisites.
 
 ---
 
-## 4. Product Image Handling & Compositing Strategy
+## 5. Product Image Handling & Compositing Strategy
 
-### The Hero Image Invariant
-Luxury packaging (e.g., perfume flacons, watch bezels, embossed brand gold lettering) cannot be generated accurately by text-to-image AI. Diffusion models create distorted lettering, asymmetric caps, and fake silhouettes that violate luxury brand guidelines.
+### The Hero Image Invariant Flow:
+$$\text{Canonical Product Image} \longrightarrow \text{Safe Ingestion} \longrightarrow \text{Deterministic Resize/Crop} \longrightarrow \text{Deterministic Compositing}$$
 
-### Compositing Engine (`Sharp` / `libvips`)
-To solve this, the Parisian Shopper architecture employs a **two-layer composite strategy**:
-
-1. **Layer 0 (AI Ambient Scene):**  
-   The `CreativeProvider` generates an empty luxury environment tailored to the product's creative brief:
-   > *"A sunlit Parisian marble vanity table near an open Haussmannian French window with delicate white jasmine blossoms and morning shadow casting, hyperrealistic still-life photography, empty pedestal center."*
-2. **Layer 1 (Hero Product Extraction & Placement):**  
-   The canonical product image from `ProductSnapshot.images[0].url` is isolated (background-removed if not transparent) and scaled to occupy 35%–60% of the canvas height.
-3. **Layer 2 (Deterministic Blending & Contact Shadow):**  
-   `Sharp` composites the authentic hero product onto the ambient scene pedestal, generating a realistic soft contact shadow at the base and applying subtle ambient tone matching.
-4. **Layer 3 (Optional Deterministic Overlay):**  
-   If the content type is `PROMOTION`, an SVG template renders an elegant discount privilege badge using exact data from `ProductSnapshot.promoPrice` and `discount.label`.
+1. **Safe Ingestion:** Catalog product images are fetched from verified domains with strict SSRF defense (see [`/docs/creative-security.md`](creative-security.md)).
+2. **Hero Isolation:**
+   - Canonical product photography with transparent alpha channels is used directly.
+   - If automated background removal is used, it must be deterministic. If automated removal would alter or erode bottle edges, the original photo is preserved and flagged for human review.
+   - Generative in-painting or fill on the product bottle, box, watch face, logo, or typography is **strictly forbidden**.
+3. **Compositing via Sharp (`libvips`):**
+   - The hero product is scaled to occupy between 35% and 60% of vertical canvas height.
+   - Positioned on the center surface pedestal with realistic soft contact drop shadow.
+4. **Text-on-Image Baseline:**
+   - Initial Phase 2A sets `TEXT_ON_IMAGE=false`.
+   - If promotional overlays are approved later, they must be rendered via deterministic SVG layout templates from structured `ProductSnapshot` data. Diffusion models never render text.
 
 ---
 
-## 5. Asset Storage Strategy (`AssetStoragePort`)
+## 6. Content-Addressable Asset Storage (`AssetStoragePort`)
 
-### Content-Addressable Storage
-All generated and composited assets are persisted using their **cryptographic SHA-256 digest**:
-$$\text{Storage Key} = \text{sha256}(\text{imageBuffer})$$
+Defined in `@parisian-shopper/application` (`src/modules/creative/application/asset-storage.port.ts`):
 
-This provides:
-- **Automatic Deduplication:** Identical asset outputs never consume duplicate storage.
-- **Cryptographic Immutability:** Assets cannot be altered in-place; any edit produces a new digest.
-- **Cache Friendly:** Long-lived HTTP caching headers (`Cache-Control: public, max-age=31536000, immutable`).
-
-### Port Definition
 ```typescript
+export enum AssetRole {
+  CANONICAL_PRODUCT = 'CANONICAL_PRODUCT',
+  GENERATED_BACKGROUND = 'GENERATED_BACKGROUND',
+  COMPOSITED_CREATIVE = 'COMPOSITED_CREATIVE',
+  PREVIEW = 'PREVIEW',
+}
+
 export interface StoredAssetRecord {
   readonly storageKey: string;
   readonly sha256Digest: string;
   readonly mimeType: string;
   readonly byteSize: number;
+  readonly width: number;
+  readonly height: number;
+  readonly assetRole: AssetRole;
   readonly publicUrl: string;
 }
 
 export const ASSET_STORAGE = Symbol('ASSET_STORAGE');
 
 export interface AssetStoragePort {
-  saveAsset(buffer: Buffer, mimeType: string, filenamePrefix?: string): Promise<StoredAssetRecord>;
+  saveAsset(
+    buffer: Buffer,
+    mimeType: string,
+    role: AssetRole,
+    metadata?: Record<string, unknown>,
+  ): Promise<StoredAssetRecord>;
+
   getAssetBuffer(storageKey: string): Promise<Buffer | null>;
   deleteAsset(storageKey: string): Promise<boolean>;
 }
 ```
 
-- **Development / Pilot:** `LocalFileAssetStorage` persists files to `./storage/creatives/` and serves via secure static endpoint.
-- **Production:** `S3AssetStorage` persists files to AWS S3 or MinIO buckets with pre-signed CDN URLs.
+- **Content Addressing:** Derived strictly from `sha256(imageBytes)`. Deduplication operates on cryptographic byte hashes, never filenames.
+- **Role Isolation:** Every asset records its explicit `AssetRole` to distinguish raw source photos from backgrounds and final composited creatives.
 
 ---
 
-## 6. Deterministic Visual Validation Engine
+## 7. Visual Validation Engine: Deterministic vs. Heuristic
 
-Before any generated visual asset can be presented to a human reviewer in Telegram, it must pass the `DeterministicVisualValidator`:
+### 7.1 Tier 1: `DeterministicVisualValidator` (Deterministic Checks)
 
-| Rule Code | Severity | Description | Verification Logic |
+| Check Code | Severity | Description | Verification Logic |
 |---|:---:|---|---|
-| `DIMENSIONS_INVALID` | `BLOCKING` | Image width and height do not match required platform dimensions. | `width === expectedWidth && height === expectedHeight` |
-| `ASPECT_RATIO_MISMATCH` | `BLOCKING` | Aspect ratio deviates from requested ratio (1:1, 4:5, 9:16). | `Math.abs((w / h) - expectedRatio) < 0.01` |
-| `FILE_SIZE_EXCEEDED` | `BLOCKING` | Image file size exceeds platform and Telegram limits. | `byteSize <= 10_485_760` (10 MB max) |
-| `MIME_TYPE_UNSUPPORTED` | `BLOCKING` | Unsupported image container format. | `mimeType in ['image/jpeg', 'image/png', 'image/webp']` |
-| `COLOR_SPACE_INVALID` | `WARNING` | Image color space is not sRGB (causes color shift on mobile). | `metadata.space === 'srgb'` |
-| `UNAPPROVED_TEXT_DETECTED`| `BLOCKING` | Diffusion model generated unauthorized text or fake pricing. | OCR check against `ProductSnapshot` dictionary |
+| `DIMENSIONS_INVALID` | `BLOCKING` | Width/height does not match required dimensions. | `width === reqWidth && height === reqHeight` |
+| `ASPECT_RATIO_MISMATCH` | `BLOCKING` | Aspect ratio deviates from platform standard. | `Math.abs((w/h) - reqRatio) < 0.001` |
+| `FILE_SIZE_EXCEEDED` | `BLOCKING` | Byte size exceeds platform ceiling. | `byteSize <= 10_485_760` (10 MB max) |
+| `CONTAINER_UNSUPPORTED`| `BLOCKING` | Unsupported container format. | Magic bytes match JPEG, PNG, or WebP |
+| `PIXEL_CEILING_EXCEEDED`| `BLOCKING` | Decoded pixels exceed decompression limits. | `width * height <= 16_777_216` |
+| `FRAME_COUNT_INVALID` | `BLOCKING` | Animated multi-frame image detected. | Single static frame only (`pages === 1`) |
+| `COLOR_SPACE_INVALID` | `WARNING` | Color profile is not standard sRGB. | `metadata.space === 'srgb'` |
+| `HERO_HASH_MISMATCH` | `BLOCKING` | Source hero digest does not match snapshot. | Digest verified against `ProductSnapshot` |
 
-If any `BLOCKING` finding occurs:
-1. `VisualValidationStatus` is marked `BLOCKED`.
-2. The Telegram review message renders a prominent `❌ Visual Validation Blocked` banner.
-3. The `Approve Visual` action button is disabled and omitted.
+### 7.2 Tier 2: `VisualSafetyScanner` (Heuristic Scans)
+
+| Scan Code | Severity | Scanner Outcome | Policy Action |
+|---|:---:|---|---|
+| `TEXT_SCAN_PASSED` | `INFO` | `NO_TEXT_DETECTED` | Heuristic passed; continue to human review. |
+| `TEXT_DETECTED` | `BLOCKING` | `TEXT_DETECTED` in background | Blocking. Background rejected or flagged before human presentation. |
+| `TEXT_SCAN_INCONCLUSIVE`| `WARNING` | Low confidence or scan timeout | Warning flag attached; requires explicit human confirmation. |
+
+#### Scanner Operational Boundaries:
+- **Never Run on Hero Packaging:** The scanner is never applied to the canonical product packaging layer (trusted upstream).
+- **Acknowledge Limitations:** Scanners can yield false positives (marble veining, foliage) and false negatives (cursive/stylized scripts). **Human review is never bypassed.**
 
 ---
 
-## 7. Telegram Interactive Visual Review Flow
+## 8. Creative State Machine & Versioning
 
-The visual creative is delivered to the reviewer's private Telegram chat using Telegram's high-resolution photo API (`sendPhoto`):
+### 8.1 State Transitions
 
-```text
-[DEMO] CREATIVE DRAFT #799F4A1E — V1
-Product: North Clock Automatic Watch
-Format: Educational • En • Facebook (4:5 Portrait)
-─────────────────────────
-🛡️ Visual Validation: ✅ Passed (1080×1350 px • 1.4 MB • sRGB)
-─────────────────────────
-🎨 Creative Concept:
-"A sunlit Parisian marble vanity table near an open Haussmannian French window with delicate white jasmine blossoms and morning shadow casting."
-
-👤 Human review required: Choose an action below.
-
-[ 🔍 View Source ] [ 🛡️ View Visual Validation ]
-[ ✏️ Request Visual Edit ] [ 🔄 Regenerate Visual ]
-[ ✅ Approve Visual ] [ ❌ Reject Visual ]
+```
+enum CreativeJobStatus {
+  REQUESTED               // Job enqueued
+  GENERATING_BACKGROUND   // AI generating ambient scene
+  COMPOSITING             // Sharp compositing hero onto scene
+  VALIDATING              // Deterministic & heuristic validation
+  READY_FOR_REVIEW        // Delivered to Telegram for review
+  REVISION_REQUESTED      // Reviewer requested styling changes
+  CREATIVE_APPROVED       // Terminal: Approved by human
+  CREATIVE_REJECTED       // Terminal: Rejected by human
+  FAILED                  // Unrecoverable pipeline error
+}
 ```
 
-### Review Actions:
-- **`Approve Visual`:** Requires two-step confirmation dialog. Marks creative as `CREATIVE_APPROVED`.
-- **`Request Visual Edit`:** Prompts user for natural language styling instructions (e.g. *"Adjust lighting to evening golden hour and add subtle cedarwood accents in background"*). Triggers generation of Creative V2.
-- **`Regenerate Visual`:** Re-runs creative generation with a new random seed.
-- **`Reject Visual`:** Prompts reviewer for a rejection comment. Marks creative as `CREATIVE_REJECTED`.
+- `CREATIVE_APPROVED` and `CREATIVE_REJECTED` are **terminal states** for Phase 2A.
+- Creative jobs maintain an **append-only** version log:
+  $$\text{CreativeJob} \longrightarrow \text{VisualAsset V1} \longrightarrow \text{Revision Request} \longrightarrow \text{VisualAsset V2}$$
+- Each `VisualAsset` preserves: provider, model, seed, brief version, source product digest, background digest, composited digest, and reviewer feedback instructions.
 
 ---
 
-## 8. Data Model Specification (Prisma Extensions)
+## 9. Data Model Specification (Prisma Extensions)
 
-To support Phase 2A, the database schema will be extended with the following models:
+To be added in `@parisian-shopper/database` (`schema.prisma`) in PR 2A-1:
 
 ```prisma
 enum CreativeJobStatus {
   REQUESTED
-  GENERATING
-  UNDER_REVIEW
+  GENERATING_BACKGROUND
+  COMPOSITING
+  VALIDATING
+  READY_FOR_REVIEW
   REVISION_REQUESTED
-  APPROVED
-  REJECTED
+  CREATIVE_APPROVED
+  CREATIVE_REJECTED
   FAILED
 }
 
@@ -274,31 +309,17 @@ enum VisualValidationStatus {
   FAILED
 }
 
-model VisualAsset {
-  id                 String                 @id @default(uuid()) @db.Uuid
-  contentVersionId   String                 @map("content_version_id") @db.Uuid
-  creativeJobId      String                 @map("creative_job_id") @db.Uuid
-  versionNumber      Int                    @map("version_number")
-  storageKey         String                 @map("storage_key") @db.VarChar(200)
-  sha256Digest       String                 @map("sha256_digest") @db.Char(64)
-  mimeType           String                 @map("mime_type") @db.VarChar(50)
-  width              Int
-  height             Int
-  aspectRatio        String                 @map("aspect_ratio") @db.VarChar(20)
-  byteSize           Int                    @map("byte_size")
-  publicUrl          String                 @map("public_url") @db.VarChar(500)
-  provider           String                 @db.VarChar(100)
-  model              String                 @db.VarChar(200)
-  promptUsed         String                 @map("prompt_used") @db.Text
-  validationStatus   VisualValidationStatus @default(PASSED) @map("validation_status")
-  createdAt          DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+enum VisualAssetRole {
+  CANONICAL_PRODUCT
+  GENERATED_BACKGROUND
+  COMPOSITED_CREATIVE
+  PREVIEW
+}
 
-  contentVersion     ContentVersion         @relation(fields: [contentVersionId], references: [id])
-  creativeJob        CreativeJob            @relation(fields: [creativeJobId], references: [id])
-  validationResults  VisualValidationResult[]
-
-  @@unique([creativeJobId, versionNumber], map: "visual_assets_job_version_key")
-  @@map("visual_assets")
+enum TextScanOutcome {
+  NO_TEXT_DETECTED
+  TEXT_DETECTED
+  TEXT_SCAN_INCONCLUSIVE
 }
 
 model CreativeJob {
@@ -308,13 +329,47 @@ model CreativeJob {
   status             CreativeJobStatus @default(REQUESTED)
   aspectRatio        String            @map("aspect_ratio") @db.VarChar(20)
   requesterUserId    String            @map("requester_user_id") @db.Uuid
+  currentVersion     Int               @default(1) @map("current_version")
   createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   contentJob         ContentJob        @relation(fields: [contentJobId], references: [id])
+  contentVersion     ContentVersion    @relation(fields: [contentVersionId], references: [id])
   assets             VisualAsset[]
 
+  @@index([contentVersionId], map: "creative_jobs_content_version_id_idx")
   @@map("creative_jobs")
+}
+
+model VisualAsset {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  creativeJobId        String                 @map("creative_job_id") @db.Uuid
+  contentVersionId     String                 @map("content_version_id") @db.Uuid
+  versionNumber        Int                    @map("version_number")
+  assetRole            VisualAssetRole        @default(COMPOSITED_CREATIVE) @map("asset_role")
+  storageKey           String                 @map("storage_key") @db.VarChar(200)
+  sha256Digest         String                 @map("sha256_digest") @db.Char(64)
+  backgroundSha256     String?                @map("background_sha256") @db.Char(64)
+  heroProductSha256    String?                @map("hero_product_sha256") @db.Char(64)
+  mimeType             String                 @map("mime_type") @db.VarChar(50)
+  width                Int
+  height               Int
+  aspectRatio          String                 @map("aspect_ratio") @db.VarChar(20)
+  byteSize             Int                    @map("byte_size")
+  provider             String                 @db.VarChar(100)
+  model                String                 @db.VarChar(200)
+  seed                 BigInt?
+  promptUsed           String                 @map("prompt_used") @db.Text
+  validationStatus     VisualValidationStatus @default(PASSED) @map("validation_status")
+  createdAt            DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  creativeJob          CreativeJob            @relation(fields: [creativeJobId], references: [id])
+  contentVersion       ContentVersion         @relation(fields: [contentVersionId], references: [id])
+  validationResults    VisualValidationResult[]
+
+  @@unique([creativeJobId, versionNumber], map: "visual_assets_job_version_key")
+  @@index([sha256Digest], map: "visual_assets_sha256_idx")
+  @@map("visual_assets")
 }
 
 model VisualValidationResult {
@@ -322,6 +377,7 @@ model VisualValidationResult {
   visualAssetId      String                 @map("visual_asset_id") @db.Uuid
   validatorVersion   String                 @map("validator_version") @db.VarChar(100)
   status             VisualValidationStatus
+  textScanOutcome    TextScanOutcome        @default(NO_TEXT_DETECTED) @map("text_scan_outcome")
   createdAt          DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
 
   visualAsset        VisualAsset            @relation(fields: [visualAssetId], references: [id])
@@ -345,27 +401,37 @@ model VisualValidationFinding {
 
 ---
 
-## 9. Security, Threat Modeling & Licensing Analysis
+## 10. Telegram Review Workflow Specification
 
-### 9.1 Threat Modeling
-- **Malicious Image Ingestion (SSRF):** Catalog product image URLs are strictly validated against allowlisted product asset domains. Arbitrary user URLs are never fetched.
-- **Decompression Bomb Defense:** Images are decoded with size-capped memory buffers in Sharp, rejecting images exceeding 25 megapixels or 15 MB uncompressed size.
-- **EXIF Stripping:** All generated and composited assets have EXIF metadata scrubbed to eliminate geographic location leakage, while embedding verified C2PA provenance tags.
-
-### 9.2 Licensing & Intellectual Property Compliance
-- **Permissive Open-Source Libraries:** All image processing relies on `sharp` (Apache-2.0).
-- **Commercial Generative Models:** Providers selected (OpenAI, Stability AI) must provide clear commercial usage terms transferring ownership of generated output to Parisian Shopper.
-- **Zero Research Contamination:** No proprietary code or assets from `/research/muse` or `/research/nichebot` are utilized.
+1. **Card Presentation:** High-resolution photo message (`sendPhoto`) containing:
+   - Visual metadata (dimensions, byte size, format, color space)
+   - Validation summary (Deterministic: Passed, Heuristic Scan: Passed)
+   - Creative concept description and active version tag (`V1`, `V2`)
+2. **Review Inline Buttons:**
+   - `[ ✅ Approve Visual ]`: Triggers optimistic concurrency check verifying the target is still the latest `VisualAsset` version. Requires two-step confirmation dialog before moving to `CREATIVE_APPROVED`.
+   - `[ ✏️ Request Visual Edit ]`: Enters conversational reply mode for styling adjustments. Creates append-only `VisualAsset` version.
+   - `[ 🔄 Regenerate Visual ]`: Requests a fresh background candidate with a new seed.
+   - `[ ❌ Reject Visual ]`: Prompts for rejection reason; marks job as `CREATIVE_REJECTED`.
+3. **Stale Approval Protection:** If a reviewer clicks `Approve Visual` on an older message when a newer version exists, the action is rejected with an explanatory message: *"Approval failed: A newer visual version exists for this creative."*
 
 ---
 
-## 10. Recommended Phased Implementation Roadmap
+## 11. Phased Implementation Roadmap (Narrowly Scoped PRs)
 
-When business leadership approves the creative brand guidelines in `docs/creative-business-rules.md`, implementation will proceed in four controlled steps:
-
-| Phase | Milestone | Deliverables |
-|---|---|---|
-| **Phase 2A.1** | Ports & Storage Foundation | Implement `CreativeProvider` port, `AssetStoragePort`, local file storage adapter, Sharp compositing pipeline, and Prisma schema migrations. |
-| **Phase 2A.2** | Generation & Provider Adapters | Implement `FakeCreativeProvider` (for testing) and `OpenAICreativeProvider` (for live generation) with BullMQ `creative-generation` worker queue. |
-| **Phase 2A.3** | Deterministic Visual Validator | Implement `DeterministicVisualValidator` checking dimensions, aspect ratio, safe zones, and text overlay accuracy. |
-| **Phase 2A.4** | Telegram Visual Review Workflow | Wire Telegram photo card dispatch, interactive review buttons (`Approve Visual`, `Request Visual Edit`, `Regenerate Visual`, `Reject Visual`), and two-step confirmation dialog. |
+- **PR 2A-1: Data Model & Ports Only**
+  - Schema migration in `@parisian-shopper/database`.
+  - Domain entities, state machine, repository/storage/provider interfaces in `@parisian-shopper/application`.
+  - Zero image dependencies installed.
+- **PR 2A-2: Fake Provider, Local CAS & Deterministic Compositor**
+  - Install `sharp` (with approved LGPL exception in `license-exceptions.json`).
+  - Implement `FakeCreativeProvider`, local filesystem CAS, and Sharp compositor.
+- **PR 2A-3: Validation Engine & Queue Workflow**
+  - Implement `DeterministicVisualValidator` and `VisualSafetyScanner`.
+  - Add `creative-generation` queue and worker in `@parisian-shopper/jobs`.
+  - Wire transactional outbox dispatcher.
+- **PR 2A-4: Telegram Visual Review Workflow**
+  - High-res photo message delivery and interactive action token handlers in Telegram.
+  - Two-step approval and revision request workflows.
+- **PR 2A-5: Single Real Provider Integration (Disabled by Default)**
+  - Optional real provider adapter behind `ENABLE_REAL_CREATIVE_PROVIDER=false` flag.
+  - Activated only after business rules and legal terms are signed off.
