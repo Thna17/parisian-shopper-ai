@@ -32,6 +32,7 @@
     "dev:worker": "pnpm --filter @parisian-shopper/worker dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "higgsfield:seedance": "node --env-file=.env.local --import tsx examples/higgsfield-seedance/index.ts",
     "license:check": "node scripts/check-licenses.mjs",
     "lint": "eslint . --max-warnings 0 && pnpm boundaries",
     "lint:fix": "eslint . --fix && prettier --write .",
@@ -68,5 +69,8 @@
     "tsx": "4.23.15",
     "typescript": "5.9.3",
     "typescript-eslint": "8.71.0"
+  },
+  "dependencies": {
+    "@higgsfield/client": "0.2.6"
   }
 }

@@ -3,7 +3,7 @@
 **Document:** `/docs/creative-automation.md`  
 **Phase:** Phase 2A (Creative / Visual Automation Foundation)  
 **Status:** Architectural Specification (PROPOSED — Implementation-Ready Pending Business & Legal Sign-off)  
-**Related Documents:** [ADR-003](architecture-decisions/ADR-003-creative-automation-architecture.md), [Creative Business Rules](creative-business-rules.md), [Creative Security](creative-security.md), [Creative License Review](creative-license-review.md)  
+**Related Documents:** [ADR-003](architecture-decisions/ADR-003-creative-automation-architecture.md), [Creative Business Rules](creative-business-rules.md), [Creative Security](creative-security.md), [Creative License Review](creative-license-review.md)
 
 ---
 
@@ -12,6 +12,7 @@
 Phase 2A introduces **Creative / Image Automation** to the Parisian Shopper AI Telegram Content System. The system converts approved or reviewable marketing copy and immutable product snapshots into high-resolution, on-brand visual creatives formatted for social platforms.
 
 ### Core Architecture Invariants
+
 1. **Hero Preservation Invariant:** Authentic product photography from verified catalog snapshots is preserved and composited; AI generates ambient luxury environments, never the product bottle, box, watch dial, or packaging itself.
 2. **Deterministic Typography Invariant:** Diffusion models must never render authoritative marketing text. The Phase 2A baseline enforces `TEXT_ON_IMAGE=false`. If typography overlays are enabled later, they are rendered deterministically through vector SVG templates using verified snapshot data.
 3. **Decoupled Workflow:** Creative generation runs downstream and is pinned to an **exact `ContentVersion`**. It does not block text generation or approval. If marketing edits copy and creates `ContentVersion V2`, the V1 visual is not automatically approved for V2.
@@ -32,6 +33,8 @@ app/packages/
 │       ├── domain/                  # CreativeJob, VisualAsset entities, state transitions, validation rules
 │       ├── application/             # Use cases, query handlers, ports (CreativeProvider, AssetStoragePort)
 │       └── infrastructure/          # FakeCreativeProvider, LocalDiskAssetStorage, Sharp compositor adapter
+├── creative-providers/
+│   └── src/                         # Higgsfield video adapter and isolated SDK wrapper
 ├── database/
 │   ├── prisma/schema.prisma         # CreativeJob, VisualAsset, VisualValidationResult models
 │   └── src/creative/                # Prisma repository implementations
@@ -141,7 +144,7 @@ export interface CreativeProviderOptions {
 
 export interface GeneratedBackgroundAsset {
   readonly imageBuffer: Buffer;
-  readonly mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
+  readonly mimeType: "image/png" | "image/jpeg" | "image/webp";
   readonly width: number;
   readonly height: number;
   readonly providerId: string;
@@ -152,7 +155,7 @@ export interface GeneratedBackgroundAsset {
   readonly estimatedCostUsd?: number;
 }
 
-export const CREATIVE_PROVIDER = Symbol('CREATIVE_PROVIDER');
+export const CREATIVE_PROVIDER = Symbol("CREATIVE_PROVIDER");
 
 export interface CreativeProvider {
   readonly providerId: string;
@@ -187,7 +190,7 @@ export interface CompositeVisualInput {
 
 export interface CompositeVisualResult {
   readonly compositedBuffer: Buffer;
-  readonly mimeType: 'image/png' | 'image/webp';
+  readonly mimeType: "image/png" | "image/webp";
   readonly width: number;
   readonly height: number;
   readonly byteSize: number;
@@ -195,7 +198,7 @@ export interface CompositeVisualResult {
   readonly latencyMs: number;
 }
 
-export const HERO_COMPOSITOR = Symbol('HERO_COMPOSITOR');
+export const HERO_COMPOSITOR = Symbol("HERO_COMPOSITOR");
 
 export interface HeroCompositor {
   composite(input: CompositeVisualInput): Promise<CompositeVisualResult>;
@@ -205,6 +208,7 @@ export interface HeroCompositor {
 Deterministic local compositing (via Sharp in future PR) places the verified canonical product image over the generated background without generative hallucination.
 
 ### Provider Implementation Strategy:
+
 1. **`FakeCreativeProvider` (Mandatory First Provider — PR 2A-2):** Deterministic local fixture generator for unit, integration, and CI test suites. Zero network overhead, zero API cost.
 2. **Single Real Provider Experiment (Deferred — PR 2A-5):** At most ONE real provider adapter (e.g. `OpenAICreativeProvider`) implemented behind a disabled-by-default feature flag (`ENABLE_REAL_CREATIVE_PROVIDER=false`).
 3. **Legal Separation:** Procurement and legal terms (copyright indemnification, commercial output rights) are marked `TODO_LEGAL_CONFIRMATION` and are not hardcoded engineering prerequisites.
@@ -214,6 +218,7 @@ Deterministic local compositing (via Sharp in future PR) places the verified can
 ## 5. Product Image Handling & Compositing Strategy
 
 ### The Hero Image Invariant Flow:
+
 $$\text{Canonical Product Image} \longrightarrow \text{Safe Ingestion} \longrightarrow \text{Deterministic Resize/Crop} \longrightarrow \text{Deterministic Compositing}$$
 
 1. **Safe Ingestion:** Catalog product images are fetched from verified domains with strict SSRF defense (see [`/docs/creative-security.md`](creative-security.md)).
@@ -235,7 +240,7 @@ $$\text{Canonical Product Image} \longrightarrow \text{Safe Ingestion} \longrigh
 Defined in `@parisian-shopper/application` (`src/modules/creative/application/asset-storage.port.ts`):
 
 ```typescript
-export const ASSET_STORAGE = Symbol('ASSET_STORAGE');
+export const ASSET_STORAGE = Symbol("ASSET_STORAGE");
 
 export interface StoredAssetMetadata {
   readonly storageKey: string;
@@ -278,26 +283,27 @@ export interface AssetStoragePort {
 
 ### 7.1 Tier 1: `DeterministicVisualValidator` (Deterministic Checks)
 
-| Check Code | Severity | Description | Verification Logic |
-|---|:---:|---|---|
-| `DIMENSIONS_INVALID` | `BLOCKING` | Width/height does not match required dimensions. | `width === reqWidth && height === reqHeight` |
-| `ASPECT_RATIO_MISMATCH` | `BLOCKING` | Aspect ratio deviates from platform standard. | `Math.abs((w/h) - reqRatio) < 0.001` |
-| `FILE_SIZE_EXCEEDED` | `BLOCKING` | Byte size exceeds platform ceiling. | `byteSize <= 10_485_760` (10 MB max) |
-| `CONTAINER_UNSUPPORTED`| `BLOCKING` | Unsupported container format. | Magic bytes match JPEG, PNG, or WebP |
-| `PIXEL_CEILING_EXCEEDED`| `BLOCKING` | Decoded pixels exceed decompression limits. | `width * height <= 16_777_216` |
-| `FRAME_COUNT_INVALID` | `BLOCKING` | Animated multi-frame image detected. | Single static frame only (`pages === 1`) |
-| `COLOR_SPACE_INVALID` | `WARNING` | Color profile is not standard sRGB. | `metadata.space === 'srgb'` |
-| `HERO_HASH_MISMATCH` | `BLOCKING` | Source hero digest does not match snapshot. | Digest verified against `ProductSnapshot` |
+| Check Code               |  Severity  | Description                                      | Verification Logic                           |
+| ------------------------ | :--------: | ------------------------------------------------ | -------------------------------------------- |
+| `DIMENSIONS_INVALID`     | `BLOCKING` | Width/height does not match required dimensions. | `width === reqWidth && height === reqHeight` |
+| `ASPECT_RATIO_MISMATCH`  | `BLOCKING` | Aspect ratio deviates from platform standard.    | `Math.abs((w/h) - reqRatio) < 0.001`         |
+| `FILE_SIZE_EXCEEDED`     | `BLOCKING` | Byte size exceeds platform ceiling.              | `byteSize <= 10_485_760` (10 MB max)         |
+| `CONTAINER_UNSUPPORTED`  | `BLOCKING` | Unsupported container format.                    | Magic bytes match JPEG, PNG, or WebP         |
+| `PIXEL_CEILING_EXCEEDED` | `BLOCKING` | Decoded pixels exceed decompression limits.      | `width * height <= 16_777_216`               |
+| `FRAME_COUNT_INVALID`    | `BLOCKING` | Animated multi-frame image detected.             | Single static frame only (`pages === 1`)     |
+| `COLOR_SPACE_INVALID`    | `WARNING`  | Color profile is not standard sRGB.              | `metadata.space === 'srgb'`                  |
+| `HERO_HASH_MISMATCH`     | `BLOCKING` | Source hero digest does not match snapshot.      | Digest verified against `ProductSnapshot`    |
 
 ### 7.2 Tier 2: `VisualSafetyScanner` (Heuristic Scans)
 
-| Scan Code | Severity | Scanner Outcome | Policy Action |
-|---|:---:|---|---|
-| `TEXT_SCAN_PASSED` | `INFO` | `NO_TEXT_DETECTED` | Heuristic passed; continue to human review. |
-| `TEXT_DETECTED` | `BLOCKING` | `TEXT_DETECTED` in background | Blocking. Background rejected or flagged before human presentation. |
-| `TEXT_SCAN_INCONCLUSIVE`| `WARNING` | Low confidence or scan timeout | Warning flag attached; requires explicit human confirmation. |
+| Scan Code                |  Severity  | Scanner Outcome                | Policy Action                                                       |
+| ------------------------ | :--------: | ------------------------------ | ------------------------------------------------------------------- |
+| `TEXT_SCAN_PASSED`       |   `INFO`   | `NO_TEXT_DETECTED`             | Heuristic passed; continue to human review.                         |
+| `TEXT_DETECTED`          | `BLOCKING` | `TEXT_DETECTED` in background  | Blocking. Background rejected or flagged before human presentation. |
+| `TEXT_SCAN_INCONCLUSIVE` | `WARNING`  | Low confidence or scan timeout | Warning flag attached; requires explicit human confirmation.        |
 
 #### Scanner Operational Boundaries:
+
 - **Never Run on Hero Packaging:** The scanner is never applied to the canonical product packaging layer (trusted upstream).
 - **Acknowledge Limitations:** Scanners can yield false positives (marble veining, foliage) and false negatives (cursive/stylized scripts). **Human review is never bypassed.**
 
@@ -455,7 +461,7 @@ model VisualValidationFinding {
    - `[ ✏️ Request Visual Edit ]`: Enters conversational reply mode for styling adjustments. Creates append-only `VisualAsset` version.
    - `[ 🔄 Regenerate Visual ]`: Requests a fresh background candidate with a new seed.
    - `[ ❌ Reject Visual ]`: Prompts for rejection reason; marks job as `CREATIVE_REJECTED`.
-3. **Stale Approval Protection:** If a reviewer clicks `Approve Visual` on an older message when a newer version exists, the action is rejected with an explanatory message: *"Approval failed: A newer visual version exists for this creative."*
+3. **Stale Approval Protection:** If a reviewer clicks `Approve Visual` on an older message when a newer version exists, the action is rejected with an explanatory message: _"Approval failed: A newer visual version exists for this creative."_
 
 ---
 
@@ -476,5 +482,13 @@ model VisualValidationFinding {
   - High-res photo message delivery and interactive action token handlers in Telegram.
   - Two-step approval and revision request workflows.
 - **PR 2A-5: Single Real Provider Integration (Disabled by Default)**
-  - Optional real provider adapter behind `ENABLE_REAL_CREATIVE_PROVIDER=false` flag.
+  - Higgsfield Seedance 2.5 video provider behind `FEATURE_HIGGSFIELD_PROVIDER=false`.
   - Activated only after business rules and legal terms are signed off.
+
+## 12. Higgsfield video boundary
+
+Video generation uses the separate `CreativeVideoProvider` port. `HiggsfieldVideoProvider` supports only `bytedance/seedance-2.5/text-to-video`; it does not implement background image generation, compositing, product editing, Telegram delivery, or publishing. The official TypeScript SDK is isolated in `@parisian-shopper/creative-providers` and is never imported by domain/application contracts.
+
+The current provider result is a temporary remote reference, not a durable `VisualAsset`. Video download, validation, hashing, and CAS persistence are a separate follow-up because the existing asset role model is image-specific. See [Higgsfield provider](higgsfield-provider.md).
+
+Sharp and `SharpHeroCompositor` remain unimplemented. The failed Sharp dependency gate was removed, and the lockfile contains no Sharp/libvips packages.

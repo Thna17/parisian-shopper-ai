@@ -75,9 +75,19 @@ export const environmentSchema = z
     FEATURE_AI_IMAGE_GENERATION: booleanFromEnvironment.default(false),
     FEATURE_CREATIVE_GENERATION: booleanFromEnvironment.default(false),
     CREATIVE_PROVIDER: z.enum(['fake']).default('fake'),
+    CREATIVE_VIDEO_PROVIDER: z.enum(['higgsfield']).default('higgsfield'),
     CREATIVE_ASSET_STORAGE_ROOT: z.string().trim().min(1).default('.data/assets'),
     CREATIVE_ASSET_MAX_BYTES: z.coerce.number().int().min(1024).max(50_000_000).default(10_485_760),
     CREATIVE_ALLOW_FAKE_IN_PRODUCTION: booleanFromEnvironment.default(false),
+    FEATURE_HIGGSFIELD_PROVIDER: booleanFromEnvironment.default(false),
+    FEATURE_PRODUCT_IMAGE_TO_VIDEO: booleanFromEnvironment.default(false),
+    HIGGSFIELD_VIDEO_MODEL: z
+      .enum(['bytedance/seedance-2.5/text-to-video'])
+      .default('bytedance/seedance-2.5/text-to-video'),
+    HIGGSFIELD_VIDEO_MAX_WAIT_MS: z.coerce.number().int().min(10_000).max(900_000).default(300_000),
+    HIGGSFIELD_GENERATE_AUDIO: booleanFromEnvironment.default(false),
+    HF_CREDENTIALS: optionalSecret,
+    RUN_HIGGSFIELD_LIVE_TESTS: booleanFromEnvironment.default(false),
     FEATURE_TELEGRAM: booleanFromEnvironment.default(false),
     FEATURE_PRODUCT_API: booleanFromEnvironment.default(false),
     FEATURE_AUTO_PUBLISHING: booleanFromEnvironment.default(false),
@@ -171,6 +181,27 @@ export const environmentSchema = z
         code: 'custom',
         path: ['CREATIVE_PROVIDER'],
         message: 'Fake creative provider is prohibited in production unless explicitly permitted',
+      });
+    }
+
+    if (
+      environment.FEATURE_CREATIVE_GENERATION &&
+      environment.FEATURE_HIGGSFIELD_PROVIDER &&
+      environment.CREATIVE_VIDEO_PROVIDER === 'higgsfield' &&
+      environment.HF_CREDENTIALS === undefined
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['HF_CREDENTIALS'],
+        message: 'HF_CREDENTIALS is required when Higgsfield video generation is enabled',
+      });
+    }
+
+    if (environment.FEATURE_PRODUCT_IMAGE_TO_VIDEO) {
+      context.addIssue({
+        code: 'custom',
+        path: ['FEATURE_PRODUCT_IMAGE_TO_VIDEO'],
+        message: 'Product image-to-video is unavailable pending a visual fidelity policy',
       });
     }
 

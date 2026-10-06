@@ -3,13 +3,14 @@
 **Document:** `/docs/creative-security.md`  
 **Status:** PROPOSED SECURITY SPECIFICATION  
 **Audience:** Security Engineers, Backend Architects, Infrastructure Leads  
-**Related Documents:** [ADR-003](architecture-decisions/ADR-003-creative-automation-architecture.md), [MVP Security Review](security/mvp-security-review.md)  
+**Related Documents:** [ADR-003](architecture-decisions/ADR-003-creative-automation-architecture.md), [MVP Security Review](security/mvp-security-review.md)
 
 ---
 
 ## 1. Executive Summary
 
 Phase 2A introduces remote image ingestion, external generative AI communication, binary image manipulation, and content-addressable storage. These capabilities introduce severe attack surfaces if not guarded by defensive engineering controls:
+
 - **Server-Side Request Forgery (SSRF):** Attacking cloud infrastructure or internal network endpoints via image URLs.
 - **Decompression Bombs (Zip/Pixel Bombs):** Memory exhaustion and denial-of-service via crafted image payloads.
 - **Path Traversal:** Directory escape attempts via malicious filenames in storage subsystems.
@@ -77,15 +78,15 @@ Processing untrusted image binaries with high-performance native engines (`libvi
 
 ### Hard Resource Ceilings:
 
-| Parameter | Limit | Enforcement Mechanism | Failure Action |
-|---|---|---|---|
-| **Max Input File Size** | 15 MB | Streaming byte counter | HTTP Stream Abort |
-| **Max Decoded Pixels** | 16,777,216 px (16 MP) | `sharp({ limitInputPixels: 16777216 })` | Instant rejection before full decode |
-| **Max Width / Height** | 4096 px × 4096 px | Metadata inspection post-header decode | Pipeline Error (`IMAGE_DIMENSIONS_TOO_LARGE`) |
-| **Max Frame / Page Count** | 1 (Static images only) | `pages: 1` constraint; multi-frame animation rejected | Rejection (`ANIMATED_IMAGES_PROHIBITED`) |
-| **Compositing Timeout** | 8000 ms per operation | Node.js `AbortSignal.timeout(8000)` | Terminate operation; log alert |
-| **Libvips Memory Cache** | 128 MB max cache | `sharp.cache({ memory: 128, files: 20, items: 100 })` | Automatic LRU cache eviction |
-| **Processing Concurrency** | Throttled to 2 concurrent jobs | BullMQ worker concurrency setting | Backpressure queuing |
+| Parameter                  | Limit                          | Enforcement Mechanism                                 | Failure Action                                |
+| -------------------------- | ------------------------------ | ----------------------------------------------------- | --------------------------------------------- |
+| **Max Input File Size**    | 15 MB                          | Streaming byte counter                                | HTTP Stream Abort                             |
+| **Max Decoded Pixels**     | 16,777,216 px (16 MP)          | `sharp({ limitInputPixels: 16777216 })`               | Instant rejection before full decode          |
+| **Max Width / Height**     | 4096 px × 4096 px              | Metadata inspection post-header decode                | Pipeline Error (`IMAGE_DIMENSIONS_TOO_LARGE`) |
+| **Max Frame / Page Count** | 1 (Static images only)         | `pages: 1` constraint; multi-frame animation rejected | Rejection (`ANIMATED_IMAGES_PROHIBITED`)      |
+| **Compositing Timeout**    | 8000 ms per operation          | Node.js `AbortSignal.timeout(8000)`                   | Terminate operation; log alert                |
+| **Libvips Memory Cache**   | 128 MB max cache               | `sharp.cache({ memory: 128, files: 20, items: 100 })` | Automatic LRU cache eviction                  |
+| **Processing Concurrency** | Throttled to 2 concurrent jobs | BullMQ worker concurrency setting                     | Backpressure queuing                          |
 
 ---
 
@@ -115,6 +116,7 @@ Processing untrusted image binaries with high-performance native engines (`libvi
 When generating ambient backgrounds, reviewers may submit natural language revision instructions via Telegram (`✏️ Request Visual Edit`).
 
 ### Mitigation Strategy:
+
 1. **Schema Separation:** Revision instructions are constrained to a dedicated prompt field: `styleAdjustmentPrompt`.
 2. **Structural Anchoring:** Prompts follow a strict rigid template where system instructions dominate:
    ```text
@@ -130,17 +132,31 @@ When generating ambient backgrounds, reviewers may submit natural language revis
    [REVIEWER STYLING SUGGESTION - UNTRUSTED]
    Reviewer aesthetic preference: {{sanitizedReviewerInstruction}}
    ```
-3. **Instruction Stripping:** Inputs are sanitized to strip markdown code blocks, prompt override attempts (e.g. *"Ignore previous instructions"*), and executable tokens.
+3. **Instruction Stripping:** Inputs are sanitized to strip markdown code blocks, prompt override attempts (e.g. _"Ignore previous instructions"_), and executable tokens.
 
 ---
 
 ## 6. Heuristic Scanning Boundaries & Limitations
 
 ### Crucial Security Invariant:
+
 **Visual safety scanners (such as OCR for unexpected text detection) are heuristics, NOT deterministic proofs.**
 
 1. **False Positives:** High-contrast organic textures, marble veins, intricate architectural wrought-iron railings, or botanical branches can trigger false-positive text detection.
-   - *Policy:* High-severity detections trigger human notification with a clear warning flag rather than silent failure.
+   - _Policy:_ High-severity detections trigger human notification with a clear warning flag rather than silent failure.
 2. **False Negatives:** Blurry text, low-contrast text, artistic cursive typography, or watermarks embedded at extreme angles can bypass OCR detectors.
-   - *Policy:* Passing the heuristic scanner (`NO_TEXT_DETECTED`) merely qualifies the image for **mandatory human review**. Human review is never bypassed.
+   - _Policy:_ Passing the heuristic scanner (`NO_TEXT_DETECTED`) merely qualifies the image for **mandatory human review**. Human review is never bypassed.
 3. **Exclusion Boundary:** The OCR heuristic scanner is never run against the canonical product layer. Trusted catalog packaging text is validated upstream in Phase 1 via `ProductSnapshot`.
+
+## 7. Higgsfield video security controls
+
+- `HF_CREDENTIALS` is server-side only, loaded from deployment secrets or ignored `.env.local`, and never persisted in content records.
+- The vendor SDK is isolated behind `HiggsfieldSdkClient`; raw SDK errors and response bodies do not cross that adapter.
+- Logs contain only provider ID, allowlisted model, requested duration/resolution/aspect ratio, stable error code, retry classification, and a request ID when one is safely returned.
+- The official SDK is configured with zero submission retries to prevent duplicate paid generation after an ambiguous POST failure.
+- Unit and CI tests use mock clients. The manual smoke test requires `RUN_HIGGSFIELD_LIVE_TESTS=true` and is never executed by test scripts.
+- Product image-to-video is disabled because generative motion can alter product identity.
+- Provider result URLs are temporary and untrusted. They are not fetched or persisted by this PR. A future provider-specific ingestion path must enforce HTTPS, trusted result provenance, public-IP resolution, redirect revalidation, download limits, magic-byte/media validation, and CAS storage.
+- An application timeout maps to unknown provider state; it never triggers an automatic resubmission.
+
+The live account currently returns insufficient credits. This is recorded as `BLOCKED_EXTERNAL_CREDITS`, not a successful generation or a platform failure.

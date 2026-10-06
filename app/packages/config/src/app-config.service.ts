@@ -44,6 +44,15 @@ export interface CreativeConfig {
   allowFakeInProduction: boolean;
 }
 
+export interface HiggsfieldConfig {
+  provider: Environment['CREATIVE_VIDEO_PROVIDER'];
+  credentials?: string;
+  videoModel: Environment['HIGGSFIELD_VIDEO_MODEL'];
+  videoMaxWaitMs: number;
+  generateAudio: boolean;
+  runLiveTests: boolean;
+}
+
 @Injectable()
 export class AppConfigService {
   public constructor(private readonly config: ConfigService<Environment, true>) {}
@@ -125,11 +134,25 @@ export class AppConfigService {
     };
   }
 
+  public get higgsfield(): HiggsfieldConfig {
+    const credentials = this.config.get('HF_CREDENTIALS', { infer: true });
+    return {
+      provider: this.config.get('CREATIVE_VIDEO_PROVIDER', { infer: true }),
+      videoModel: this.config.get('HIGGSFIELD_VIDEO_MODEL', { infer: true }),
+      videoMaxWaitMs: this.config.get('HIGGSFIELD_VIDEO_MAX_WAIT_MS', { infer: true }),
+      generateAudio: this.config.get('HIGGSFIELD_GENERATE_AUDIO', { infer: true }),
+      runLiveTests: this.config.get('RUN_HIGGSFIELD_LIVE_TESTS', { infer: true }),
+      ...(credentials === undefined ? {} : { credentials }),
+    };
+  }
+
   public get featureFlags(): Readonly<Record<FeatureFlag, boolean>> {
     return Object.freeze({
       AI_TEXT_GENERATION: this.config.get('FEATURE_AI_TEXT_GENERATION', { infer: true }),
       AI_IMAGE_GENERATION: this.config.get('FEATURE_AI_IMAGE_GENERATION', { infer: true }),
       CREATIVE_GENERATION: this.config.get('FEATURE_CREATIVE_GENERATION', { infer: true }),
+      HIGGSFIELD_PROVIDER: this.config.get('FEATURE_HIGGSFIELD_PROVIDER', { infer: true }),
+      PRODUCT_IMAGE_TO_VIDEO: this.config.get('FEATURE_PRODUCT_IMAGE_TO_VIDEO', { infer: true }),
       TELEGRAM: this.config.get('FEATURE_TELEGRAM', { infer: true }),
       PRODUCT_API: this.config.get('FEATURE_PRODUCT_API', { infer: true }),
       AUTO_PUBLISHING: this.config.get('FEATURE_AUTO_PUBLISHING', { infer: true }),

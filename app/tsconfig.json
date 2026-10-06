@@ -4,11 +4,13 @@
     { "path": "packages/common" },
     { "path": "packages/config" },
     { "path": "packages/ai-providers" },
+    { "path": "packages/creative-providers" },
     { "path": "packages/database" },
     { "path": "packages/jobs" },
     { "path": "packages/logger" },
     { "path": "packages/telegram" },
     { "path": "packages/application" },
+    { "path": "examples/higgsfield-seedance" },
     { "path": "apps/api" },
     { "path": "apps/worker" }
   ]

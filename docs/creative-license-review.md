@@ -34,11 +34,11 @@ Evidence references:
 
 ## 3. Deployment target determination
 
-| Use | Evidence in the repository/environment | Required package | Exception status |
-|---|---|---|---|
-| Developer platform | Current development host reports Darwin ARM64 | `@img/sharp-libvips-darwin-arm64@1.0.4` | Registered |
-| CI platform | `.github/workflows/ci.yml` uses GitHub-hosted `ubuntu-latest` jobs; the current target is Ubuntu x64 | `@img/sharp-libvips-linux-x64@1.0.4` | Registered |
-| Production deployment | ADR-002 specifies an OCI container on a conventional Linux company host, but the repository does not select CPU architecture, libc, base image, or a production Dockerfile | Not yet determinable | No production-specific exception registered |
+| Use                   | Evidence in the repository/environment                                                                                                                                     | Required package                        | Exception status                            |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------- |
+| Developer platform    | Current development host reports Darwin ARM64                                                                                                                              | `@img/sharp-libvips-darwin-arm64@1.0.4` | Registered                                  |
+| CI platform           | `.github/workflows/ci.yml` uses GitHub-hosted `ubuntu-latest` jobs; the current target is Ubuntu x64                                                                       | `@img/sharp-libvips-linux-x64@1.0.4`    | Registered                                  |
+| Production deployment | ADR-002 specifies an OCI container on a conventional Linux company host, but the repository does not select CPU architecture, libc, base image, or a production Dockerfile | Not yet determinable                    | No production-specific exception registered |
 
 No Darwin x64, Linux ARM64, Linux musl, Windows, or other platform package is approved by this decision. If production is fixed to glibc Linux x64 and still uses exactly version `1.0.4`, the registered Linux x64 package is already covered. Any different production target requires an exact package/version review and a separate registry update before installation or deployment.
 
@@ -46,10 +46,10 @@ No Darwin x64, Linux ARM64, Linux musl, Windows, or other platform package is ap
 
 The authoritative records are in `app/license-exceptions.json`:
 
-| Package | Exact version | Recorded license | Scope |
-|---|---:|---|---|
-| `@img/sharp-libvips-darwin-arm64` | `1.0.4` | `LGPL-3.0-or-later` | Current Darwin ARM64 developer platform |
-| `@img/sharp-libvips-linux-x64` | `1.0.4` | `LGPL-3.0-or-later` | Current Ubuntu x64 CI platform; reusable only for a production target that exactly matches this platform/package/version |
+| Package                           | Exact version | Recorded license    | Scope                                                                                                                    |
+| --------------------------------- | ------------: | ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `@img/sharp-libvips-darwin-arm64` |       `1.0.4` | `LGPL-3.0-or-later` | Current Darwin ARM64 developer platform                                                                                  |
+| `@img/sharp-libvips-linux-x64`    |       `1.0.4` | `LGPL-3.0-or-later` | Current Ubuntu x64 CI platform; reusable only for a production target that exactly matches this platform/package/version |
 
 The exception records preserve the approval reason, evidence, obligations, and re-review triggers. They intentionally do not assert that backend use, dynamic linking, private deployment, or SaaS operation eliminates source, relinking, notice, installation-information, or other license obligations.
 
@@ -80,3 +80,7 @@ This approval covers only the two exact libvips binary packages listed above. It
 ## 8. Gate outcome
 
 The license exception registration gate is complete for the current Darwin ARM64 development and Ubuntu x64 CI targets at package version `1.0.4`. Installing Sharp or implementing the compositor is explicitly outside this change. Production remains gated until its exact target is selected or confirmed to match the already registered Linux x64 package and version.
+
+## 9. Higgsfield SDK
+
+`@higgsfield/client@0.2.6` declares MIT and depends on Axios and form-data. It passes the existing dependency license policy without an exception. This approval does not cover Higgsfield service terms, generated-media rights, account procurement, or commercial usage terms; those remain separate management/legal review items.

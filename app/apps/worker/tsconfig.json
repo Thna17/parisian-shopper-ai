@@ -10,6 +10,7 @@
     { "path": "../../packages/application" },
     { "path": "../../packages/ai-providers" },
     { "path": "../../packages/config" },
+    { "path": "../../packages/creative-providers" },
     { "path": "../../packages/database" },
     { "path": "../../packages/jobs" },
     { "path": "../../packages/logger" }

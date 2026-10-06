@@ -5,6 +5,10 @@ import {
   type GeneratedBackgroundAsset,
 } from './creative-provider.port.js';
 import {
+  type CreativeVideoProvider,
+  type VideoCreativeBrief,
+} from './creative-video-provider.port.js';
+import {
   type CompositeVisualInput,
   type CompositeVisualResult,
   type HeroCompositor,
@@ -57,6 +61,32 @@ describe('Creative Ports Contract Tests', () => {
     expect(typeof mockCompositor.composite).toBe('function');
     // Verify background generation does not exist on HeroCompositor
     expect('generateBackground' in mockCompositor).toBe(false);
+  });
+
+  it('CreativeVideoProvider remains separate from image generation and compositing', () => {
+    const mockProvider: CreativeVideoProvider = {
+      providerId: 'mock-video-provider',
+      generateVideo: (brief: VideoCreativeBrief) =>
+        Promise.resolve({
+          providerId: 'mock-video-provider',
+          model: 'mock-video-v1',
+          videoUrl: 'https://example.invalid/video.mp4',
+          durationSeconds: brief.durationSeconds,
+          resolution: brief.resolution,
+          aspectRatio: brief.aspectRatio,
+          mimeType: 'video/mp4',
+          metadata: {
+            outputFormat: brief.outputFormat,
+            generateAudio: brief.generateAudio ?? false,
+            providerStatus: 'completed',
+          },
+        }),
+    };
+
+    expect(typeof mockProvider.generateVideo).toBe('function');
+    expect('generateBackground' in mockProvider).toBe(false);
+    expect('composite' in mockProvider).toBe(false);
+    expect('publish' in mockProvider).toBe(false);
   });
 
   it('AssetStoragePort contract contains safe access only (NO deleteAsset method)', () => {

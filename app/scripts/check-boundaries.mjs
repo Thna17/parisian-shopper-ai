@@ -17,6 +17,7 @@ const rules = [
       'express',
       'grammy',
       'openai',
+      '@higgsfield/client',
     ],
   },
   {
@@ -30,6 +31,7 @@ const rules = [
       'express',
       'grammy',
       'openai',
+      '@higgsfield/client',
     ],
   },
   {
@@ -43,6 +45,7 @@ const rules = [
       'express',
       'grammy',
       'openai',
+      '@higgsfield/client',
     ],
   },
   {
@@ -56,6 +59,7 @@ const rules = [
       'express',
       'grammy',
       'openai',
+      '@higgsfield/client',
     ],
   },
   {
@@ -69,6 +73,7 @@ const rules = [
       'express',
       'grammy',
       'openai',
+      '@higgsfield/client',
     ],
   },
   {
@@ -82,6 +87,7 @@ const rules = [
       'express',
       'grammy',
       'openai',
+      '@higgsfield/client',
     ],
   },
   {
@@ -94,6 +100,7 @@ const rules = [
       'express',
       'grammy',
       'openai',
+      '@higgsfield/client',
       '@parisian-shopper/database',
       '@parisian-shopper/jobs',
       '@parisian-shopper/logger',
@@ -108,6 +115,7 @@ const rules = [
       'express',
       'grammy',
       'openai',
+      '@higgsfield/client',
       '@parisian-shopper/database',
       '@parisian-shopper/jobs',
       '@parisian-shopper/logger',
@@ -121,20 +129,33 @@ const rules = [
 
 for (const file of await sourceFiles(root)) {
   const relative = path.relative(root, file).split(path.sep).join('/');
-  const rule = rules.find((candidate) => relative.startsWith(candidate.prefix));
-  if (rule === undefined) continue;
-
   const source = await readFile(file, 'utf8');
   const imports = [
     ...source.matchAll(/(?:import|export)\s+(?:[^'";]+?\s+from\s+)?['"]([^'"]+)['"]/g),
   ].map((match) => match[1]);
-  for (const imported of imports) {
-    if (
-      imported !== undefined &&
-      rule.forbidden.some((name) => imported === name || imported.startsWith(name))
-    ) {
-      violations.push(`${relative}: forbidden import "${imported}"`);
+
+  const rule = rules.find((candidate) => relative.startsWith(candidate.prefix));
+  if (rule !== undefined) {
+    for (const imported of imports) {
+      if (
+        imported !== undefined &&
+        rule.forbidden.some((name) => imported === name || imported.startsWith(name))
+      ) {
+        violations.push(`${relative}: forbidden import "${imported}"`);
+      }
     }
+  }
+
+  const isCreativeProviderSource = relative.startsWith('packages/creative-providers/src/');
+  const isSdkBoundary = /higgsfield-sdk-client(?:\.spec)?\.ts$/.test(relative);
+  if (
+    isCreativeProviderSource &&
+    !isSdkBoundary &&
+    imports.some(
+      (imported) => imported === '@higgsfield/client' || imported === '@higgsfield/client/v2',
+    )
+  ) {
+    violations.push(`${relative}: Higgsfield SDK imports are restricted to higgsfield-sdk-client`);
   }
 }
 

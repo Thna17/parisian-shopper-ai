@@ -12,12 +12,14 @@ describe('configuration validation', () => {
     expect(configuration.FEATURE_AI_TEXT_GENERATION).toBe(false);
     expect(configuration.FEATURE_AI_IMAGE_GENERATION).toBe(false);
     expect(configuration.FEATURE_CREATIVE_GENERATION).toBe(false);
+    expect(configuration.FEATURE_HIGGSFIELD_PROVIDER).toBe(false);
+    expect(configuration.FEATURE_PRODUCT_IMAGE_TO_VIDEO).toBe(false);
     expect(configuration.FEATURE_TELEGRAM).toBe(false);
     expect(configuration.FEATURE_PRODUCT_API).toBe(false);
     expect(configuration.FEATURE_AUTO_PUBLISHING).toBe(false);
     expect(configuration.FEATURE_META_PUBLISHING).toBe(false);
     expect(configuration.FEATURE_ANALYTICS).toBe(false);
-    expect(Object.values(FeatureFlag)).toHaveLength(8);
+    expect(Object.values(FeatureFlag)).toHaveLength(10);
   });
 
   it('parses the string false as false', () => {
@@ -78,6 +80,42 @@ describe('configuration validation', () => {
         CREATIVE_PROVIDER: 'fake',
       }),
     ).toThrow('Fake creative provider is prohibited');
+  });
+
+  it('requires Higgsfield credentials only when creative generation and the provider are enabled', () => {
+    expect(() =>
+      validateEnvironment({
+        ...minimumEnvironment,
+        FEATURE_CREATIVE_GENERATION: 'true',
+        FEATURE_HIGGSFIELD_PROVIDER: 'true',
+        CREATIVE_VIDEO_PROVIDER: 'higgsfield',
+      }),
+    ).toThrow('HF_CREDENTIALS is required');
+
+    expect(() =>
+      validateEnvironment({
+        ...minimumEnvironment,
+        FEATURE_CREATIVE_GENERATION: 'true',
+        FEATURE_HIGGSFIELD_PROVIDER: 'true',
+        CREATIVE_VIDEO_PROVIDER: 'higgsfield',
+        HF_CREDENTIALS: 'test-key:test-secret',
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects unknown Higgsfield models and product image-to-video activation', () => {
+    expect(() =>
+      validateEnvironment({
+        ...minimumEnvironment,
+        HIGGSFIELD_VIDEO_MODEL: 'unknown/model',
+      }),
+    ).toThrow('HIGGSFIELD_VIDEO_MODEL');
+    expect(() =>
+      validateEnvironment({
+        ...minimumEnvironment,
+        FEATURE_PRODUCT_IMAGE_TO_VIDEO: 'true',
+      }),
+    ).toThrow('visual fidelity policy');
   });
 
   it('requires a Telegram token only when Telegram is enabled', () => {
