@@ -63,3 +63,4 @@ export * from './modules/validation/domain/factual-rules.js';
 export * from './modules/validation/domain/factual-validator.js';
 export * from './modules/validation/domain/normalization.js';
 export * from './modules/validation/domain/validation.js';
+export * from './modules/creative/index.js';

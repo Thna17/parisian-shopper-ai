@@ -3,9 +3,14 @@ import {
   APPROVALS_REPOSITORY,
   BRAND_RULE_REPOSITORY,
   CONTENT_GENERATION_REPOSITORY,
+  CREATIVE_APPROVAL_REPOSITORY,
+  CREATIVE_JOB_REPOSITORY,
+  CREATIVE_REVISION_REPOSITORY,
   PRODUCT_SNAPSHOT_REPOSITORY,
-  VALIDATION_REPOSITORY,
   TELEGRAM_WORKFLOW_REPOSITORY,
+  VALIDATION_REPOSITORY,
+  VISUAL_ASSET_REPOSITORY,
+  VISUAL_VALIDATION_REPOSITORY,
 } from '@parisian-shopper/application';
 
 import { DatabaseHealthIndicator } from './database-health.indicator.js';
@@ -20,6 +25,13 @@ import { PrismaProductSnapshotRepository } from './product-snapshot/prisma-produ
 import { PrismaValidationRepository } from './validation/prisma-validation.repository.js';
 import { PrismaTelegramWorkflowRepository } from './telegram/prisma-telegram-workflow.repository.js';
 import { PrismaApprovalsRepository } from './approvals/prisma-approvals.repository.js';
+import {
+  PrismaCreativeApprovalRepository,
+  PrismaCreativeJobRepository,
+  PrismaCreativeRevisionRepository,
+  PrismaVisualAssetRepository,
+  PrismaVisualValidationRepository,
+} from './creative/index.js';
 
 @Global()
 @Module({
@@ -33,6 +45,11 @@ import { PrismaApprovalsRepository } from './approvals/prisma-approvals.reposito
     PrismaValidationRepository,
     PrismaTelegramWorkflowRepository,
     PrismaApprovalsRepository,
+    PrismaCreativeJobRepository,
+    PrismaVisualAssetRepository,
+    PrismaVisualValidationRepository,
+    PrismaCreativeRevisionRepository,
+    PrismaCreativeApprovalRepository,
     { provide: TRANSACTION_MANAGER, useExisting: PrismaTransactionManager },
     { provide: PRODUCT_SNAPSHOT_REPOSITORY, useExisting: PrismaProductSnapshotRepository },
     { provide: BRAND_RULE_REPOSITORY, useExisting: PrismaBrandRuleRepository },
@@ -40,6 +57,11 @@ import { PrismaApprovalsRepository } from './approvals/prisma-approvals.reposito
     { provide: VALIDATION_REPOSITORY, useExisting: PrismaValidationRepository },
     { provide: TELEGRAM_WORKFLOW_REPOSITORY, useExisting: PrismaTelegramWorkflowRepository },
     { provide: APPROVALS_REPOSITORY, useExisting: PrismaApprovalsRepository },
+    { provide: CREATIVE_JOB_REPOSITORY, useExisting: PrismaCreativeJobRepository },
+    { provide: VISUAL_ASSET_REPOSITORY, useExisting: PrismaVisualAssetRepository },
+    { provide: VISUAL_VALIDATION_REPOSITORY, useExisting: PrismaVisualValidationRepository },
+    { provide: CREATIVE_REVISION_REPOSITORY, useExisting: PrismaCreativeRevisionRepository },
+    { provide: CREATIVE_APPROVAL_REPOSITORY, useExisting: PrismaCreativeApprovalRepository },
   ],
   exports: [
     PrismaService,
@@ -51,6 +73,11 @@ import { PrismaApprovalsRepository } from './approvals/prisma-approvals.reposito
     PrismaValidationRepository,
     PrismaTelegramWorkflowRepository,
     PrismaApprovalsRepository,
+    PrismaCreativeJobRepository,
+    PrismaVisualAssetRepository,
+    PrismaVisualValidationRepository,
+    PrismaCreativeRevisionRepository,
+    PrismaCreativeApprovalRepository,
     TRANSACTION_MANAGER,
     PRODUCT_SNAPSHOT_REPOSITORY,
     BRAND_RULE_REPOSITORY,
@@ -58,6 +85,11 @@ import { PrismaApprovalsRepository } from './approvals/prisma-approvals.reposito
     VALIDATION_REPOSITORY,
     TELEGRAM_WORKFLOW_REPOSITORY,
     APPROVALS_REPOSITORY,
+    CREATIVE_JOB_REPOSITORY,
+    VISUAL_ASSET_REPOSITORY,
+    VISUAL_VALIDATION_REPOSITORY,
+    CREATIVE_REVISION_REPOSITORY,
+    CREATIVE_APPROVAL_REPOSITORY,
   ],
 })
 export class DatabaseModule {}

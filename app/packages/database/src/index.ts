@@ -8,3 +8,4 @@ export * from './product-snapshot/prisma-product-snapshot.repository.js';
 export * from './validation/prisma-validation.repository.js';
 export * from './telegram/prisma-telegram-workflow.repository.js';
 export * from './approvals/prisma-approvals.repository.js';
+export * from './creative/index.js';

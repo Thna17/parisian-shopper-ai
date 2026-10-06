@@ -122,6 +122,42 @@ enum TelegramNotificationStatus {
   FAILED
 }
 
+enum CreativeJobStatus {
+  REQUESTED
+  GENERATING_BACKGROUND
+  COMPOSITING
+  VALIDATING
+  READY_FOR_REVIEW
+  REVISION_REQUESTED
+  CREATIVE_APPROVED
+  CREATIVE_REJECTED
+  FAILED
+}
+
+enum VisualAssetRole {
+  CANONICAL_PRODUCT
+  GENERATED_BACKGROUND
+  COMPOSITED_CREATIVE
+  PREVIEW
+}
+
+enum VisualValidationStatus {
+  PASSED
+  PASSED_WITH_WARNINGS
+  BLOCKED
+  FAILED
+}
+
+enum CreativeRevisionType {
+  EDIT
+  REGENERATE
+}
+
+enum CreativeApprovalDecision {
+  CREATIVE_APPROVED
+  CREATIVE_REJECTED
+}
+
 model User {
   id          String     @id @default(uuid()) @db.Uuid
   displayName String     @map("display_name") @db.VarChar(200)
@@ -130,13 +166,16 @@ model User {
   createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  roles                UserRole[]         @relation("UserRoles")
-  roleAssignments      UserRole[]         @relation("RoleAssignedBy")
-  telegramIdentities   TelegramIdentity[]
-  requestedContentJobs ContentJob[]       @relation("ContentJobRequester")
-  revisionRequests     RevisionRequest[]  @relation("UserRevisionRequests")
-  approvalEvents       ApprovalEvent[]
-  auditEvents          AuditEvent[]
+  roles                    UserRole[]                @relation("UserRoles")
+  roleAssignments          UserRole[]                @relation("RoleAssignedBy")
+  telegramIdentities       TelegramIdentity[]
+  requestedContentJobs     ContentJob[]              @relation("ContentJobRequester")
+  revisionRequests         RevisionRequest[]         @relation("UserRevisionRequests")
+  approvalEvents           ApprovalEvent[]
+  auditEvents              AuditEvent[]
+  requestedCreativeJobs    CreativeJob[]             @relation("UserCreativeJobs")
+  creativeRevisionRequests CreativeRevisionRequest[] @relation("UserCreativeRevisionRequests")
+  creativeApprovalEvents   CreativeApprovalEvent[]   @relation("UserCreativeApprovalEvents")
 
   @@index([status], map: "users_status_idx")
   @@map("users")
@@ -228,6 +267,7 @@ model ProductSnapshot {
 
   contentJobs     ContentJob[]
   contentVersions ContentVersion[]
+  creativeJobs    CreativeJob[]
 
   @@index([sku, createdAt], map: "product_snapshots_sku_created_at_idx")
   @@index([snapshotHash], map: "product_snapshots_snapshot_hash_idx")
@@ -252,6 +292,7 @@ model BrandRuleVersion {
 
   contentJobs     ContentJob[]
   contentVersions ContentVersion[]
+  creativeJobs    CreativeJob[]
 
   @@unique([name, version], map: "brand_rule_versions_name_version_key")
   @@index([status, createdAt], map: "brand_rule_versions_status_created_at_idx")
@@ -458,6 +499,7 @@ model ContentVersion {
   resultingRevisionRequest  RevisionRequest?                   @relation("ResultingContentVersionRevision")
   approvalEvents            ApprovalEvent[]
   pendingReviewInteractions TelegramPendingReviewInteraction[]
+  creativeJobs              CreativeJob[]
 
   @@unique([contentJobId, versionNumber], map: "content_versions_job_version_key")
   @@index([productSnapshotId, createdAt], map: "content_versions_product_snapshot_id_created_at_idx")
@@ -565,4 +607,141 @@ model TelegramPendingReviewInteraction {
 
   @@index([telegramIdentityId, expiresAt], map: "telegram_pending_review_interactions_identity_expires_idx")
   @@map("telegram_pending_review_interactions")
+}
+
+model CreativeJob {
+  id                 String            @id @default(uuid()) @db.Uuid
+  contentVersionId   String            @map("content_version_id") @db.Uuid
+  productSnapshotId  String            @map("product_snapshot_id") @db.Uuid
+  brandRuleVersionId String            @map("brand_rule_version_id") @db.Uuid
+  requestedByUserId  String?           @map("requested_by_user_id") @db.Uuid
+  status             CreativeJobStatus @default(REQUESTED)
+  targetPlatform     ContentPlatform   @default(GENERIC) @map("target_platform")
+  aspectRatio        String            @default("1:1") @map("aspect_ratio") @db.VarChar(20)
+  creativeProfile    String            @default("PARISIAN_LUXURY_ATELIER") @map("creative_profile") @db.VarChar(100)
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  contentVersion   ContentVersion            @relation(fields: [contentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_jobs_content_version_id_fkey")
+  productSnapshot  ProductSnapshot           @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_jobs_product_snapshot_id_fkey")
+  brandRuleVersion BrandRuleVersion          @relation(fields: [brandRuleVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_jobs_brand_rule_version_id_fkey")
+  requestedByUser  User?                     @relation("UserCreativeJobs", fields: [requestedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_jobs_requested_by_user_id_fkey")
+  visualAssets     VisualAsset[]
+  revisionRequests CreativeRevisionRequest[]
+  approvalEvents   CreativeApprovalEvent[]
+
+  @@index([contentVersionId, createdAt], map: "creative_jobs_content_version_created_at_idx")
+  @@index([status, createdAt], map: "creative_jobs_status_created_at_idx")
+  @@index([productSnapshotId], map: "creative_jobs_product_snapshot_id_idx")
+  @@map("creative_jobs")
+}
+
+model VisualAsset {
+  id                       String          @id @default(uuid()) @db.Uuid
+  creativeJobId            String          @map("creative_job_id") @db.Uuid
+  versionNumber            Int             @map("version_number")
+  assetRole                VisualAssetRole @default(COMPOSITED_CREATIVE) @map("asset_role")
+  mimeType                 String          @map("mime_type") @db.VarChar(50)
+  width                    Int
+  height                   Int
+  byteSize                 Int             @map("byte_size")
+  sha256                   String          @db.Char(64)
+  storageKey               String          @map("storage_key") @db.VarChar(300)
+  provider                 String?         @db.VarChar(100)
+  model                    String?         @db.VarChar(200)
+  seed                     BigInt?
+  promptVersion            String?         @map("prompt_version") @db.VarChar(100)
+  creativeBriefVersion     String?         @map("creative_brief_version") @db.VarChar(100)
+  sourceProductAssetDigest String          @map("source_product_asset_digest") @db.Char(64)
+  backgroundAssetDigest    String?         @map("background_asset_digest") @db.Char(64)
+  createdAt                DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  creativeJob               CreativeJob               @relation(fields: [creativeJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "visual_assets_creative_job_id_fkey")
+  validationResults         VisualValidationResult[]
+  sourceRevisionRequests    CreativeRevisionRequest[] @relation("SourceVisualAssetRevisions")
+  resultingRevisionRequests CreativeRevisionRequest[] @relation("ResultingVisualAssetRevision")
+  approvalEvents            CreativeApprovalEvent[]
+
+  @@unique([creativeJobId, versionNumber], map: "visual_assets_job_version_key")
+  @@index([creativeJobId, createdAt], map: "visual_assets_job_created_at_idx")
+  @@index([sha256], map: "visual_assets_sha256_idx")
+  @@map("visual_assets")
+}
+
+model VisualValidationResult {
+  id               String                 @id @default(uuid()) @db.Uuid
+  visualAssetId    String                 @map("visual_asset_id") @db.Uuid
+  validatorVersion String                 @map("validator_version") @db.VarChar(100)
+  status           VisualValidationStatus
+  findingCount     Int                    @map("finding_count")
+  blockingCount    Int                    @map("blocking_count")
+  warningCount     Int                    @map("warning_count")
+  infoCount        Int                    @map("info_count")
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  visualAsset    VisualAsset               @relation(fields: [visualAssetId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "visual_validation_results_visual_asset_id_fkey")
+  findings       VisualValidationFinding[]
+  approvalEvents CreativeApprovalEvent[]
+
+  @@unique([visualAssetId, validatorVersion], map: "visual_validation_results_asset_validator_key")
+  @@index([visualAssetId, createdAt], map: "visual_validation_results_asset_created_at_idx")
+  @@map("visual_validation_results")
+}
+
+model VisualValidationFinding {
+  id                       String             @id @default(uuid()) @db.Uuid
+  visualValidationResultId String             @map("visual_validation_result_id") @db.Uuid
+  field                    String             @db.VarChar(100)
+  severity                 ValidationSeverity
+  code                     String             @db.VarChar(100)
+  message                  String             @db.VarChar(1000)
+  metadata                 Json?              @db.JsonB
+  createdAt                DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  visualValidationResult VisualValidationResult @relation(fields: [visualValidationResultId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "visual_validation_findings_result_id_fkey")
+
+  @@index([visualValidationResultId, severity], map: "visual_validation_findings_result_severity_idx")
+  @@index([code], map: "visual_validation_findings_code_idx")
+  @@map("visual_validation_findings")
+}
+
+model CreativeRevisionRequest {
+  id                     String                @id @default(uuid()) @db.Uuid
+  creativeJobId          String                @map("creative_job_id") @db.Uuid
+  sourceVisualAssetId    String                @map("source_visual_asset_id") @db.Uuid
+  requestedByUserId      String                @map("requested_by_user_id") @db.Uuid
+  instruction            String?               @db.VarChar(1000)
+  type                   CreativeRevisionType
+  status                 RevisionRequestStatus @default(PENDING)
+  resultingVisualAssetId String?               @unique(map: "creative_revision_requests_resulting_version_key") @map("resulting_visual_asset_id") @db.Uuid
+  createdAt              DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  creativeJob          CreativeJob  @relation(fields: [creativeJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_revision_requests_creative_job_id_fkey")
+  sourceVisualAsset    VisualAsset  @relation("SourceVisualAssetRevisions", fields: [sourceVisualAssetId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_revision_requests_source_visual_asset_id_fkey")
+  requestedByUser      User         @relation("UserCreativeRevisionRequests", fields: [requestedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_revision_requests_requested_by_user_id_fkey")
+  resultingVisualAsset VisualAsset? @relation("ResultingVisualAssetRevision", fields: [resultingVisualAssetId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_revision_requests_resulting_visual_asset_id_fkey")
+
+  @@index([creativeJobId, createdAt], map: "creative_revision_requests_job_created_at_idx")
+  @@index([status, createdAt], map: "creative_revision_requests_status_created_at_idx")
+  @@map("creative_revision_requests")
+}
+
+model CreativeApprovalEvent {
+  id                       String                   @id @default(uuid()) @db.Uuid
+  creativeJobId            String                   @map("creative_job_id") @db.Uuid
+  visualAssetId            String                   @map("visual_asset_id") @db.Uuid
+  approverUserId           String                   @map("approver_user_id") @db.Uuid
+  decision                 CreativeApprovalDecision
+  comment                  String?                  @db.VarChar(1000)
+  visualValidationResultId String?                  @map("visual_validation_result_id") @db.Uuid
+  createdAt                DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  creativeJob            CreativeJob             @relation(fields: [creativeJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_approval_events_creative_job_id_fkey")
+  visualAsset            VisualAsset             @relation(fields: [visualAssetId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_approval_events_visual_asset_id_fkey")
+  approverUser           User                    @relation("UserCreativeApprovalEvents", fields: [approverUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_approval_events_approver_user_id_fkey")
+  visualValidationResult VisualValidationResult? @relation(fields: [visualValidationResultId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_approval_events_visual_validation_result_id_fkey")
+
+  @@index([creativeJobId, createdAt], map: "creative_approval_events_job_created_at_idx")
+  @@index([visualAssetId, createdAt], map: "creative_approval_events_asset_created_at_idx")
+  @@map("creative_approval_events")
 }
