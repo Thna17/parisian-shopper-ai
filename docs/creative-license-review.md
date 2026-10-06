@@ -6,7 +6,7 @@
 
 **Classification:** MANAGEMENT APPROVAL RECORDED; LEGAL INTERPRETATION REMAINS OUT OF SCOPE
 
-**Reviewer:** `<INSERT ACTUAL APPROVER NAME AND ROLE>`
+**Reviewer:** `HONG THAN BRATHNA — TECHNICALL DEVELOPER`
 
 **Review date:** 2026-10-06
 
@@ -75,7 +75,7 @@ This approval covers only the two exact libvips binary packages listed above. It
 - Management approval of an exception is not a legal opinion about which LGPL obligations apply.
 - A future deployment may constitute distribution or conveyance in ways that require additional compliance work; the delivery model must be reviewed before release.
 - Commercial rights, indemnification, retention, and training terms for any future generative-image provider remain separate procurement/legal decisions.
-- The reviewer value is recorded exactly as supplied for this decision: `<INSERT ACTUAL APPROVER NAME AND ROLE>`.
+- The reviewer value is recorded exactly as supplied for this decision: `HONG THAN BRATHNA — TECHNICALL DEVELOPER`.
 
 ## 8. Gate outcome
 
