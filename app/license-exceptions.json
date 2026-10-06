@@ -10,6 +10,28 @@
       "evidence": "https://github.com/browserslist/caniuse-lite/blob/main/LICENSE",
       "obligations": "Retain license and attribution through the installed dependency/lockfile and include required notices in distributed development-tool bundles if any.",
       "reReview": "Re-review whenever the installed caniuse-lite version changes or the dependency enters a production artifact."
+    },
+    {
+      "package": "@img/sharp-libvips-darwin-arm64",
+      "versions": ["1.0.4"],
+      "license": "LGPL-3.0-or-later",
+      "reviewer": "<INSERT ACTUAL APPROVER NAME AND ROLE>",
+      "reviewDate": "2026-10-06",
+      "reason": "Approved dependency exception for backend use subject to documented LGPL obligations and re-review if deployment/distribution model changes. This package is the platform-specific libvips binary declared by the planned sharp 0.33.5 dependency for the current Darwin ARM64 development platform.",
+      "evidence": "Exact-version npm registry metadata at https://www.npmjs.com/package/@img/sharp-libvips-darwin-arm64/v/1.0.4 declares LGPL-3.0-or-later, identifies https://github.com/lovell/sharp-libvips as its source repository, and records package integrity sha512-XblONe153h0O2zuFfTAbQYAX2JhYmDHeWikp1LM9Hul9gVPjFY427k6dFEcOL72O01QxQsWi761svJ/ev9xEDg==.",
+      "obligations": "Preserve applicable license and copyright notices; retain the corresponding LGPL-3.0-or-later text with any distribution that includes the binary; assess and satisfy applicable library replacement, relinking, source, and installation-information requirements for the actual packaging and distribution model. This registry entry records an engineering exception and does not determine legal obligations.",
+      "reReview": "Re-review before changing the package or version, changing how libvips is linked or packaged, distributing an artifact containing it, or changing the deployment/distribution model."
+    },
+    {
+      "package": "@img/sharp-libvips-linux-x64",
+      "versions": ["1.0.4"],
+      "license": "LGPL-3.0-or-later",
+      "reviewer": "<INSERT ACTUAL APPROVER NAME AND ROLE>",
+      "reviewDate": "2026-10-06",
+      "reason": "Approved dependency exception for backend use subject to documented LGPL obligations and re-review if deployment/distribution model changes. This package is the platform-specific libvips binary declared by the planned sharp 0.33.5 dependency for the current GitHub Actions Ubuntu x64 CI platform.",
+      "evidence": "Exact-version npm registry metadata at https://www.npmjs.com/package/@img/sharp-libvips-linux-x64/v/1.0.4 declares LGPL-3.0-or-later, identifies https://github.com/lovell/sharp-libvips as its source repository, and records package integrity sha512-MmWmQ3iPFZr0Iev+BAgVMb3ZyC4KeFc3jFxnNbEPas60e1cIfevbtuyf9nDGIzOaW9PdnDciJm+wFFaTlj5xYw==.",
+      "obligations": "Preserve applicable license and copyright notices; retain the corresponding LGPL-3.0-or-later text with any distribution that includes the binary; assess and satisfy applicable library replacement, relinking, source, and installation-information requirements for the actual packaging and distribution model. This registry entry records an engineering exception and does not determine legal obligations.",
+      "reReview": "Re-review before changing the package or version, changing how libvips is linked or packaged, distributing an artifact containing it, or changing the deployment/distribution model."
     }
   ]
 }

@@ -1,113 +1,82 @@
 # Creative Automation Dependency Licensing Review (Phase 2A)
 
-**Document:** `/docs/creative-license-review.md`  
-**Status:** PROPOSED EXCEPTION REVIEW  
-**Classification:** `TODO_LEGAL_CONFIRMATION`  
-**Audience:** Legal Counsel, Architecture Board, Engineering Lead  
+**Document:** `/docs/creative-license-review.md`
 
----
+**Status:** APPROVED DEPENDENCY EXCEPTION
 
-## 1. Purpose & Compliance Context
+**Classification:** MANAGEMENT APPROVAL RECORDED; LEGAL INTERPRETATION REMAINS OUT OF SCOPE
 
-In accordance with [`/docs/dependency-license-policy.md`](dependency-license-policy.md), the Parisian Shopper AI platform enforces a strict **permissive-license-first** policy:
-- **Default Permitted Licenses:** `MIT`, `Apache-2.0`, `BSD-2-Clause`, `BSD-3-Clause`, `ISC`, `PostgreSQL`, `0BSD`, `BlueOak-1.0.0`, `CC0-1.0`, `Python-2.0`, `Unlicense`.
-- **Automatic Failure:** `AGPL`, `GPL`, `SSPL`, `UNKNOWN`, `UNLICENSED`.
-- **Manual Exception Required:** `LGPL`, `MPL`, source-available, Commons Clause, or ambiguous licenses.
+**Reviewer:** `<INSERT ACTUAL APPROVER NAME AND ROLE>`
 
-Phase 2A introduces image compositing and storage requirements. This document audits every candidate library, analyzes linking characteristics, evaluates automated license check behavior, and drafts the necessary exception proposals.
+**Review date:** 2026-10-06
 
-**Crucial Policy Rule:** We do not describe any non-allowlisted dependency as "fully compliant" until management and legal counsel formally sign off on the documented exception in `app/license-exceptions.json`.
+## 1. Scope and decision
 
----
+Management approved narrowly scoped exceptions for the platform-specific libvips binaries required by the planned backend use of Sharp 0.33.5. The registered license is `LGPL-3.0-or-later`, as declared by each package's npm metadata.
 
-## 2. Dependency Audit & Candidate Analysis
+The approved wording is:
 
-### 2.1 Core Image Processing Engine: `sharp` & `libvips`
+> Approved dependency exception for backend use subject to documented LGPL obligations and re-review if deployment/distribution model changes.
 
-| Component | Target Version | Declared License | Linking / Distribution Characteristics | Policy Evaluation |
-|---|---|---|---|---|
-| **`sharp`** (npm package) | `^0.33.5` | `Apache-2.0` | Node.js C++ native addon interfacing with libvips. | Allowed by default under Apache-2.0. |
-| **`@img/sharp-libvips-*`** (prebuilt binaries) | `^8.15.2` | `LGPL-3.0-or-later` | Dynamically linked precompiled C library runtime binaries. Loaded as a shared library (`.so`, `.dylib`, `.dll`) at runtime. Not statically linked into the Node.js application binary. | **Requires Documented Exception.** Fails automated check `pnpm license:check` without entry in `license-exceptions.json`. |
+This is an engineering compliance record, not legal advice or a conclusion about the obligations applicable to a future deployment or distribution. Sharp and the libvips packages are not currently installed; this change does not modify a package manifest or lockfile and does not begin compositor implementation.
 
-#### Technical Linking Characteristics:
-- `sharp` interacts with `libvips` via dynamic shared library linking (`dlopen`).
-- The application's proprietary TypeScript / JavaScript source code is not combined or statically compiled into `libvips`.
-- Under LGPL-3.0 Section 4, conveyance of a combined work that uses an LGPL library is permitted if user relinking/replacement is supported, or through a shared library mechanism.
-- In server-side SaaS environments where the software is executed as a backend service and not distributed as end-user client binaries, LGPL distribution obligations are typically not triggered.
-- **Classification:** `TODO_LEGAL_CONFIRMATION` — Legal confirmation is required to ratify that server-side SaaS deployment of `@img/sharp-libvips-*` under LGPL-3.0-or-later does not impose reciprocal source disclosure on Parisian Shopper proprietary codebase.
+## 2. Evidence reviewed
 
----
+The current `app/pnpm-lock.yaml` contains neither `sharp` nor an `@img/sharp-libvips-*` package. Registry metadata for the planned `sharp@0.33.5` identifies these platform-specific libvips optional dependencies at package version `1.0.4`. Registry metadata for each selected binary declares `LGPL-3.0-or-later` and points to the `lovell/sharp-libvips` source repository.
 
-### 2.2 Background Removal Candidates
+The previous draft incorrectly treated the libvips ABI/version `8.15.x` as the npm package version. The exact npm package version selected by `sharp@0.33.5` is `1.0.4` for the targets below.
 
-| Candidate | License | Evaluation & Viability | Recommendation |
+Evidence references:
+
+- exact-version npm metadata: <https://www.npmjs.com/package/@img/sharp-libvips-darwin-arm64/v/1.0.4> (integrity `sha512-XblONe153h0O2zuFfTAbQYAX2JhYmDHeWikp1LM9Hul9gVPjFY427k6dFEcOL72O01QxQsWi761svJ/ev9xEDg==`)
+- exact-version npm metadata: <https://www.npmjs.com/package/@img/sharp-libvips-linux-x64/v/1.0.4> (integrity `sha512-MmWmQ3iPFZr0Iev+BAgVMb3ZyC4KeFc3jFxnNbEPas60e1cIfevbtuyf9nDGIzOaW9PdnDciJm+wFFaTlj5xYw==`)
+- source repository: <https://github.com/lovell/sharp-libvips>
+
+## 3. Deployment target determination
+
+| Use | Evidence in the repository/environment | Required package | Exception status |
 |---|---|---|---|
-| **Client/Server AI Model (`@imgly/background-removal-node`)** | GPL-3.0 or Commercial Dual-License | **STRICTLY PROHIBITED.** GPL-3.0 triggers automatic check failure and violates project clean-room policy. | **REJECTED.** |
-| **ONNX Runtime (`onnxruntime-node`) + RMBG-1.4** | MIT (runtime) / CC-BY-NC-4.0 (model) | CC-BY-NC prohibits commercial retail use unless model weights are commercially licensed. | **DEFERRED.** |
-| **Catalog Photography Pre-Processing (Upstream / Manual)** | Proprietary / Catalog Source | Product images provided with alpha transparency or processed by approved vendor API. | **RECOMMENDED FOR PHASE 2A.** Zero local GPL/LGPL risk. |
+| Developer platform | Current development host reports Darwin ARM64 | `@img/sharp-libvips-darwin-arm64@1.0.4` | Registered |
+| CI platform | `.github/workflows/ci.yml` uses GitHub-hosted `ubuntu-latest` jobs; the current target is Ubuntu x64 | `@img/sharp-libvips-linux-x64@1.0.4` | Registered |
+| Production deployment | ADR-002 specifies an OCI container on a conventional Linux company host, but the repository does not select CPU architecture, libc, base image, or a production Dockerfile | Not yet determinable | No production-specific exception registered |
 
----
+No Darwin x64, Linux ARM64, Linux musl, Windows, or other platform package is approved by this decision. If production is fixed to glibc Linux x64 and still uses exactly version `1.0.4`, the registered Linux x64 package is already covered. Any different production target requires an exact package/version review and a separate registry update before installation or deployment.
 
-### 2.3 Image Metadata & Vector Rendering
+## 4. Registered exceptions
 
-| Package | Version | License | Linking Characteristics | Policy Status |
-|---|---|---|---|---|
-| **`exif-reader`** (transitive with sharp) | `^1.0.3` | `MIT` | Pure JavaScript metadata parser. | Allowed by default (`MIT`). |
-| **SVG Layout Engine** (built into Sharp) | Native | `LGPL-3.0-or-later` (via librsvg/libvips) | Dynamically linked inside libvips binary bundle. | Covered under the libvips exception proposal. |
+The authoritative records are in `app/license-exceptions.json`:
 
----
+| Package | Exact version | Recorded license | Scope |
+|---|---:|---|---|
+| `@img/sharp-libvips-darwin-arm64` | `1.0.4` | `LGPL-3.0-or-later` | Current Darwin ARM64 developer platform |
+| `@img/sharp-libvips-linux-x64` | `1.0.4` | `LGPL-3.0-or-later` | Current Ubuntu x64 CI platform; reusable only for a production target that exactly matches this platform/package/version |
 
-### 2.4 Cloud Storage SDKs
+The exception records preserve the approval reason, evidence, obligations, and re-review triggers. They intentionally do not assert that backend use, dynamic linking, private deployment, or SaaS operation eliminates source, relinking, notice, installation-information, or other license obligations.
 
-| Package | Target Version | License | Status |
-|---|---|---|---|
-| **`@aws-sdk/client-s3`** | `^3.700.0` | `Apache-2.0` | Allowed by default (`Apache-2.0`). |
-| **`minio`** (Node.js SDK) | `^8.0.0` | `Apache-2.0` | Allowed by default (`Apache-2.0`). |
+## 5. Obligations tracked for implementation and release
 
----
+Before a build containing either binary is distributed or deployed, engineering and the appropriate reviewer must determine which obligations apply to the actual delivery model. At minimum, the project tracks these controls:
 
-## 3. Proposed Exception for `license-exceptions.json`
+- preserve applicable license and copyright notices;
+- retain the corresponding LGPL-3.0-or-later license text with a distribution containing the binary;
+- identify the exact binary and source-version evidence in release materials;
+- assess applicable library replacement, relinking, source, and installation-information requirements for the selected packaging model;
+- re-review any package/version, linking, packaging, target-platform, or deployment/distribution change.
 
-Before `sharp` and `@img/sharp-libvips-*` can be added to `package.json` in PR 2A-2, the following exception entry must be reviewed and approved:
+These controls describe compliance work to be evaluated; they do not resolve legal interpretation.
 
-```json
-{
-  "package": "@img/sharp-libvips-darwin-arm64",
-  "versions": ["8.15.2"],
-  "license": "LGPL-3.0-or-later",
-  "reviewer": "TODO_LEGAL_CONFIRMATION",
-  "reviewDate": "2026-10-06",
-  "reason": "High-performance native image compositing and format transformation engine. Dynamically linked shared library executing solely within private backend server container; not distributed to client end-users.",
-  "evidence": "https://github.com/lovell/sharp-libvips/blob/main/LICENSE",
-  "obligations": "Maintain upstream copyright notices, retain LGPL-3.0 license text in deployment container metadata, and preserve dynamic linking mechanism allowing binary substitution.",
-  "reReview": "Re-review upon major libvips version bump or if application packaging transitions to distributed client binaries."
-}
-```
-*(Corresponding platform entries required for `darwin-x64`, `linux-x64`, and `linux-arm64` based on deployment target architectures).*
+## 6. Related candidates outside this approval
 
----
+This approval covers only the two exact libvips binary packages listed above. It does not approve background-removal models, model weights, commercial AI-provider terms, storage SDKs, other native binaries, or additional platform packages. Those dependencies remain subject to the normal dependency license policy and any required procurement/legal review.
 
-## 4. Generative AI Provider Legal & Procurement Separation
+## 7. Remaining legal and deployment assumptions
 
-We strictly decouple engineering interfaces from procurement/legal sign-offs:
+- The actual production CPU architecture, libc, base image, packaging, and distribution model are not yet recorded in the repository.
+- Management approval of an exception is not a legal opinion about which LGPL obligations apply.
+- A future deployment may constitute distribution or conveyance in ways that require additional compliance work; the delivery model must be reviewed before release.
+- Commercial rights, indemnification, retention, and training terms for any future generative-image provider remain separate procurement/legal decisions.
+- The reviewer value is recorded exactly as supplied for this decision: `<INSERT ACTUAL APPROVER NAME AND ROLE>`.
 
-### Technical Engineering Criteria (Architecture Handled):
-- TypeScript abstraction (`CreativeProvider` port) isolated in `@parisian-shopper/application`.
-- Vendor-agnostic payload schemas and timeout boundaries.
-- Full execution auditability (seed, prompt, model, tokens, latency).
+## 8. Gate outcome
 
-### Procurement & Legal Criteria (`TODO_LEGAL_CONFIRMATION`):
-1. **Commercial Rights of Output Media:**
-   - Legal confirmation that generated visual assets can be used in commercial advertising across digital channels in all target operating jurisdictions.
-2. **Copyright Indemnification:**
-   - Determination of whether vendor contractual indemnification (e.g., OpenAI Enterprise Customer Agreement or Google Cloud Generative AI Indemnification) is a mandatory corporate requirement prior to public marketing use.
-3. **Training Data Exclusions:**
-   - Contractual guarantee that product images and proprietary brand prompts uploaded to the provider API are not retained for foundational model re-training.
-
----
-
-## 5. Summary Action Items
-
-1. [ ] **Legal Review:** Counsel review of LGPL-3.0 dynamic linking in private backend service.
-2. [ ] **Exception Approval:** Formally ratify `license-exceptions.json` update prior to merging PR 2A-2.
-3. [ ] **Model Terms Review:** Review terms of service for selected candidate provider prior to PR 2A-5.
+The license exception registration gate is complete for the current Darwin ARM64 development and Ubuntu x64 CI targets at package version `1.0.4`. Installing Sharp or implementing the compositor is explicitly outside this change. Production remains gated until its exact target is selected or confirmed to match the already registered Linux x64 package and version.
