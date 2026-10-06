@@ -43,7 +43,7 @@ export class ContentGenerationQueue implements OnModuleInit, ContentGenerationEn
       .add(
         ContentGenerationJobName.GENERATE_CONTENT,
         { contentJobId },
-        { jobId: `generate-${contentJobId}` },
+        { jobId: `generate-${contentJobId}-${Date.now()}` },
       );
   }
 }

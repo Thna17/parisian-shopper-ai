@@ -138,21 +138,21 @@ async function detectStuck() {
 
   const stuckJobs = await prisma.contentJob.findMany({
     where: {
-      status: { in: ['GENERATING', 'REQUESTED'] },
+      status: { in: ['GENERATING', 'REQUESTED', 'REVISION_REQUESTED'] },
       updatedAt: { lt: thresholdDate },
     },
     include: {
-      snapshot: { select: { sku: true, productName: true } },
+      productSnapshot: { select: { sku: true, productName: true } },
     },
   });
 
   const stuckAttempts = await prisma.generationAttempt.findMany({
     where: {
       status: { in: ['RUNNING', 'PENDING'] },
-      createdAt: { lt: thresholdDate },
+      startedAt: { lt: thresholdDate },
     },
     include: {
-      job: { include: { snapshot: { select: { sku: true } } } },
+      contentJob: { include: { productSnapshot: { select: { sku: true } } } },
     },
   });
 
@@ -164,16 +164,18 @@ async function detectStuck() {
     console.log('\nStuck Jobs:');
     for (const j of stuckJobs) {
       const ageSec = Math.floor((Date.now() - j.updatedAt.getTime()) / 1000);
-      console.log(`  - Job ${j.id} (${j.snapshot.sku}) — State: ${j.status}, Stuck for ${ageSec}s`);
+      console.log(
+        `  - Job ${j.id} (${j.productSnapshot?.sku ?? 'unknown'}) — State: ${j.status}, Stuck for ${ageSec}s`,
+      );
     }
   }
 
   if (stuckAttempts.length > 0) {
     console.log('\nStuck Attempts:');
     for (const a of stuckAttempts) {
-      const ageSec = Math.floor((Date.now() - a.createdAt.getTime()) / 1000);
+      const ageSec = Math.floor((Date.now() - a.startedAt.getTime()) / 1000);
       console.log(
-        `  - Attempt ${a.id} (Job ${a.contentJobId}, ${a.job?.snapshot.sku}) — Stuck for ${ageSec}s`,
+        `  - Attempt ${a.id} (Job ${a.contentJobId}, ${a.contentJob?.productSnapshot?.sku ?? 'unknown'}) — Stuck for ${ageSec}s`,
       );
     }
   }
@@ -187,6 +189,12 @@ async function detectStuck() {
 async function retryJob(jobId) {
   const job = await prisma.contentJob.findUnique({
     where: { id: jobId },
+    include: {
+      revisionRequests: {
+        where: { status: 'PENDING' },
+        orderBy: { createdAt: 'desc' },
+      },
+    },
   });
 
   if (!job) {
@@ -205,13 +213,45 @@ async function retryJob(jobId) {
     process.exit(1);
   }
 
-  // Safe retry: reset job to REQUESTED
-  await prisma.contentJob.update({
-    where: { id: jobId },
-    data: { status: 'REQUESTED' },
-  });
+  // If job is in REVISION_REQUESTED and has a pending revision, preserve status
+  if (job.status === 'REVISION_REQUESTED' && job.revisionRequests.length > 0) {
+    console.log(
+      `ℹ️ ContentJob ${jobId} has pending revision request. Maintaining REVISION_REQUESTED status.`,
+    );
+  } else {
+    // Safe retry: reset job to REQUESTED
+    await prisma.contentJob.update({
+      where: { id: jobId },
+      data: { status: 'REQUESTED' },
+    });
+    console.log(`✅ ContentJob ${jobId} status reset to REQUESTED for safe reprocessing.`);
+  }
 
-  console.log(`✅ ContentJob ${jobId} status reset to REQUESTED for safe reprocessing.`);
+  // Re-enqueue to BullMQ queue
+  try {
+    const { GlideClient } =
+      await import('../packages/jobs/node_modules/@valkey/valkey-glide/build-ts/index.js');
+    const { Queue, createValkeyGlideClient } =
+      await import('../packages/jobs/node_modules/bullmq/dist/cjs/index.js');
+    const valkeyHost = process.env.VALKEY_HOST || '127.0.0.1';
+    const valkeyPort = parseInt(process.env.VALKEY_PORT || '6379', 10);
+    const glide = await GlideClient.createClient({
+      addresses: [{ host: valkeyHost, port: valkeyPort }],
+    });
+    const queue = new Queue('content-generation', { connection: createValkeyGlideClient(glide) });
+
+    await queue.add(
+      'GENERATE_CONTENT',
+      { contentJobId: jobId },
+      { jobId: `generate-${jobId}-${Date.now()}` },
+    );
+
+    console.log(`🚀 ContentJob ${jobId} enqueued to BullMQ (content-generation).`);
+    await queue.close();
+    glide.close();
+  } catch (err) {
+    console.error(`⚠️ Failed to enqueue to BullMQ: ${err?.message || err}`);
+  }
 }
 
 async function main() {

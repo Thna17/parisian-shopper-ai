@@ -61,18 +61,22 @@ export function formatDraft(view: TelegramDraftView, options?: TelegramFormatOpt
   const prefix = options?.demoMode ? '[DEMO] ' : '';
   const status = validationBanner(view.validation);
   const output = view.output;
+  const divider = '─────────────────────────';
   return [
     `${prefix}DRAFT #${shortReference(view.jobId)} — V${String(view.versionNumber ?? 1)}`,
     `Product: ${view.productName}`,
     `Content type: ${friendlyEnum(view.contentType)}`,
     `Language: ${friendlyEnum(view.language)}`,
     `Platform: ${friendlyEnum(view.platform)}`,
+    divider,
     status,
+    divider,
     `Headline:\n${output.headline}`,
     ...(output.khmerCaption === null ? [] : [`Khmer:\n${output.khmerCaption}`]),
     ...(output.englishCaption === null ? [] : [`English:\n${output.englishCaption}`]),
     `CTA:\n${output.cta}`,
     `Hashtags:\n${output.hashtags.join(' ')}`,
+    divider,
     'Human review is still required.',
   ].join('\n\n');
 }

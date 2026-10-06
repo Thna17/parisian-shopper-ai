@@ -165,8 +165,7 @@ async function main() {
           data: {
             userId: user.id,
             telegramUserId: targetId,
-            telegramUsername:
-              usernameInput ?? nameInput.toLowerCase().replace(/[^a-z0-9_]/g, '_'),
+            telegramUsername: usernameInput ?? nameInput.toLowerCase().replace(/[^a-z0-9_]/g, '_'),
           },
           include: { user: true },
         });

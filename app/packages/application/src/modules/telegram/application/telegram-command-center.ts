@@ -331,7 +331,48 @@ export class TelegramCommandCenter {
     if (!(await this.repository.consumeRateLimit(actor.identityId, 'create', 5, 60))) {
       return one('Creation limit reached. Please wait before requesting another draft.');
     }
-    const product = await this.products.execute({ sku });
+    const trimmedSku = sku?.trim() ?? '';
+    if (trimmedSku.length === 0) {
+      const result = await this.searchProducts.execute({ query: '', limit: 8 });
+      if (result.items.length === 0) {
+        return one('No products found in catalogue. Please use /search to find items.');
+      }
+      const expiresAt = this.expiry();
+      const itemTokens = await this.tokens.create(
+        actor.identityId,
+        result.items.map((item) => ({
+          action: TelegramAction.SELECT_PRODUCT,
+          resourceId: item.product.sku,
+        })),
+        expiresAt,
+      );
+      const rows = result.items.map((item, index) => [
+        {
+          text: `Select ${item.product.sku} — ${item.product.product_name}`,
+          callbackData: callbackData(required(itemTokens[index])),
+        },
+      ]);
+      return {
+        messages: [
+          {
+            text: [
+              '🛍️ *Create Content — Select a Product*',
+              '',
+              'Tap any product below to start generating content, or type `/create <SKU>` directly:',
+              '',
+              ...result.items.map(
+                (item, index) =>
+                  `${index + 1}. *${item.product.product_name}* (\`${item.product.sku}\`)\n` +
+                  `   • Brand: ${item.product.brand} • Price: $${item.product.price}` +
+                  (item.product.promo_price ? ` (Promo: $${item.product.promo_price})` : ''),
+              ),
+            ].join('\n'),
+            buttons: rows,
+          },
+        ],
+      };
+    }
+    const product = await this.products.execute({ sku: trimmedSku });
     const expiresAt = this.expiry();
     const flow = await this.repository.createFlow(actor.identityId, product, expiresAt);
     const choices = applicableContentTypes(product);
@@ -353,7 +394,7 @@ export class TelegramCommandCenter {
     return {
       messages: [
         {
-          text: `${formatProduct(product, this.formatOptions)}\n\nChoose a content type:`,
+          text: `${formatProduct(product, this.formatOptions)}\n\nStep 1 of 3 — Choose a content type:`,
           buttons: choices.map((choice, index) => [
             { text: friendly(choice), callbackData: callbackData(required(tokenValues[index])) },
           ]),
@@ -441,7 +482,7 @@ export class TelegramCommandCenter {
     const flow = await this.repository.updateFlowSelection(flowId, 'contentType', value);
     const values = ['KM', 'EN', 'BILINGUAL'] as const;
     const tokens = await this.selectionTokens(actor, flow, TelegramAction.SELECT_LANGUAGE, values);
-    return selectionResponse('Choose a language:', values, tokens);
+    return selectionResponse('Step 2 of 3 — Choose a language:', values, tokens);
   }
 
   private async selectLanguage(
@@ -455,7 +496,7 @@ export class TelegramCommandCenter {
     const values = ['FACEBOOK', 'INSTAGRAM', 'TELEGRAM', 'GENERIC'] as const;
     const tokens = await this.selectionTokens(actor, flow, TelegramAction.SELECT_PLATFORM, values);
     return selectionResponse(
-      'Choose the target platform. This generates content; it does not publish:',
+      'Step 3 of 3 — Choose the target platform. This generates content; it does not publish:',
       values,
       tokens,
     );
@@ -509,20 +550,26 @@ export class TelegramCommandCenter {
   private async status(actor: TelegramActor): Promise<TelegramResponse> {
     this.require(actor, Permission.VIEW_OWN_CONTENT);
     const jobs = await this.repository.listRecentJobs(actor, 10);
+    if (jobs.length === 0) return one('📋 No recent content jobs.');
     return one(
-      jobs.length === 0
-        ? 'No recent content jobs.'
-        : jobs.map((job) => formatJobSummary(job, this.formatOptions)).join('\n'),
+      [
+        '📋 *Recent Content Jobs*',
+        '',
+        ...jobs.map((job) => formatJobSummary(job, this.formatOptions)),
+      ].join('\n'),
     );
   }
 
   private async history(actor: TelegramActor, sku: string): Promise<TelegramResponse> {
     this.require(actor, Permission.VIEW_OWN_CONTENT);
     const jobs = await this.repository.listHistory(actor, parseSku(sku), 10);
+    if (jobs.length === 0) return one('📜 No content history found for this SKU.');
     return one(
-      jobs.length === 0
-        ? 'No content history found for this SKU.'
-        : jobs.map((job) => formatJobSummary(job, this.formatOptions)).join('\n'),
+      [
+        `📜 *Content History for SKU: ${parseSku(sku)}*`,
+        '',
+        ...jobs.map((job) => formatJobSummary(job, this.formatOptions)),
+      ].join('\n'),
     );
   }
 
@@ -823,13 +870,30 @@ function selectionResponse(
   };
 }
 function welcomeText(actor: TelegramActor): string {
-  return `Parisian Shopper AI Content Assistant\n\nWelcome, ${actor.displayName}.\n\n${helpText(actor, new PermissionService())}`;
+  return [
+    '✨ *Parisian Shopper AI — Content Studio*',
+    '',
+    `Welcome, *${actor.displayName}*!`,
+    `Role: *${actor.roles.map(friendly).join(', ')}*`,
+    '',
+    'Transform verified luxury products into brand-aligned social content with automated factual verification and strict human review governance.',
+    '',
+    helpText(actor, new PermissionService()),
+  ].join('\n');
 }
 function helpText(actor: TelegramActor, permissions: PermissionService): string {
   const commands = ['/search <keyword>', '/status', '/history <SKU>'];
-  if (permissions.hasAnyRolePermission(actor.roles, Permission.CREATE_CONTENT))
-    commands.unshift('/create <SKU>');
-  return `Available commands:\n${commands.join('\n')}\n/help\n\nAI-assisted drafts require human review. Factual validation reduces risk but is not a guarantee.`;
+  if (permissions.hasAnyRolePermission(actor.roles, Permission.CREATE_CONTENT)) {
+    commands.unshift('/create <SKU> (or /create to browse catalogue)');
+  }
+  return [
+    'Available commands:',
+    ...commands,
+    '/help',
+    '',
+    '🛡️ *Human Governance Policy:*',
+    'AI-assisted drafts require human review. Factual validation reduces risk but is not a guarantee.',
+  ].join('\n');
 }
 function applicableContentTypes(
   product: Awaited<ReturnType<GetProductBySkuUseCase['execute']>>,
