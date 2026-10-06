@@ -3,7 +3,9 @@ import {
   type CreateCreativeRevisionInput,
   type CreativeRevisionRepository,
   type CreativeRevisionRequestRecord,
+  validateCreativeRevisionInstruction,
   CreativeActiveRevisionExistsError,
+  CreativeRevisionValidationError,
 } from '@parisian-shopper/application';
 import { type CreativeRevisionRequest as PrismaCreativeRevisionRequest } from '@prisma/client';
 import { PrismaService } from '../prisma.service.js';
@@ -15,6 +17,11 @@ export class PrismaCreativeRevisionRepository implements CreativeRevisionReposit
   public async createRequest(
     input: CreateCreativeRevisionInput,
   ): Promise<CreativeRevisionRequestRecord> {
+    const validation = validateCreativeRevisionInstruction(input.type, input.instruction);
+    if (!validation.valid) {
+      throw new CreativeRevisionValidationError(validation.error ?? 'Invalid revision instruction');
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const active = await tx.creativeRevisionRequest.findFirst({
         where: {
@@ -31,7 +38,7 @@ export class PrismaCreativeRevisionRepository implements CreativeRevisionReposit
           creativeJobId: input.creativeJobId,
           sourceVisualAssetId: input.sourceVisualAssetId,
           requestedByUserId: input.requestedByUserId,
-          instruction: input.instruction ?? null,
+          instruction: validation.normalizedInstruction ?? null,
           type: input.type,
           status: 'PENDING',
         },

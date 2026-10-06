@@ -52,12 +52,14 @@ No `@parisian-shopper/domain` package is created. The architecture strictly resp
 - **`@parisian-shopper/telegram` & Telegram application module:**
   - Outbox dispatcher for high-resolution visual cards and review callback tokens.
 
-### D3: Hero Product Image Preservation & Invariant
+### D3: Hero Product Image Preservation & HeroCompositor Port
 **Generative AI is strictly prohibited from synthesizing the core product packaging from scratch.**
 - The canonical product image from `ProductSnapshot.images` is treated as an immutable visual truth (the "Hero").
 - **Ingestion & Compositing Flow:**
   $$\text{Canonical Product Image} \longrightarrow \text{Safe Ingestion} \longrightarrow \text{Deterministic Resize/Crop} \longrightarrow \text{Deterministic Compositing}$$
-- Generative AI is utilized exclusively for **ambient lifestyle background generation** (empty surface, French window, ambient morning light).
+- **Port Separation:**
+  - `CreativeProvider`: AI ambient background generation ONLY (`generateBackground`). Zero compositing capabilities. Strictly prohibited from manipulating the product.
+  - `HeroCompositor`: Dedicated port (`composite`) for deterministic local compositing (via Sharp in future PR). Places the trusted canonical product image over the verified AI background without generative alteration.
 - Under no circumstances is generative in-painting or diffusion fill used on:
   - Product bottles, boxes, caps, or packaging geometry
   - Watch dials, bezels, hands, or straps
@@ -90,7 +92,7 @@ We explicitly separate deterministic mathematical verification from heuristic sa
    - OCR is **never** run against canonical product packaging typography (which is separately trusted from catalog source).
    - Heuristics document known risks of false positives (e.g. marble veining, botanical branches) and false negatives (e.g. stylized scripts, low contrast text).
 
-### D6: Content-Addressable Asset Storage Strategy
+### D6: Content-Addressable Asset Storage Strategy & Audit Immutability
 Assets are stored using cryptographic SHA-256 digests calculated over **raw bytes**:
 $$\text{Storage Key} = \text{sha256}(\text{imageBytes})$$
 - Assets are never deduplicated merely by filename.
@@ -100,6 +102,8 @@ $$\text{Storage Key} = \text{sha256}(\text{imageBytes})$$
   - `COMPOSITED_CREATIVE`: Multi-layer composited final visual.
   - `PREVIEW`: Scaled/compressed preview optimized for Telegram transport.
 - Metadata is tracked in PostgreSQL (`VisualAsset`): `sha256`, `mimeType`, `width`, `height`, `byteSize`, `assetRole`, `createdAt`, `sourceProvenance`.
+- **Immutable Storage Access:** The application `AssetStoragePort` provides safe read/write access (`saveAsset`, `getMetadata`, `getAssetBuffer`, `assetExists`) with NO deletion methods. Assets participate in the tamper-evident audit chain. Future retention or legal purge operations are separated into an administrative port (`AssetRetentionPort` / `AssetAdministrationPort`).
+
 
 ### D7: Creative State Machine & Append-Only Versioning
 The creative workflow is isolated from `ContentJob` status and governed by its own state machine:

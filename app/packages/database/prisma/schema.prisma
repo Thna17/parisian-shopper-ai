@@ -149,8 +149,9 @@ enum VisualValidationStatus {
 }
 
 enum CreativeRevisionType {
-  EDIT
-  REGENERATE
+  EDIT_BACKGROUND
+  REGENERATE_BACKGROUND
+  RETRY_FAILED
 }
 
 enum CreativeApprovalDecision {

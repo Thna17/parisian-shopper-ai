@@ -1,6 +1,7 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import {
   CreateProductSnapshotUseCase,
+  CreativeApprovalMismatchedAssetError,
   DEVELOPMENT_BRAND_RULES,
   FICTIONAL_PRODUCTS,
 } from '@parisian-shopper/application';
@@ -503,7 +504,7 @@ describe('Phase 2A Creative Workflow Foundation Integration', () => {
       sourceVisualAssetId: v1.id,
       requestedByUserId: testUserId,
       instruction: 'Make the background marble darker with softer light',
-      type: 'EDIT',
+      type: 'EDIT_BACKGROUND',
     });
 
     expect(revision.status).toBe('PENDING');
@@ -515,7 +516,7 @@ describe('Phase 2A Creative Workflow Foundation Integration', () => {
         sourceVisualAssetId: v1.id,
         requestedByUserId: testUserId,
         instruction: 'Duplicate pending revision',
-        type: 'EDIT',
+        type: 'EDIT_BACKGROUND',
       }),
     ).rejects.toThrow();
 
@@ -539,5 +540,181 @@ describe('Phase 2A Creative Workflow Foundation Integration', () => {
     // Now no pending revision exists
     const active = await creativeRevisionRepo!.findActiveByJobId(job.id);
     expect(active).toBeNull();
+  });
+
+  it('enforces validation uniqueness on (visualAssetId, validatorVersion)', async () => {
+    const { contentVersion1Id, productSnapshotId } = await createContentSetup();
+
+    const job = await creativeJobRepo!.createJob({
+      contentVersionId: contentVersion1Id,
+      productSnapshotId,
+      brandRuleVersionId,
+    });
+
+    const asset = await visualAssetRepo!.createAsset({
+      creativeJobId: job.id,
+      assetRole: 'COMPOSITED_CREATIVE',
+      mimeType: 'image/png',
+      width: 1080,
+      height: 1080,
+      byteSize: 500000,
+      sha256: '7'.repeat(64),
+      storageKey: 'cas/77/66/key7.png',
+      sourceProductAssetDigest: 'p'.repeat(64),
+    });
+
+    // 1. Same VisualAsset + ps-visual-v1 => persisted
+    const valV1 = await visualValidationRepo!.persistResult({
+      visualAssetId: asset.id,
+      validatorVersion: 'ps-visual-v1',
+      status: 'PASSED',
+      findings: [],
+    });
+    expect(valV1.validatorVersion).toBe('ps-visual-v1');
+
+    // 2. Same VisualAsset + ps-visual-v2 => both persisted
+    const valV2 = await visualValidationRepo!.persistResult({
+      visualAssetId: asset.id,
+      validatorVersion: 'ps-visual-v2',
+      status: 'PASSED_WITH_WARNINGS',
+      findings: [
+        {
+          field: 'frame',
+          severity: 'WARNING',
+          code: 'COLOR_SPACE_NORMALIZED',
+          message: 'Color space check warning',
+        },
+      ],
+    });
+    expect(valV2.validatorVersion).toBe('ps-visual-v2');
+
+    // 3. Same VisualAsset + ps-visual-v1 twice => duplicate rejected safely
+    await expect(
+      visualValidationRepo!.persistResult({
+        visualAssetId: asset.id,
+        validatorVersion: 'ps-visual-v1',
+        status: 'PASSED',
+        findings: [],
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('safely serializes concurrent createAsset calls for the same CreativeJob into V2 + V3', async () => {
+    const { contentVersion1Id, productSnapshotId } = await createContentSetup();
+
+    const job = await creativeJobRepo!.createJob({
+      contentVersionId: contentVersion1Id,
+      productSnapshotId,
+      brandRuleVersionId,
+    });
+
+    // Seed V1
+    const v1 = await visualAssetRepo!.createAsset({
+      creativeJobId: job.id,
+      assetRole: 'COMPOSITED_CREATIVE',
+      mimeType: 'image/png',
+      width: 1080,
+      height: 1080,
+      byteSize: 500000,
+      sha256: '8'.repeat(64),
+      storageKey: 'cas/88/77/key8.png',
+      sourceProductAssetDigest: 'p'.repeat(64),
+    });
+    expect(v1.versionNumber).toBe(1);
+
+    // Trigger two concurrent createAsset calls for the same job
+    const [resA, resB] = await Promise.all([
+      visualAssetRepo!.createAsset({
+        creativeJobId: job.id,
+        assetRole: 'COMPOSITED_CREATIVE',
+        mimeType: 'image/png',
+        width: 1080,
+        height: 1080,
+        byteSize: 510000,
+        sha256: '9'.repeat(64),
+        storageKey: 'cas/99/88/key9.png',
+        sourceProductAssetDigest: 'p'.repeat(64),
+      }),
+      visualAssetRepo!.createAsset({
+        creativeJobId: job.id,
+        assetRole: 'COMPOSITED_CREATIVE',
+        mimeType: 'image/png',
+        width: 1080,
+        height: 1080,
+        byteSize: 520000,
+        sha256: 'a'.repeat(64),
+        storageKey: 'cas/aa/99/keyA.png',
+        sourceProductAssetDigest: 'p'.repeat(64),
+      }),
+    ]);
+
+    const versions = [resA.versionNumber, resB.versionNumber].sort((a, b) => a - b);
+    // Invariant: Both succeed with sequential versions 2 and 3; NEVER two V2s, errors, or lost assets
+    expect(versions).toEqual([2, 3]);
+  });
+
+  it('enforces same-asset invariant between approval event and validation result', async () => {
+    const { contentVersion1Id, productSnapshotId } = await createContentSetup();
+
+    const job = await creativeJobRepo!.createJob({
+      contentVersionId: contentVersion1Id,
+      productSnapshotId,
+      brandRuleVersionId,
+    });
+
+    // Asset A with Validation Result A
+    const assetA = await visualAssetRepo!.createAsset({
+      creativeJobId: job.id,
+      assetRole: 'COMPOSITED_CREATIVE',
+      mimeType: 'image/png',
+      width: 1080,
+      height: 1080,
+      byteSize: 500000,
+      sha256: 'b'.repeat(64),
+      storageKey: 'cas/bb/aa/keyB.png',
+      sourceProductAssetDigest: 'p'.repeat(64),
+    });
+
+    const validationA = await visualValidationRepo!.persistResult({
+      visualAssetId: assetA.id,
+      validatorVersion: 'ps-visual-v1',
+      status: 'PASSED',
+      findings: [],
+    });
+
+    // Asset B
+    const assetB = await visualAssetRepo!.createAsset({
+      creativeJobId: job.id,
+      assetRole: 'COMPOSITED_CREATIVE',
+      mimeType: 'image/png',
+      width: 1080,
+      height: 1080,
+      byteSize: 520000,
+      sha256: 'c'.repeat(64),
+      storageKey: 'cas/cc/bb/keyC.png',
+      sourceProductAssetDigest: 'p'.repeat(64),
+    });
+
+    // Attempt: Approve Asset B using Validation Result A => Rejected at application layer
+    await expect(
+      creativeApprovalRepo!.recordApproval({
+        creativeJobId: job.id,
+        visualAssetId: assetB.id,
+        approverUserId: testUserId,
+        decision: 'CREATIVE_APPROVED',
+        visualValidationResultId: validationA.id,
+      }),
+    ).rejects.toThrow(CreativeApprovalMismatchedAssetError);
+
+    // Attempt: Approve Asset B using Validation Result A directly via raw SQL => Rejected by DB trigger
+    await expect(
+      prisma!.$executeRaw`
+        INSERT INTO "creative_approval_events" (
+          "id", "creative_job_id", "visual_asset_id", "approver_user_id", "decision", "visual_validation_result_id"
+        ) VALUES (
+          gen_random_uuid(), ${job.id}::uuid, ${assetB.id}::uuid, ${testUserId}::uuid, 'CREATIVE_APPROVED'::"CreativeApprovalDecision", ${validationA.id}::uuid
+        )
+      `,
+    ).rejects.toThrow(/visual_validation_result does not belong to visual_asset/);
   });
 });

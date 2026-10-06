@@ -3,8 +3,10 @@ import {
   type CreateVisualAssetInput,
   type VisualAssetRecord,
   type VisualAssetRepository,
+  CreativeAssetConflictError,
+  CreativeJobNotFoundError,
 } from '@parisian-shopper/application';
-import { type VisualAsset as PrismaVisualAsset } from '@prisma/client';
+import { Prisma, type VisualAsset as PrismaVisualAsset } from '@prisma/client';
 import { PrismaService } from '../prisma.service.js';
 
 @Injectable()
@@ -13,6 +15,14 @@ export class PrismaVisualAssetRepository implements VisualAssetRepository {
 
   public async createAsset(input: CreateVisualAssetInput): Promise<VisualAssetRecord> {
     return this.prisma.$transaction(async (tx) => {
+      // Row lock on CreativeJob to serialize version allocation under concurrency
+      const locked = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM creative_jobs WHERE id = ${input.creativeJobId}::uuid FOR UPDATE
+      `;
+      if (locked.length === 0) {
+        throw new CreativeJobNotFoundError(input.creativeJobId);
+      }
+
       const latest = await tx.visualAsset.findFirst({
         where: { creativeJobId: input.creativeJobId },
         orderBy: { versionNumber: 'desc' },
@@ -20,28 +30,34 @@ export class PrismaVisualAssetRepository implements VisualAssetRepository {
       });
       const nextVersion = (latest?.versionNumber ?? 0) + 1;
 
-      const created = await tx.visualAsset.create({
-        data: {
-          creativeJobId: input.creativeJobId,
-          versionNumber: nextVersion,
-          assetRole: input.assetRole,
-          mimeType: input.mimeType,
-          width: input.width,
-          height: input.height,
-          byteSize: input.byteSize,
-          sha256: input.sha256,
-          storageKey: input.storageKey,
-          provider: input.provider ?? null,
-          model: input.model ?? null,
-          seed: input.seed ?? null,
-          promptVersion: input.promptVersion ?? null,
-          creativeBriefVersion: input.creativeBriefVersion ?? null,
-          sourceProductAssetDigest: input.sourceProductAssetDigest,
-          backgroundAssetDigest: input.backgroundAssetDigest ?? null,
-        },
-      });
-
-      return toRecord(created);
+      try {
+        const created = await tx.visualAsset.create({
+          data: {
+            creativeJobId: input.creativeJobId,
+            versionNumber: nextVersion,
+            assetRole: input.assetRole,
+            mimeType: input.mimeType,
+            width: input.width,
+            height: input.height,
+            byteSize: input.byteSize,
+            sha256: input.sha256,
+            storageKey: input.storageKey,
+            provider: input.provider ?? null,
+            model: input.model ?? null,
+            seed: input.seed ?? null,
+            promptVersion: input.promptVersion ?? null,
+            creativeBriefVersion: input.creativeBriefVersion ?? null,
+            sourceProductAssetDigest: input.sourceProductAssetDigest,
+            backgroundAssetDigest: input.backgroundAssetDigest ?? null,
+          },
+        });
+        return toRecord(created);
+      } catch (err: unknown) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          throw new CreativeAssetConflictError(input.creativeJobId, nextVersion);
+        }
+        throw err;
+      }
     });
   }
 

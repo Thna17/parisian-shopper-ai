@@ -25,8 +25,9 @@ CREATE TYPE "VisualValidationStatus" AS ENUM (
 );
 
 CREATE TYPE "CreativeRevisionType" AS ENUM (
-  'EDIT',
-  'REGENERATE'
+  'EDIT_BACKGROUND',
+  'REGENERATE_BACKGROUND',
+  'RETRY_FAILED'
 );
 
 CREATE TYPE "CreativeApprovalDecision" AS ENUM (
@@ -204,3 +205,19 @@ BEGIN
 END; $$;
 CREATE TRIGGER creative_revision_requests_core_immutable BEFORE UPDATE ON "creative_revision_requests"
 FOR EACH ROW EXECUTE FUNCTION prevent_creative_revision_request_core_mutation();
+
+CREATE FUNCTION check_creative_approval_same_asset() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.visual_validation_result_id IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM "visual_validation_results"
+      WHERE "id" = NEW.visual_validation_result_id
+        AND "visual_asset_id" = NEW.visual_asset_id
+    ) THEN
+      RAISE EXCEPTION 'visual_validation_result does not belong to visual_asset';
+    END IF;
+  END IF;
+  RETURN NEW;
+END; $$;
+CREATE TRIGGER creative_approval_same_asset BEFORE INSERT OR UPDATE ON "creative_approval_events"
+FOR EACH ROW EXECUTE FUNCTION check_creative_approval_same_asset();

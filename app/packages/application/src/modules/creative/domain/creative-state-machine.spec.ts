@@ -6,9 +6,11 @@ import {
   creativeJobStatusSchema,
   creativeRevisionTypeSchema,
   isTerminalCreativeStatus,
+  validateCreativeRevisionInstruction,
   visualAssetRoleSchema,
   visualValidationStatusSchema,
 } from './creative.js';
+import { CreativeInvalidTransitionError, CreativeTerminalStateError } from './creative-errors.js';
 import {
   DEFAULT_DEVELOPMENT_PROFILE,
   DEVELOPMENT_ONLY_CREATIVE_PROFILE,
@@ -82,7 +84,11 @@ describe('Creative Domain & State Machine', () => {
 
       expect(() => {
         assertCreativeJobTransition('REQUESTED', 'CREATIVE_APPROVED');
-      }).toThrow(/Invalid creative job transition/);
+      }).toThrow(CreativeInvalidTransitionError);
+
+      expect(() => {
+        assertCreativeJobTransition('CREATIVE_APPROVED', 'REQUESTED');
+      }).toThrow(CreativeTerminalStateError);
     });
   });
 
@@ -109,13 +115,55 @@ describe('Creative Domain & State Machine', () => {
     });
 
     it('validates CreativeRevisionType and ApprovalDecision enums', () => {
-      expect(creativeRevisionTypeSchema.parse('EDIT')).toBe('EDIT');
-      expect(creativeRevisionTypeSchema.parse('REGENERATE')).toBe('REGENERATE');
-      expect(() => creativeRevisionTypeSchema.parse('CANCEL')).toThrow();
+      expect(creativeRevisionTypeSchema.parse('EDIT_BACKGROUND')).toBe('EDIT_BACKGROUND');
+      expect(creativeRevisionTypeSchema.parse('REGENERATE_BACKGROUND')).toBe(
+        'REGENERATE_BACKGROUND',
+      );
+      expect(creativeRevisionTypeSchema.parse('RETRY_FAILED')).toBe('RETRY_FAILED');
+      expect(() => creativeRevisionTypeSchema.parse('EDIT')).toThrow();
+      expect(() => creativeRevisionTypeSchema.parse('REGENERATE')).toThrow();
 
       expect(creativeApprovalDecisionSchema.parse('CREATIVE_APPROVED')).toBe('CREATIVE_APPROVED');
       expect(creativeApprovalDecisionSchema.parse('CREATIVE_REJECTED')).toBe('CREATIVE_REJECTED');
       expect(() => creativeApprovalDecisionSchema.parse('MAYBE')).toThrow();
+    });
+
+    it('validates creative revision instruction rules', () => {
+      // EDIT_BACKGROUND requires non-empty instruction
+      const editEmpty = validateCreativeRevisionInstruction('EDIT_BACKGROUND', '');
+      expect(editEmpty.valid).toBe(false);
+      expect(editEmpty.error).toMatch(/Instruction is required/);
+
+      const editWhitespace = validateCreativeRevisionInstruction('EDIT_BACKGROUND', '   ');
+      expect(editWhitespace.valid).toBe(false);
+
+      const editValid = validateCreativeRevisionInstruction(
+        'EDIT_BACKGROUND',
+        'Make the lighting softer and marble darker.',
+      );
+      expect(editValid.valid).toBe(true);
+      expect(editValid.normalizedInstruction).toBe('Make the lighting softer and marble darker.');
+
+      // Length boundary (> 1000 chars)
+      const longText = 'a'.repeat(1001);
+      const editTooLong = validateCreativeRevisionInstruction('EDIT_BACKGROUND', longText);
+      expect(editTooLong.valid).toBe(false);
+
+      // REGENERATE_BACKGROUND instruction is optional
+      const regenNone = validateCreativeRevisionInstruction('REGENERATE_BACKGROUND', null);
+      expect(regenNone.valid).toBe(true);
+      expect(regenNone.normalizedInstruction).toBeUndefined();
+
+      const regenWithText = validateCreativeRevisionInstruction(
+        'REGENERATE_BACKGROUND',
+        'Try a lighter background tone',
+      );
+      expect(regenWithText.valid).toBe(true);
+      expect(regenWithText.normalizedInstruction).toBe('Try a lighter background tone');
+
+      // RETRY_FAILED instruction is not required
+      const retryNoText = validateCreativeRevisionInstruction('RETRY_FAILED', undefined);
+      expect(retryNoText.valid).toBe(true);
     });
 
     it('maintains explicit validator versioning and severity levels', () => {

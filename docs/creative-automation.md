@@ -121,34 +121,33 @@ app/packages/
 Defined in `@parisian-shopper/application` (`src/modules/creative/application/creative-provider.port.ts`):
 
 ```typescript
-export type AspectRatio = '1:1' | '4:5' | '9:16' | '16:9';
-
-export interface ImageDimensions {
-  readonly width: number;
-  readonly height: number;
-}
-
-export interface GenerateSceneRequest {
+export interface CreativeBrief {
   readonly creativeJobId: string;
   readonly contentVersionId: string;
-  readonly creativeBrief: string;
+  readonly briefText: string;
   readonly stylePrompt: string;
   readonly negativePrompt?: string;
-  readonly dimensions: ImageDimensions;
-  readonly aspectRatio: AspectRatio;
-  readonly seed?: number;
-  readonly timeoutMs?: number;
+  readonly targetWidth: number;
+  readonly targetHeight: number;
+  readonly aspectRatio: string;
+  readonly creativeProfile: string;
 }
 
-export interface GenerateSceneResult {
+export interface CreativeProviderOptions {
+  readonly seed?: number;
+  readonly timeoutMs?: number;
+  readonly modelOverride?: string;
+}
+
+export interface GeneratedBackgroundAsset {
   readonly imageBuffer: Buffer;
   readonly mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
   readonly width: number;
   readonly height: number;
-  readonly provider: string;
+  readonly providerId: string;
   readonly model: string;
   readonly seed?: number;
-  readonly metadata: Readonly<Record<string, unknown>>;
+  readonly metadata?: Readonly<Record<string, unknown>>;
   readonly latencyMs: number;
   readonly estimatedCostUsd?: number;
 }
@@ -156,11 +155,54 @@ export interface GenerateSceneResult {
 export const CREATIVE_PROVIDER = Symbol('CREATIVE_PROVIDER');
 
 export interface CreativeProvider {
-  readonly providerName: string;
-  readonly defaultModel: string;
-  generateScene(request: GenerateSceneRequest): Promise<GenerateSceneResult>;
+  readonly providerId: string;
+  generateBackground(
+    brief: CreativeBrief,
+    options?: CreativeProviderOptions,
+  ): Promise<GeneratedBackgroundAsset>;
 }
 ```
+
+> **Architectural Invariant:**
+> `CreativeProvider` generates AI backgrounds ONLY. It is strictly prohibited from compositing or manipulating the canonical product packaging. Providers execute exclusively in background queue workers, never on HTTP/Telegram request cycles.
+
+### 4.1 Dedicated HeroCompositor Port
+
+Defined in `@parisian-shopper/application` (`src/modules/creative/application/hero-compositor.port.ts`):
+
+```typescript
+export interface CompositeVisualInput {
+  readonly creativeJobId: string;
+  readonly canonicalProductBuffer: Buffer;
+  readonly canonicalProductMimeType: string;
+  readonly canonicalProductSha256: string;
+  readonly backgroundBuffer: Buffer;
+  readonly backgroundMimeType: string;
+  readonly backgroundSha256: string;
+  readonly targetWidth: number;
+  readonly targetHeight: number;
+  readonly aspectRatio: string;
+  readonly compositionMarginPercent?: number;
+}
+
+export interface CompositeVisualResult {
+  readonly compositedBuffer: Buffer;
+  readonly mimeType: 'image/png' | 'image/webp';
+  readonly width: number;
+  readonly height: number;
+  readonly byteSize: number;
+  readonly sha256: string;
+  readonly latencyMs: number;
+}
+
+export const HERO_COMPOSITOR = Symbol('HERO_COMPOSITOR');
+
+export interface HeroCompositor {
+  composite(input: CompositeVisualInput): Promise<CompositeVisualResult>;
+}
+```
+
+Deterministic local compositing (via Sharp in future PR) places the verified canonical product image over the generated background without generative hallucination.
 
 ### Provider Implementation Strategy:
 1. **`FakeCreativeProvider` (Mandatory First Provider — PR 2A-2):** Deterministic local fixture generator for unit, integration, and CI test suites. Zero network overhead, zero API cost.
@@ -193,41 +235,40 @@ $$\text{Canonical Product Image} \longrightarrow \text{Safe Ingestion} \longrigh
 Defined in `@parisian-shopper/application` (`src/modules/creative/application/asset-storage.port.ts`):
 
 ```typescript
-export enum AssetRole {
-  CANONICAL_PRODUCT = 'CANONICAL_PRODUCT',
-  GENERATED_BACKGROUND = 'GENERATED_BACKGROUND',
-  COMPOSITED_CREATIVE = 'COMPOSITED_CREATIVE',
-  PREVIEW = 'PREVIEW',
-}
+export const ASSET_STORAGE = Symbol('ASSET_STORAGE');
 
-export interface StoredAssetRecord {
+export interface StoredAssetMetadata {
   readonly storageKey: string;
   readonly sha256Digest: string;
   readonly mimeType: string;
   readonly byteSize: number;
-  readonly width: number;
-  readonly height: number;
-  readonly assetRole: AssetRole;
-  readonly publicUrl: string;
+  readonly width?: number;
+  readonly height?: number;
+  readonly assetRole: VisualAssetRole;
+  readonly publicUrl?: string;
+  readonly createdAt: Date;
 }
 
-export const ASSET_STORAGE = Symbol('ASSET_STORAGE');
+export interface SaveAssetInput {
+  readonly buffer: Buffer;
+  readonly mimeType: string;
+  readonly assetRole: VisualAssetRole;
+  readonly width?: number;
+  readonly height?: number;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
 
 export interface AssetStoragePort {
-  saveAsset(
-    buffer: Buffer,
-    mimeType: string,
-    role: AssetRole,
-    metadata?: Record<string, unknown>,
-  ): Promise<StoredAssetRecord>;
-
+  saveAsset(input: SaveAssetInput): Promise<StoredAssetMetadata>;
+  getMetadata(storageKey: string): Promise<StoredAssetMetadata | null>;
   getAssetBuffer(storageKey: string): Promise<Buffer | null>;
-  deleteAsset(storageKey: string): Promise<boolean>;
+  assetExists(storageKey: string): Promise<boolean>;
 }
 ```
 
 - **Content Addressing:** Derived strictly from `sha256(imageBytes)`. Deduplication operates on cryptographic byte hashes, never filenames.
-- **Role Isolation:** Every asset records its explicit `AssetRole` to distinguish raw source photos from backgrounds and final composited creatives.
+- **Role Isolation:** Every asset records its explicit `AssetRole` (`CANONICAL_PRODUCT`, `GENERATED_BACKGROUND`, `COMPOSITED_CREATIVE`, `PREVIEW`).
+- **Audit Preservation & Immutability:** Normal application `AssetStoragePort` provides NO deletion method. Historical assets participate in the audit chain and must not be casually deleted. Any future retention or legal compliance purge must be modeled as a separate privileged operational port (e.g., `AssetRetentionPort` or `AssetAdministrationPort`).
 
 ---
 

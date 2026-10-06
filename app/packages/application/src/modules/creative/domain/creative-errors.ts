@@ -49,3 +49,43 @@ export class CreativeActiveRevisionExistsError extends ApplicationError {
     });
   }
 }
+
+export class CreativeTerminalStateError extends ApplicationError {
+  public constructor(status: CreativeJobStatus) {
+    super({
+      code: 'CONFLICT',
+      publicMessage: `Cannot transition from terminal creative status: ${status}`,
+      details: { status },
+    });
+  }
+}
+
+export class CreativeRevisionValidationError extends ApplicationError {
+  public constructor(message: string) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Creative revision validation failed: ${message}`,
+      details: { message },
+    });
+  }
+}
+
+export class CreativeApprovalMismatchedAssetError extends ApplicationError {
+  public constructor(visualAssetId: string, visualValidationResultId: string) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Visual validation result ${visualValidationResultId} does not belong to visual asset ${visualAssetId}`,
+      details: { visualAssetId, visualValidationResultId },
+    });
+  }
+}
+
+export class CreativeAssetConflictError extends ApplicationError {
+  public constructor(creativeJobId: string, versionNumber: number) {
+    super({
+      code: 'CONFLICT',
+      publicMessage: `Visual asset version ${versionNumber} already exists for creative job ${creativeJobId}`,
+      details: { creativeJobId, versionNumber },
+    });
+  }
+}

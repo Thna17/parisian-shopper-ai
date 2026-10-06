@@ -3,6 +3,7 @@ import {
   type CreativeApprovalEventRecord,
   type CreativeApprovalRepository,
   type RecordCreativeApprovalInput,
+  CreativeApprovalMismatchedAssetError,
 } from '@parisian-shopper/application';
 import { type CreativeApprovalEvent as PrismaCreativeApprovalEvent } from '@prisma/client';
 import { PrismaService } from '../prisma.service.js';
@@ -14,6 +15,19 @@ export class PrismaCreativeApprovalRepository implements CreativeApprovalReposit
   public async recordApproval(
     input: RecordCreativeApprovalInput,
   ): Promise<CreativeApprovalEventRecord> {
+    if (input.visualValidationResultId !== undefined && input.visualValidationResultId !== null) {
+      const validationResult = await this.prisma.visualValidationResult.findUnique({
+        where: { id: input.visualValidationResultId },
+        select: { visualAssetId: true },
+      });
+      if (validationResult === null || validationResult.visualAssetId !== input.visualAssetId) {
+        throw new CreativeApprovalMismatchedAssetError(
+          input.visualAssetId,
+          input.visualValidationResultId,
+        );
+      }
+    }
+
     const created = await this.prisma.creativeApprovalEvent.create({
       data: {
         creativeJobId: input.creativeJobId,

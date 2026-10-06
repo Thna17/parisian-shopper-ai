@@ -24,15 +24,18 @@ export interface SaveAssetInput {
 }
 
 /**
- * Content-Addressable Storage (CAS) contract.
+ * Content-Addressable Storage (CAS) contract for normal application workflows.
  *
  * Invariants:
  * 1. Storage keys must be derived deterministically from sha256(raw bytes), never from user-supplied filenames.
  * 2. Distinct asset roles separate canonical catalog photography from generated backgrounds and composited creatives.
+ * 3. Historical assets participate in the audit chain and must not be casually deleted through application ports.
+ *    Any future legal or operational retention purge must be handled by a separate privileged port
+ *    (e.g., AssetRetentionPort or AssetAdministrationPort).
  */
 export interface AssetStoragePort {
   saveAsset(input: SaveAssetInput): Promise<StoredAssetMetadata>;
   getMetadata(storageKey: string): Promise<StoredAssetMetadata | null>;
   getAssetBuffer(storageKey: string): Promise<Buffer | null>;
-  deleteAsset(storageKey: string): Promise<boolean>;
+  assetExists(storageKey: string): Promise<boolean>;
 }

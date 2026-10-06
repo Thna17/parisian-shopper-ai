@@ -99,6 +99,9 @@ Processing untrusted image binaries with high-performance native engines (`libvi
 2. **Access Control & Asset Serving:**
    - Local asset directory is served through NestJS controllers with authenticated authorization or signed temporary access tokens.
    - In production S3 environments, assets are private by default and accessed via time-limited pre-signed URLs (maximum 15-minute TTL).
+3. **Storage Immutability & Privileged Retention:**
+   - Normal application `AssetStoragePort` provides NO deletion methods. Assets participate in the tamper-evident audit chain and cannot be casually deleted.
+   - Any future legal compliance or GDPR/retention purges must occur through a separate privileged port (`AssetRetentionPort` / `AssetAdministrationPort`) requiring administrative privileges and immutable audit logging.
 
 ---
 

@@ -1,4 +1,5 @@
 export * from './creative-provider.port.js';
+export * from './hero-compositor.port.js';
 export * from './asset-storage.port.js';
 export * from './creative-job.repository.js';
 export * from './visual-asset.repository.js';

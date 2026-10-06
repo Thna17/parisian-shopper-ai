@@ -1,24 +1,29 @@
 export const CREATIVE_PROVIDER = Symbol('CREATIVE_PROVIDER');
 
-export interface GenerateBackgroundRequest {
+export interface CreativeBrief {
   readonly creativeJobId: string;
   readonly contentVersionId: string;
-  readonly creativeBrief: string;
+  readonly briefText: string;
   readonly stylePrompt: string;
   readonly negativePrompt?: string;
-  readonly width: number;
-  readonly height: number;
+  readonly targetWidth: number;
+  readonly targetHeight: number;
   readonly aspectRatio: string;
-  readonly seed?: number;
-  readonly timeoutMs?: number;
+  readonly creativeProfile: string;
 }
 
-export interface GenerateBackgroundResult {
+export interface CreativeProviderOptions {
+  readonly seed?: number;
+  readonly timeoutMs?: number;
+  readonly modelOverride?: string;
+}
+
+export interface GeneratedBackgroundAsset {
   readonly imageBuffer: Buffer;
   readonly mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
   readonly width: number;
   readonly height: number;
-  readonly provider: string;
+  readonly providerId: string;
   readonly model: string;
   readonly seed?: number;
   readonly metadata?: Readonly<Record<string, unknown>>;
@@ -29,12 +34,15 @@ export interface GenerateBackgroundResult {
 /**
  * CreativeProvider port.
  *
- * Invariant:
- * The creative provider generates ambient background imagery ONLY.
- * It is strictly prohibited from synthesizing the canonical product packaging.
+ * Invariants:
+ * 1. Background synthesis ONLY.
+ * 2. CreativeProvider MUST NEVER manipulate, synthesize, or modify the canonical product imagery.
+ * 3. Execution occurs exclusively asynchronously in background queue workers, never on HTTP/Telegram request cycles.
  */
 export interface CreativeProvider {
-  readonly providerName: string;
-  readonly defaultModel: string;
-  generateBackground(request: GenerateBackgroundRequest): Promise<GenerateBackgroundResult>;
+  readonly providerId: string;
+  generateBackground(
+    brief: CreativeBrief,
+    options?: CreativeProviderOptions,
+  ): Promise<GeneratedBackgroundAsset>;
 }
