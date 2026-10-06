@@ -84,3 +84,15 @@ The license exception registration gate is complete for the current Darwin ARM64
 ## 9. Higgsfield SDK
 
 `@higgsfield/client@0.2.6` declares MIT and depends on Axios and form-data. It passes the existing dependency license policy without an exception. This approval does not cover Higgsfield service terms, generated-media rights, account procurement, or commercial usage terms; those remain separate management/legal review items.
+
+## 10. Package Manager & Native Platform Resolution Evaluation (2026-10-06)
+
+An evaluation of upgrading from `pnpm 9.15.1` to `pnpm 12.9.1` was performed to investigate whether newer pnpm releases safely isolate native optional dependencies (`@img/sharp-libvips-*` and `@img/sharp-*`) on Darwin ARM64 and Linux x64 glibc without activating incompatible Linux musl packages.
+
+Findings:
+- **Platform discrimination in pnpm 12.9.1:** Confirmed. In isolation, pnpm 12.9.1 activates strictly `@img/sharp-libvips-darwin-arm64@1.0.4` on Darwin ARM64 and strictly `@img/sharp-libvips-linux-x64@1.0.4` on Linux x64 glibc. `linuxmusl` packages are correctly omitted on glibc and only activated on musl environments (verified via Alpine negative test).
+- **Workspace upgrade blockers:** Upgrading the repository package manager to pnpm 12 introduces breaking workspace changes:
+  1. pnpm 12 replaces `onlyBuiltDependencies` with `allowBuilds` and fails with `ERR_PNPM_IGNORED_BUILDS` on 11 existing workspace dependencies (`@prisma/client`, `prisma`, `esbuild`, `cpu-features`, etc.).
+  2. Root `package.json` `pnpm.overrides` is deprecated/ignored by pnpm 11+.
+- **Decision:** The repository package manager pin remains at `pnpm@9.15.1`. Sharp installation and PR 2A-2B remain **BLOCKED** until workspace script execution policies are formally adapted in a separate infrastructure task. Production target remains **UNRESOLVED / REQUIRES RE-REVIEW**.
+
