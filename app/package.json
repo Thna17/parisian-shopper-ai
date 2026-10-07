@@ -6,14 +6,9 @@
   "license": "UNLICENSED",
   "engines": {
     "node": "22.22.2",
-    "pnpm": "9.15.1"
+    "pnpm": "12.9.1"
   },
-  "packageManager": "pnpm@9.15.1",
-  "pnpm": {
-    "overrides": {
-      "deepmerge-ts": "8.0.0"
-    }
-  },
+  "packageManager": "pnpm@12.9.1",
   "scripts": {
     "build": "tsc -b --force",
     "boundaries": "node scripts/check-boundaries.mjs",

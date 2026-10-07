@@ -1,21 +1,20 @@
 # Native Runtime Targets & Package Manager Platform Resolution
 
 **Document:** `/docs/native-runtime-targets.md`  
-**Status:** EVALUATION COMPLETE / BLOCKER IDENTIFIED (UPGRADE BLOCKED BY WORKSPACE LIFECYCLE SCRIPTS BREAKAGE)  
-**Last Evaluated:** 2026-10-06  
+**Status:** WORKSPACE INFRASTRUCTURE MIGRATED TO PNPM 12.9.1 / PR 2A-2B UNBLOCKED FOR CONTROLLED NATIVE EVALUATION  
+**Last Evaluated:** 2026-10-07  
 **Evaluator:** `HONG THAN BRATHNA — TECHNICAL DEVELOPER`  
 
 ---
 
 ## 1. Executive Summary
 
-This evaluation was conducted to assess upgrading the project's package manager (`pnpm 9.15.1`) to resolve native optional dependency platform filtering for `sharp@0.33.5`.
+This evaluation assessed upgrading the project's package manager (`pnpm 9.15.1`) to resolve native optional dependency platform filtering for `sharp@0.33.5`.
 
 - **Old pnpm version:** `9.15.1`
-- **Candidate pnpm version evaluated:** `12.9.1` (latest stable pnpm 12 release)
-- **Secondary pnpm versions evaluated:** `11.28.2` (pnpm 11), `10.34.6` (pnpm 10)
-- **Evaluation Status:** **REMAIN_BLOCKED**
-- **Recommendation:** Do not migrate repository package manager to pnpm 12.x or 11.x at this time; PR 2A-2B remains blocked from merging sharp into the workspace until script build allowlists or isolated resolution strategies are implemented.
+- **Current repository pnpm version:** `12.9.1` (migrated in dedicated infrastructure PR; see `docs/package-manager-migration.md`)
+- **Evaluation Status:** **WORKSPACE_INFRASTRUCTURE_UNBLOCKED**
+- **Recommendation:** Workspace build-script lifecycle policies (`allowBuilds`) and configuration relocations are now fully resolved under `pnpm 12.9.1`. PR 2A-2B can now proceed in isolation with the approved native target matrix without risk of `linuxmusl` package pollution. Sharp remains NOT installed in this PR.
 
 ---
 
