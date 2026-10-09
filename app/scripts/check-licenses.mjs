@@ -24,7 +24,7 @@ const exceptions = new Map(
   policy.exceptions.map((exception) => [`${exception.package}|${exception.license}`, exception]),
 );
 
-const raw = execFileSync('pnpm', ['licenses', 'list', '--json'], {
+const raw = execFileSync('pnpm', ['-r', 'licenses', 'list', '--json'], {
   cwd: process.cwd(),
   encoding: 'utf8',
 });

@@ -1,20 +1,22 @@
 # Native Runtime Targets & Package Manager Platform Resolution
 
 **Document:** `/docs/native-runtime-targets.md`  
-**Status:** WORKSPACE INFRASTRUCTURE MIGRATED TO PNPM 12.9.1 / PR 2A-2B UNBLOCKED FOR CONTROLLED NATIVE EVALUATION  
-**Last Evaluated:** 2026-10-07  
+**Status:** PR 2A-2B COMPLETED & VERIFIED / SHARP 0.33.5 INSTALLED  
+**Last Evaluated:** 2026-10-09  
 **Evaluator:** `HONG THAN BRATHNA — TECHNICAL DEVELOPER`  
 
 ---
 
 ## 1. Executive Summary
 
-This evaluation assessed upgrading the project's package manager (`pnpm 9.15.1`) to resolve native optional dependency platform filtering for `sharp@0.33.5`.
+Phase 2A (PR 2A-2B) successfully installed `sharp@0.33.5` and implemented `SharpHeroCompositor` following the workspace infrastructure migration to `pnpm 12.9.1`.
 
-- **Old pnpm version:** `9.15.1`
-- **Current repository pnpm version:** `12.9.1` (migrated in dedicated infrastructure PR; see `docs/package-manager-migration.md`)
-- **Evaluation Status:** **WORKSPACE_INFRASTRUCTURE_UNBLOCKED**
-- **Recommendation:** Workspace build-script lifecycle policies (`allowBuilds`) and configuration relocations are now fully resolved under `pnpm 12.9.1`. PR 2A-2B can now proceed in isolation with the approved native target matrix without risk of `linuxmusl` package pollution. Sharp remains NOT installed in this PR.
+- **Package manager version:** `pnpm 12.9.1`
+- **Installed Sharp version:** `sharp@0.33.5`
+- **Darwin ARM64 runtime packages:** `@img/sharp-darwin-arm64@0.33.5`, `@img/sharp-libvips-darwin-arm64@1.0.4`
+- **Linux x64 glibc runtime packages:** `@img/sharp-linux-x64@0.33.5`, `@img/sharp-libvips-linux-x64@1.0.4`
+- **Linux musl packages:** Confirmed **NOT ACTIVE** on Linux x64 glibc.
+- **Production Target Status:** **UNRESOLVED / REQUIRES RE-REVIEW**
 
 ---
 
@@ -60,56 +62,38 @@ Evaluation in clean isolated environments yielded the following results across t
 
 ---
 
-## 4. Why pnpm 12 / 11 Upgrades Cannot Be Applied to the Repository (Stop Conditions)
+## 4. Resolution of Workspace Blockers & Migration to pnpm 12.9.1
 
-While pnpm 12.9.1 solved the native libc platform filtering problem in isolation, upgrading the repository to pnpm 12.9.1 violates **Stop Condition 3 ("current workspace breaks materially")**:
+Following the infrastructure migration PR (`chore/migrate-workspace-pnpm-12`), all workspace script execution blockers were formally addressed:
+1. `allowBuilds` policy was explicitly approved in `app/pnpm-workspace.yaml` for legitimate dependencies (`@prisma/client`, `prisma`, `esbuild`, `msgpackr-extract`, `unrs-resolver`, `@parcel/watcher`, `protobufjs`).
+2. Telemetry and unneeded install scripts (`@scarf/scarf`, `cpu-features`, `ssh2`) were reviewed and blocked/disallowed.
+3. In PR 2A-2B, `sharp: true` was added to `allowBuilds` in `app/pnpm-workspace.yaml`.
+4. `pnpm.overrides` was migrated to `pnpm-workspace.yaml`.
 
-### 1. Breaking Change in Script Execution Policy (`allowBuilds` / `ERR_PNPM_IGNORED_BUILDS`)
-In pnpm 10+, lifecycle build scripts (e.g. `install`, `postinstall`) are blocked by default for security. In pnpm 12, running `pnpm install` fails with `ERR_PNPM_IGNORED_BUILDS` for 11 critical workspace packages:
-- `@parcel/watcher`
-- `@prisma/client`
-- `@prisma/engines`
-- `@scarf/scarf`
-- `cpu-features`
-- `esbuild`
-- `msgpackr-extract`
-- `prisma`
-- `protobufjs`
-- `ssh2`
-- `unrs-resolver`
-
-In pnpm 9, the repository relied on `onlyBuiltDependencies` in `pnpm-workspace.yaml`. In pnpm 12, pnpm replaces this with `allowBuilds` and refuses to run builds unless explicitly approved or configured, causing frozen-lockfile and CI installs to break.
-
-### 2. Breaking Change in Configuration Settings (`pnpm.overrides`)
-In pnpm 11 and 12, the `"pnpm"` configuration field in root `package.json` is no longer supported and emits deprecation/breakage warnings:
-`[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides".`
-The repository's override for `deepmerge-ts@8.0.0` would require relocation to `pnpm-workspace.yaml`.
-
-### 3. Portable Lockfile vs Actual Installation
-- Lockfile format in pnpm 12 uses v9 format with an updated structure and entries.
-- While the portable lockfile records optional packages for multiple platforms in its index, pnpm 12 only installs packages matching the current host architecture and libc.
-- However, because the package manager upgrade introduces extensive breaking changes across workspace build script permissions and configuration keys, the repository package manager pin cannot be updated in this evaluation PR without destabilizing the application stack.
+With pnpm 12.9.1 in place:
+- Darwin ARM64 activates strictly `@img/sharp-darwin-arm64@0.33.5` and `@img/sharp-libvips-darwin-arm64@1.0.4`.
+- Linux x64 glibc activates strictly `@img/sharp-linux-x64@0.33.5` and `@img/sharp-libvips-linux-x64@1.0.4`.
+- Incompatible musl packages are completely excluded on glibc environments.
 
 ---
 
 ## 5. Status of Native Targets
 
-| Platform | Target Designation | Status | Supported by pnpm 9.15.1? | Supported by pnpm 12.9.1? |
+| Platform | Target Designation | Status | Active Packages | License Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Darwin ARM64** | Development | Supported & Approved | YES (only arm64 active) | YES |
-| **Linux x64 glibc** | CI (`ubuntu-latest`) | Supported & Approved | NO (activates linuxmusl) | YES (correct libc filtering) |
-| **Linux x64 musl** | Incompatible | UNAPPROVED | N/A (unintentionally installed on pnpm 9) | Skipped properly on pnpm 12 |
-| **Production** | Unresolved | REQUIRES RE-REVIEW | UNRESOLVED | UNRESOLVED |
+| **Darwin ARM64** | Development | Supported & Verified | `@img/sharp-darwin-arm64@0.33.5`<br>`@img/sharp-libvips-darwin-arm64@1.0.4` | Approved Exception |
+| **Linux x64 glibc** | CI (`ubuntu-latest`) | Supported & Verified | `@img/sharp-linux-x64@0.33.5`<br>`@img/sharp-libvips-linux-x64@1.0.4` | Approved Exception |
+| **Linux x64 musl** | Incompatible | UNAPPROVED | None (correctly omitted by pnpm 12.9.1) | N/A |
+| **Production** | Unresolved | REQUIRES RE-REVIEW | UNRESOLVED | REQUIRES RE-REVIEW |
 
 ---
 
-## 6. Current Recommendation
+## 6. PR 2A-2B Completion Status
 
-**REMAIN_BLOCKED**
+**COMPLETED & VERIFIED**
 
-1. Maintain package manager pin at `pnpm@9.15.1` for now.
-2. Do **NOT** install `sharp@0.33.5` into `app/package.json` on `main`.
-3. Do **NOT** implement `SharpHeroCompositor`.
-4. PR 2A-2B remains blocked until either:
-   - A dedicated infrastructure task establishes a full pnpm 12 migration plan (including `allowBuilds` policy for all 11 binary dependencies and relocating `pnpm.overrides` to `pnpm-workspace.yaml`), OR
-   - An alternative approach for native graphics processing is approved.
+1. `sharp@0.33.5` is installed in `@parisian-shopper/application`.
+2. Native platform resolution passes on both Darwin ARM64 and Linux x64 glibc.
+3. Zero unapproved native packages are activated.
+4. `SharpHeroCompositor` adapter is fully implemented and passes all unit, integration, and security checks.
+5. Production target remains explicitly **UNRESOLVED / REQUIRES RE-REVIEW**.

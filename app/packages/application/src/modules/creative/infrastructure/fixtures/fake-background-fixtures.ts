@@ -81,10 +81,10 @@ export function generateDeterministicBackgroundPng(options: DeterministicPngOpti
   }
 
   // Modulate slightly with seed to yield distinct deterministic byte sequences
-  const seedShift = Math.abs(seed) % 32;
-  const r = (baseR + seedShift) % 256;
-  const g = (baseG + seedShift * 2) % 256;
-  const b = (baseB + seedShift * 3) % 256;
+  const seedShift = Math.abs(seed) % 8;
+  const r = Math.min(255, Math.max(0, baseR - seedShift));
+  const g = Math.min(255, Math.max(0, baseG - seedShift));
+  const b = Math.min(255, Math.max(0, baseB - seedShift));
 
   // 1. Standard PNG Signature (8 bytes)
   const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -111,10 +111,10 @@ export function generateDeterministicBackgroundPng(options: DeterministicPngOpti
   for (let y = 0; y < height; y++) {
     const rowOffset = y * rowSize;
     rawData.writeUInt8(0, rowOffset); // Filter type: 0 (None)
-    const yGradient = y % 16;
-    const pixelR = (r + yGradient) % 256;
-    const pixelG = (g + yGradient) % 256;
-    const pixelB = (b + yGradient) % 256;
+    const yGradient = (y % 8) - 4;
+    const pixelR = Math.min(255, Math.max(0, r + yGradient));
+    const pixelG = Math.min(255, Math.max(0, g + yGradient));
+    const pixelB = Math.min(255, Math.max(0, b + yGradient));
 
     for (let x = 0; x < width; x++) {
       const pixelOffset = rowOffset + 1 + x * 3;

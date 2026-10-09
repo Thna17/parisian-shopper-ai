@@ -183,3 +183,89 @@ export class AssetNotFoundError extends ApplicationError {
     });
   }
 }
+
+export class CreativeImageDecodeFailedError extends ApplicationError {
+  public constructor(
+    message = 'Failed to decode input image binary',
+    details?: Readonly<Record<string, unknown>>,
+  ) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Creative image decode failed: ${message}`,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}
+
+export class CreativeUnsupportedImageFormatError extends ApplicationError {
+  public constructor(format: string, expectedFormats: readonly string[]) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Unsupported image format "${format}". Expected one of: ${expectedFormats.join(', ')}`,
+      details: { format, expectedFormats },
+    });
+  }
+}
+
+export class CreativeInputTooLargeError extends ApplicationError {
+  public constructor(byteSize: number, maxBytes: number) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Image input size (${byteSize} bytes) exceeds maximum permitted limit of ${maxBytes} bytes`,
+      details: { byteSize, maxBytes },
+    });
+  }
+}
+
+export class CreativePixelLimitExceededError extends ApplicationError {
+  public constructor(pixels: number, maxPixels: number) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Image pixel count (${pixels} pixels) exceeds maximum permitted limit of ${maxPixels} pixels`,
+      details: { pixels, maxPixels },
+    });
+  }
+}
+
+export class CreativeAlphaRequiredError extends ApplicationError {
+  public constructor(
+    message = 'Canonical product image must contain usable alpha transparency for compositing',
+    details?: Readonly<Record<string, unknown>>,
+  ) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: message,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}
+
+export class CreativeInvalidLayoutError extends ApplicationError {
+  public constructor(reason: string, details?: Readonly<Record<string, unknown>>) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Creative invalid layout: ${reason}`,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}
+
+export class CreativeCompositionFailedError extends ApplicationError {
+  public constructor(reason: string, details?: Readonly<Record<string, unknown>>) {
+    super({
+      code: 'EXTERNAL_SERVICE_ERROR',
+      publicMessage: `Creative composition failed: ${reason}`,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}
+
+export class CreativeOutputTooLargeError extends ApplicationError {
+  public constructor(byteSize: number, maxBytes: number) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Composited output size (${byteSize} bytes) exceeds maximum limit of ${maxBytes} bytes`,
+      details: { byteSize, maxBytes },
+    });
+  }
+}

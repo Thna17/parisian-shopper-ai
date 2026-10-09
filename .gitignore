@@ -19,3 +19,5 @@
 app/.testcontainers.properties
 app/test-results/
 app/tmp/
+.pnpm-store/
+prompt.md

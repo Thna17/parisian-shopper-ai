@@ -14,14 +14,28 @@ export interface CompositeVisualInput {
   readonly compositionMarginPercent?: number;
 }
 
+export interface HeroBoundingBox {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface CompositeVisualResult {
   readonly compositedBuffer: Buffer;
-  readonly mimeType: 'image/png' | 'image/webp';
+  readonly mimeType: 'image/png';
   readonly width: number;
   readonly height: number;
   readonly byteSize: number;
   readonly sha256: string;
   readonly latencyMs: number;
+  readonly compositorVersion: string;
+  readonly heroScale: number;
+  readonly heroPlacement: string;
+  readonly heroBoundingBox: HeroBoundingBox;
+  readonly productDigest: string;
+  readonly backgroundDigest: string;
+  readonly outputDigest: string;
 }
 
 /**

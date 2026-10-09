@@ -205,7 +205,7 @@ export interface HeroCompositor {
 }
 ```
 
-Deterministic local compositing (via Sharp in future PR) places the verified canonical product image over the generated background without generative hallucination.
+In Phase 2A PR 2A-2B, the `SharpHeroCompositor` adapter is implemented in `@parisian-shopper/application` (`src/modules/creative/infrastructure/sharp-hero-compositor.adapter.ts`). It performs deterministic local compositing using `sharp@0.33.5`, placing the verified canonical product image over the generated background with mathematical precision, strict alpha validation, safe-margin enforcement, and zero generative modification.
 
 ### Provider Implementation Strategy:
 

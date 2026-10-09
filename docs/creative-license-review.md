@@ -96,3 +96,17 @@ Findings:
   2. Root `package.json` `pnpm.overrides` is deprecated/ignored by pnpm 11+.
 - **Decision:** The repository package manager pin remains at `pnpm@9.15.1`. Sharp installation and PR 2A-2B remain **BLOCKED** until workspace script execution policies are formally adapted in a separate infrastructure task. Production target remains **UNRESOLVED / REQUIRES RE-REVIEW**.
 
+## 11. PR 2A-2B Sharp Installation & License Verification (2026-10-09)
+
+Following completion of the workspace infrastructure migration to `pnpm 12.9.1` (`chore/migrate-workspace-pnpm-12`), `sharp@0.33.5` was installed in `@parisian-shopper/application` with `allowBuilds.sharp: true` in `app/pnpm-workspace.yaml`.
+
+- **Active Darwin ARM64 Packages:**
+  - `@img/sharp-darwin-arm64@0.33.5` (Apache-2.0)
+  - `@img/sharp-libvips-darwin-arm64@1.0.4` (LGPL-3.0-or-later — Covered by registered exception in `app/license-exceptions.json`)
+- **Active Linux x64 glibc Packages:**
+  - `@img/sharp-linux-x64@0.33.5` (Apache-2.0)
+  - `@img/sharp-libvips-linux-x64@1.0.4` (LGPL-3.0-or-later — Covered by registered exception in `app/license-exceptions.json`)
+- **Active musl Packages:** Confirmed **NONE**. Verified in clean Debian Bookworm Linux x64 container.
+- **License Gate Outcome:** `pnpm license:check` passes across all workspace packages and native optional dependencies. Existing libvips exceptions are strictly sufficient; no new exceptions were required or added.
+- **Production Deployment Status:** Remains **UNRESOLVED / REQUIRES RE-REVIEW**.
+

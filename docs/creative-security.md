@@ -160,3 +160,32 @@ When generating ambient backgrounds, reviewers may submit natural language revis
 - An application timeout maps to unknown provider state; it never triggers an automatic resubmission.
 
 The live account currently returns insufficient credits. This is recorded as `BLOCKED_EXTERNAL_CREDITS`, not a successful generation or a platform failure.
+
+---
+
+## 8. Sharp Hero Compositor Security Controls (Phase 2A PR 2A-2B)
+
+The deterministic `SharpHeroCompositor` adapter (`packages/application/src/modules/creative/infrastructure/sharp-hero-compositor.adapter.ts`) implements strict defensive measures against image-processing vulnerabilities:
+
+1. **Pixel Bomb & Decompression DoS Defenses:**
+   - Both product and background decoders configure `sharp({ limitInputPixels: 16777216, failOn: "error" })` (16 Megapixels).
+   - Input dimension guards enforce maximum 4096 × 4096 on background and target canvas dimensions.
+   - Streaming/Buffer size limit: Max 15 MB per input buffer.
+2. **Resource Throttling & Process Protection:**
+   - `sharp.cache({ memory: 128 * 1024 * 1024, files: 20, items: 100 })` prevents unbounded libvips memory growth.
+   - `sharp.concurrency(2)` restricts libvips thread pool usage.
+   - Application-level queue concurrency throttle restricts parallel compositing jobs to 2.
+3. **Metadata Stripping & Privacy:**
+   - Output images explicitly invoke `.withMetadata(false)` to strip all EXIF, GPS, camera metadata, ICC profiles, and comments from final visuals.
+4. **Product Invariant & Alpha Enforcement:**
+   - The product image MUST have an alpha channel (`channels >= 4` and `hasAlpha === true`). Opaque product photos are rejected immediately (`CreativeAlphaRequiredError`) to prevent canvas occlusion.
+   - Product layer undergoes linear aspect-ratio-preserving downscaling (`fit: "inside"`) with zero generative modification. Product RGB pixel identity is preserved.
+5. **Security Audit Governance (Advisory Review):**
+   - Sharp 0.33.5 inherits 3 upstream C-library advisories in bundled libvips dependencies:
+     - `GHSA-f88m-g3jw-g9cj` (libvips out-of-bounds read)
+     - `GHSA-rgj7-g3m4-5g8c` (libheif integer overflow)
+     - `GHSA-wq5f-xc86-pv6w` (librsvg resource exhaustion)
+   - These are formally ignored via `auditConfig.ignoreGhsas` in `app/pnpm-workspace.yaml` based on technical review:
+     - All inputs are strictly restricted to PNG, WebP, and JPEG formats (SVG and HEIF inputs are rejected).
+     - Execution is isolated within background worker queues with memory caps and 16MP decompression limits.
+     - No untrusted or arbitrary native files are loaded via filesystem paths.

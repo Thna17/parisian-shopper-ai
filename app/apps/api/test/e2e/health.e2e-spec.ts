@@ -18,7 +18,11 @@ describe('API foundation (e2e)', () => {
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)
-      .useValue({ $connect: jest.fn(), $disconnect: jest.fn() })
+      .useValue({
+        $connect: jest.fn(),
+        $disconnect: jest.fn(),
+        $transaction: jest.fn().mockImplementation(() => Promise.resolve([])),
+      })
       .overrideProvider(DatabaseHealthIndicator)
       .useValue(databaseHealth)
       .overrideProvider(ValkeyConnectionService)
