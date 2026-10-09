@@ -1,4 +1,6 @@
 export const HERO_COMPOSITOR = Symbol('HERO_COMPOSITOR');
+export const PS_COMPOSITOR_VERSION = 'ps-compositor-v1';
+export const COMPOSITOR_VERSION = PS_COMPOSITOR_VERSION;
 
 export interface CompositeVisualInput {
   readonly creativeJobId: string;

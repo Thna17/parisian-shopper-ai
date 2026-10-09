@@ -163,29 +163,32 @@ The live account currently returns insufficient credits. This is recorded as `BL
 
 ---
 
-## 8. Sharp Hero Compositor Security Controls (Phase 2A PR 2A-2B)
+## 8. Sharp Hero Compositor Security Controls (Phase 2A PR 2A-2B & PR 2A-2B.1)
 
 The deterministic `SharpHeroCompositor` adapter (`packages/application/src/modules/creative/infrastructure/sharp-hero-compositor.adapter.ts`) implements strict defensive measures against image-processing vulnerabilities:
 
 1. **Pixel Bomb & Decompression DoS Defenses:**
    - Both product and background decoders configure `sharp({ limitInputPixels: 16777216, failOn: "error" })` (16 Megapixels).
    - Input dimension guards enforce maximum 4096 × 4096 on background and target canvas dimensions.
-   - Streaming/Buffer size limit: Max 15 MB per input buffer.
+   - Streaming/Buffer size limit: Max 15 MB per input buffer (`CreativeInputTooLargeError`).
 2. **Resource Throttling & Process Protection:**
    - `sharp.cache({ memory: 128 * 1024 * 1024, files: 20, items: 100 })` prevents unbounded libvips memory growth.
    - `sharp.concurrency(2)` restricts libvips thread pool usage.
    - Application-level queue concurrency throttle restricts parallel compositing jobs to 2.
-3. **Metadata Stripping & Privacy:**
-   - Output images explicitly invoke `.withMetadata(false)` to strip all EXIF, GPS, camera metadata, ICC profiles, and comments from final visuals.
-4. **Product Invariant & Alpha Enforcement:**
+3. **Native Loader Blocking (Elimination of HEIF & SVG Attack Surfaces):**
+   - At process initialization in `configureSharpResourceLimits()`, `sharp.block({ operation: ['VipsForeignLoadHeif', 'VipsForeignLoadSvg'] })` is executed.
+   - This native call instructs libvips to refuse to register or execute the HEIF (`VipsForeignLoadHeif`) and SVG (`VipsForeignLoadSvg`) decoders, eliminating vulnerabilities in upstream `libheif` (`GHSA-rgj7-g3m4-5g8c`) and `librsvg` (`GHSA-wq5f-xc86-pv6w`).
+4. **Metadata Stripping & Privacy:**
+   - By default, Sharp strips all metadata from rendered images unless `.withMetadata()` is explicitly invoked.
+   - The compositing pipeline does not invoke `.withMetadata()`, ensuring that output visuals contain zero EXIF, GPS coordinates, XMP packets, IPTC tags, camera metadata, or embedded ICC profiles.
+5. **Product Invariant & Alpha Enforcement:**
    - The product image MUST have an alpha channel (`channels >= 4` and `hasAlpha === true`). Opaque product photos are rejected immediately (`CreativeAlphaRequiredError`) to prevent canvas occlusion.
-   - Product layer undergoes linear aspect-ratio-preserving downscaling (`fit: "inside"`) with zero generative modification. Product RGB pixel identity is preserved.
-5. **Security Audit Governance (Advisory Review):**
+   - Product layer undergoes linear aspect-ratio-preserving downscaling (`fit: "fill"` with computed aspect ratio) via Lanczos3 kernel with zero generative modification. Product RGB pixel identity in opaque interior regions is preserved within deterministic resampling tolerance.
+6. **Security Audit Governance (Advisory Review):**
    - Sharp 0.33.5 inherits 3 upstream C-library advisories in bundled libvips dependencies:
      - `GHSA-f88m-g3jw-g9cj` (libvips out-of-bounds read)
      - `GHSA-rgj7-g3m4-5g8c` (libheif integer overflow)
      - `GHSA-wq5f-xc86-pv6w` (librsvg resource exhaustion)
-   - These are formally ignored via `auditConfig.ignoreGhsas` in `app/pnpm-workspace.yaml` based on technical review:
-     - All inputs are strictly restricted to PNG, WebP, and JPEG formats (SVG and HEIF inputs are rejected).
-     - Execution is isolated within background worker queues with memory caps and 16MP decompression limits.
-     - No untrusted or arbitrary native files are loaded via filesystem paths.
+   - These are formally reviewed, registered in `app/security-exceptions.json`, and documented with full technical analysis in [`/docs/security-exceptions.md`](security-exceptions.md).
+   - `pnpm security:check` (via `app/scripts/check-security.mjs`) enforces that 0 unreviewed vulnerabilities exist, outputting:
+     `PASS — 0 unreviewed findings, 3 reviewed temporary exceptions`

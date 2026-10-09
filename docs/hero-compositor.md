@@ -45,7 +45,12 @@ The canonical product image is treated as authoritative, immutable brand visual 
 - Alpha compositing over the background (`blend: 'over'`)
 - Cryptographic SHA-256 digest verification
 
-### 2.2 Strictly Forbidden Operations:
+### 2.2 Product-Pixel Preservation Invariant:
+- **No color transform is intentionally applied:** zero color grading, hue shifts, saturation shifts, contrast manipulation, or LUTs.
+- **Interior uniform regions:** Known fully opaque interior uniform-color regions retain their expected RGB values within deterministic resampling tolerance ($\le 2$).
+- **Boundary interpolation:** Boundary pixels and high-frequency edges may interpolate values according to the mathematical Lanczos3 kernel without violating the visual identity of the product.
+
+### 2.3 Strictly Forbidden Operations:
 - **No** hue, saturation, brightness, contrast, or tint changes
 - **No** creative color grading or LUTs
 - **No** blur, sharpening, or edge softening
@@ -80,8 +85,9 @@ Phase 2A strictly requires canonical product imagery to provide usable alpha tra
 
 ### 4.3 Output Format:
 - **PNG exclusively** (`image/png`), compression level 9, adaptive filtering, sRGB color space.
-- Metadata is completely stripped (zero EXIF, GPS, camera model, or upstream tags retained).
-- Cryptographic digests computed: `productDigest`, `backgroundDigest`, `outputDigest`.
+- **Metadata Stripping:** The output PNG contains zero EXIF, GPS, camera metadata, XMP, IPTC, or embedded ICC profiles (ensured by Sharp default behavior when `.withMetadata()` is omitted).
+- **Cryptographic Digests:** Computed and returned in `CompositeVisualResult`: `productDigest`, `backgroundDigest`, `outputDigest`.
+- **Provenance Version:** Fixed to `PS_COMPOSITOR_VERSION = "ps-compositor-v1"`.
 
 ### 4.4 Canvas Profiles & Scaling:
 - Standard visual profiles: `1:1` (1080x1080), `4:5` (1080x1350), `9:16` (1080x1920).
@@ -94,6 +100,7 @@ Phase 2A strictly requires canonical product imagery to provide usable alpha tra
 
 - `sharp.concurrency(2)`: Process-wide concurrency throttle preventing CPU starvation under high load.
 - `sharp.cache({ memory: 128, files: 20, items: 100 })`: Explicit LRU cache ceiling preventing unconstrained memory growth.
+- `sharp.block({ operation: ['VipsForeignLoadHeif', 'VipsForeignLoadSvg'] })`: Explicit native libvips loader blocks eliminating `libheif` (`GHSA-rgj7-g3m4-5g8c`) and `librsvg` (`GHSA-wq5f-xc86-pv6w`) attack surfaces.
 
 ---
 

@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from '@jest/globals';
 import sharp from 'sharp';
-import { SharpHeroCompositor, COMPOSITOR_VERSION } from './sharp-hero-compositor.adapter.js';
+import { SharpHeroCompositor } from './sharp-hero-compositor.adapter.js';
+import { COMPOSITOR_VERSION, PS_COMPOSITOR_VERSION } from '../application/hero-compositor.port.js';
 import { getPresetFixture } from './fixtures/fake-background-fixtures.js';
 import {
   generateTransparentProductPng,
@@ -10,8 +11,10 @@ import {
 import {
   CreativeAlphaRequiredError,
   CreativeImageDecodeFailedError,
+  CreativeInputTooLargeError,
   CreativeInvalidLayoutError,
   CreativePixelLimitExceededError,
+  CreativeUnsupportedImageFormatError,
 } from '../domain/creative-errors.js';
 import { DiskAssetStorageAdapter } from './disk-asset-storage.adapter.js';
 import { FakeCreativeProvider } from './fake-creative-provider.js';
@@ -314,6 +317,9 @@ describe('SharpHeroCompositor (Phase 2A - Deterministic Compositor)', () => {
 
     const outMeta = await sharp(result.compositedBuffer).metadata();
     expect(outMeta.exif).toBeUndefined();
+    expect(outMeta.xmp).toBeUndefined();
+    expect(outMeta.iptc).toBeUndefined();
+    expect(outMeta.icc).toBeUndefined();
   });
 
   it('Requirement 43: Determinism test (identical inputs yield identical SHA-256 digests)', async () => {
@@ -459,5 +465,80 @@ describe('SharpHeroCompositor (Phase 2A - Deterministic Compositor)', () => {
     expect(typeof provider.generateBackground).toBe('function');
     expect('composite' in provider).toBe(false);
     expect('compositeVisual' in provider).toBe(false);
+  });
+
+  it('Requirement 47: Provenance version consistency — PS_COMPOSITOR_VERSION must be "ps-compositor-v1"', async () => {
+    expect(PS_COMPOSITOR_VERSION).toBe('ps-compositor-v1');
+    expect(COMPOSITOR_VERSION).toBe('ps-compositor-v1');
+
+    const result = await compositor.composite({
+      creativeJobId: 'job-provenance-test',
+      canonicalProductBuffer: validProduct,
+      canonicalProductMimeType: 'image/png',
+      canonicalProductSha256: productSha256,
+      backgroundBuffer: validBackground,
+      backgroundMimeType: 'image/png',
+      backgroundSha256: backgroundSha256,
+      targetWidth: 1080,
+      targetHeight: 1080,
+      aspectRatio: '1:1',
+    });
+
+    expect(result.compositorVersion).toBe('ps-compositor-v1');
+    expect(result.compositorVersion).toBe(PS_COMPOSITOR_VERSION);
+  });
+
+  it('Requirement 48: Security mitigation — Max input byte limit enforcement (fails with CreativeInputTooLargeError)', async () => {
+    const limitedCompositor = new SharpHeroCompositor({
+      maxInputBytes: 1024, // 1 KB limit
+    });
+
+    await expect(
+      limitedCompositor.composite({
+        creativeJobId: 'job-large-input',
+        canonicalProductBuffer: validProduct, // > 1 KB
+        canonicalProductMimeType: 'image/png',
+        canonicalProductSha256: productSha256,
+        backgroundBuffer: validBackground,
+        backgroundMimeType: 'image/png',
+        backgroundSha256: backgroundSha256,
+        targetWidth: 1080,
+        targetHeight: 1080,
+        aspectRatio: '1:1',
+      }),
+    ).rejects.toThrow(CreativeInputTooLargeError);
+  });
+
+  it('Requirement 49: Security mitigation — Unsupported format rejection (fails with CreativeUnsupportedImageFormatError)', async () => {
+    // Valid 1x1 GIF buffer (unsupported by compositor which strictly requires PNG/WebP for products)
+    const gifBuffer = Buffer.from(
+      '47494638396101000100800000ffffff00000021f90401000000002c00000000010001000002024401003b',
+      'hex',
+    );
+    const gifSha = createHash('sha256').update(gifBuffer).digest('hex');
+
+    await expect(
+      compositor.composite({
+        creativeJobId: 'job-format-reject',
+        canonicalProductBuffer: gifBuffer,
+        canonicalProductMimeType: 'image/gif',
+        canonicalProductSha256: gifSha,
+        backgroundBuffer: validBackground,
+        backgroundMimeType: 'image/png',
+        backgroundSha256: backgroundSha256,
+        targetWidth: 1080,
+        targetHeight: 1080,
+        aspectRatio: '1:1',
+      }),
+    ).rejects.toThrow(CreativeUnsupportedImageFormatError);
+  });
+
+  it('Requirement 50: Storage-agnostic invariant — Compositor operates purely in-memory and has no storage or DB coupling', () => {
+    const comp = new SharpHeroCompositor();
+    expect('saveAsset' in comp).toBe(false);
+    expect('getMetadata' in comp).toBe(false);
+    expect('getAssetBuffer' in comp).toBe(false);
+    expect('prisma' in comp).toBe(false);
+    expect('storageRoot' in comp).toBe(false);
   });
 });

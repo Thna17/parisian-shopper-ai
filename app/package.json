@@ -37,7 +37,7 @@
     "queue:status": "node scripts/queue-operations.mjs --status",
     "backup:verify": "node scripts/verify-backup-restore.mjs",
     "security:audit": "pnpm audit --prod",
-    "security:check": "pnpm security:audit",
+    "security:check": "node scripts/check-security.mjs",
     "start:api": "node apps/api/dist/main.js",
     "start:worker": "node apps/worker/dist/main.js",
     "test": "pnpm test:unit && pnpm test:integration && pnpm test:e2e",

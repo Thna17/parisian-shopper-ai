@@ -5,6 +5,7 @@ import {
   type CompositeVisualInput,
   type CompositeVisualResult,
   type HeroBoundingBox,
+  PS_COMPOSITOR_VERSION,
 } from '../application/hero-compositor.port.js';
 import {
   CreativeImageDecodeFailedError,
@@ -16,8 +17,6 @@ import {
   CreativeCompositionFailedError,
   CreativeOutputTooLargeError,
 } from '../domain/creative-errors.js';
-
-export const COMPOSITOR_VERSION = 'ps-compositor-v1';
 
 export interface SharpHeroCompositorOptions {
   /**
@@ -67,6 +66,8 @@ const SUPPORTED_PRODUCT_FORMATS = new Set(['png', 'webp']);
  * Configure global Sharp resource controls defensively once.
  * - Concurrency capped at 2 to prevent CPU starvation.
  * - Memory cache bounded to 128 MB.
+ * - Native loaders for HEIF and SVG explicitly blocked to eliminate libheif/librsvg attack surface
+ *   (mitigating GHSA-rgj7-g3m4-5g8c and GHSA-wq5f-xc86-pv6w).
  */
 let isSharpConfigured = false;
 export function configureSharpResourceLimits(): void {
@@ -74,6 +75,7 @@ export function configureSharpResourceLimits(): void {
   try {
     sharp.concurrency(2);
     sharp.cache({ memory: 128, files: 20, items: 100 });
+    sharp.block({ operation: ['VipsForeignLoadHeif', 'VipsForeignLoadSvg'] });
   } catch {
     // Ignore if not supported in test environment
   }
@@ -289,7 +291,7 @@ export class SharpHeroCompositor implements HeroCompositor {
         byteSize: compositedBuffer.length,
         sha256: outputDigest,
         latencyMs,
-        compositorVersion: COMPOSITOR_VERSION,
+        compositorVersion: PS_COMPOSITOR_VERSION,
         heroScale: targetHeroHeight / canvasHeight,
         heroPlacement: 'CENTER',
         heroBoundingBox,
