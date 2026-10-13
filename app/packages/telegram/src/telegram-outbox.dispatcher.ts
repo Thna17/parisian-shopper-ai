@@ -1,36 +1,48 @@
-import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import {
+  ASSET_STORAGE,
+  CREATIVE_JOB_REPOSITORY,
   TELEGRAM_WORKFLOW_REPOSITORY,
   TelegramAction,
   TelegramActionTokenService,
+  VISUAL_ASSET_REPOSITORY,
+  VISUAL_VALIDATION_REPOSITORY,
   callbackData,
   formatDraft,
   hasAnyRolePermission,
   splitTelegramMessage,
   Permission,
+  type AssetStoragePort,
   type CreateTelegramActionInput,
+  type CreativeJobRepository,
   type TelegramButton,
   type TelegramMessage,
   type TelegramWorkflowRepository,
+  type VisualAssetRepository,
+  type VisualReviewNotificationDispatcher,
+  type VisualValidationRepository,
 } from '@parisian-shopper/application';
 import { AppConfigService, FeatureFlag, FeatureFlagService } from '@parisian-shopper/config';
-import { APPLICATION_LOGGER, type ApplicationLogger } from '@parisian-shopper/common';
+import { APPLICATION_LOGGER, type ApplicationLogger, type ClaimedOutboxEvent } from '@parisian-shopper/common';
 import { GrammyError, HttpError } from 'grammy';
 
 import {
   TELEGRAM_DELIVERY_GATEWAY,
   type TelegramDeliveryGateway,
 } from './telegram-delivery.gateway.js';
+import { buildVisualReviewKeyboard } from './keyboards/visual-review.keyboard.js';
+import { VisualReviewCardRenderer } from './renderers/visual-review-card.renderer.js';
 
 const TOPICS = [
   'CONTENT_VALIDATION_COMPLETED',
   'CONTENT_GENERATION_FAILED',
   'CONTENT_APPROVED',
   'CONTENT_REJECTED',
+  'CREATIVE_VALIDATED',
 ] as const;
 
 @Injectable()
-export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy {
+export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy, VisualReviewNotificationDispatcher {
   private timer: ReturnType<typeof setInterval> | undefined;
   private active = false;
 
@@ -42,6 +54,18 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy {
     private readonly config: Pick<AppConfigService, 'telegram' | 'demoMode'>,
     @Inject(FeatureFlagService) private readonly flags: Pick<FeatureFlagService, 'isEnabled'>,
     @Inject(APPLICATION_LOGGER) private readonly logger: ApplicationLogger,
+    @Optional()
+    @Inject(CREATIVE_JOB_REPOSITORY)
+    private readonly creativeJobs?: CreativeJobRepository,
+    @Optional()
+    @Inject(VISUAL_ASSET_REPOSITORY)
+    private readonly visualAssets?: VisualAssetRepository,
+    @Optional()
+    @Inject(VISUAL_VALIDATION_REPOSITORY)
+    private readonly validations?: VisualValidationRepository,
+    @Optional()
+    @Inject(ASSET_STORAGE)
+    private readonly assetStorage?: AssetStoragePort,
   ) {}
 
   public onModuleInit(): void {
@@ -72,7 +96,8 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy {
     attemptCount: number;
   }): Promise<void> {
     try {
-      if (event.topic === 'CONTENT_VALIDATION_COMPLETED') await this.sendDraft(event);
+      if (event.topic === 'CREATIVE_VALIDATED') await this.sendVisualReview(event);
+      else if (event.topic === 'CONTENT_VALIDATION_COMPLETED') await this.sendDraft(event);
       else if (event.topic === 'CONTENT_APPROVED') await this.sendApproval(event);
       else if (event.topic === 'CONTENT_REJECTED') await this.sendRejection(event);
       else await this.sendFailure(event);
@@ -282,6 +307,120 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy {
         text: `Content generation failed for ${view.productName}. Please try again later.\nJob #${short(jobId)}`,
       },
     ]);
+    await this.repository.markNotificationSent(event.id, new Date());
+  }
+
+  public async dispatchVisualReview(event: ClaimedOutboxEvent): Promise<void> {
+    await this.sendVisualReview({
+      id: event.id,
+      payload: event.payload,
+    });
+  }
+
+  private async sendVisualReview(event: {
+    id: string;
+    payload: Readonly<Record<string, unknown>>;
+  }): Promise<void> {
+    const creativeJobId = stringPayload(event.payload, 'creativeJobId');
+    const visualAssetId = stringPayload(event.payload, 'visualAssetId');
+    const job = this.creativeJobs ? await this.creativeJobs.findById(creativeJobId) : null;
+    const view = job ? await this.repository.getDraftViewByVersionId(job.contentVersionId) : null;
+    if (view === null) throw new PermanentTelegramDeliveryError('VISUAL_REVIEW_RECIPIENT_NOT_FOUND');
+    if (
+      (await this.repository.beginNotificationDelivery(event.id, view.telegramIdentityId)) ===
+      'ALREADY_SENT'
+    )
+      return;
+
+    const asset = this.visualAssets ? await this.visualAssets.findById(visualAssetId) : null;
+    if (asset === null) throw new PermanentTelegramDeliveryError('VISUAL_ASSET_NOT_FOUND');
+
+    const validation =
+      this.validations !== undefined
+        ? await this.validations.findLatestByAssetId(visualAssetId)
+        : null;
+
+    const expiresAt = new Date(Date.now() + this.config.telegram.actionTokenTtlSeconds * 1_000);
+    const tokenDefs: CreateTelegramActionInput[] = [
+      {
+        action: TelegramAction.APPROVE_VISUAL,
+        resourceId: creativeJobId,
+        metadata: { creativeJobId, visualAssetId, productName: view.productName },
+        singleUse: true,
+      },
+      {
+        action: TelegramAction.REQUEST_VISUAL_EDIT,
+        resourceId: creativeJobId,
+        metadata: { creativeJobId, visualAssetId, productName: view.productName },
+        singleUse: true,
+      },
+      {
+        action: TelegramAction.REGENERATE_VISUAL,
+        resourceId: creativeJobId,
+        metadata: { creativeJobId, visualAssetId, productName: view.productName },
+        singleUse: true,
+      },
+      {
+        action: TelegramAction.REJECT_VISUAL,
+        resourceId: creativeJobId,
+        metadata: { creativeJobId, visualAssetId, productName: view.productName },
+        singleUse: true,
+      },
+    ];
+
+    const [approveToken, requestEditToken, regenerateToken, rejectToken] =
+      await this.tokens.create(view.telegramIdentityId, tokenDefs, expiresAt);
+
+    const buttonRows = buildVisualReviewKeyboard({
+      approveToken: approveToken ?? '',
+      requestEditToken: requestEditToken ?? '',
+      regenerateToken: regenerateToken ?? '',
+      rejectToken: rejectToken ?? '',
+    });
+
+    const dimensionsPassed =
+      validation !== null
+        ? !validation.findings.some(
+            (f) => f.code.includes('DIMENSION') || f.code.includes('ASPECT'),
+          )
+        : true;
+    const containmentPassed =
+      validation !== null
+        ? !validation.findings.some((f) => f.code.includes('CONTAINMENT'))
+        : true;
+    const safetyPassed =
+      validation !== null
+        ? !validation.findings.some((f) => f.code.includes('SAFETY'))
+        : true;
+
+    const caption = VisualReviewCardRenderer.renderCaption({
+      productName: view.productName,
+      brand: view.productName,
+      targetFormat: '1:1 Feed Post',
+      compositorVersion: 'ps-compositor-v1',
+      width: asset.width,
+      height: asset.height,
+      dimensionsPassed,
+      containmentPassed,
+      safetyPassed,
+      casSha256: asset.sha256,
+    });
+
+    let photoBuffer: Buffer | undefined;
+    if (this.assetStorage !== undefined) {
+      const retrieved = await this.assetStorage.getAssetBuffer(asset.storageKey);
+      if (retrieved !== null) {
+        photoBuffer = retrieved;
+      }
+    }
+
+    const message: TelegramMessage = {
+      text: caption,
+      buttons: buttonRows,
+      ...(photoBuffer !== undefined ? { photoBuffer } : {}),
+    };
+
+    await this.gateway.sendMessages(view.requesterTelegramUserId, [message]);
     await this.repository.markNotificationSent(event.id, new Date());
   }
 }

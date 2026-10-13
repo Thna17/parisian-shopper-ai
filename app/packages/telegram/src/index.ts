@@ -5,3 +5,6 @@ export * from './telegram-delivery.gateway.js';
 export * from './telegram-infrastructure.module.js';
 export * from './telegram-outbox.dispatcher.js';
 export * from './telegram-webhook.controller.js';
+export * from './renderers/visual-review-card.renderer.js';
+export * from './keyboards/visual-review.keyboard.js';
+export * from './handlers/visual-review-callback.handler.js';

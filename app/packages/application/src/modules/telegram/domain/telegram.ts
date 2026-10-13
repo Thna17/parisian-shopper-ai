@@ -15,6 +15,12 @@ export const TelegramAction = {
   REJECT_PROMPT: 'REJECT_PROMPT',
   VIEW_PREVIOUS: 'VIEW_PREVIOUS',
   CANCEL_ACTION: 'CANCEL_ACTION',
+  APPROVE_VISUAL: 'APPROVE_VISUAL',
+  CONFIRM_APPROVE_VISUAL: 'CONFIRM_APPROVE_VISUAL',
+  REQUEST_VISUAL_EDIT: 'REQUEST_VISUAL_EDIT',
+  REGENERATE_VISUAL: 'REGENERATE_VISUAL',
+  REJECT_VISUAL: 'REJECT_VISUAL',
+  CANCEL_VISUAL_ACTION: 'CANCEL_VISUAL_ACTION',
 } as const;
 export type TelegramAction = (typeof TelegramAction)[keyof typeof TelegramAction];
 
@@ -40,6 +46,7 @@ export interface TelegramButton {
 export interface TelegramMessage {
   text: string;
   buttons?: readonly (readonly TelegramButton[])[];
+  photoBuffer?: Buffer | Uint8Array;
 }
 
 export interface TelegramResponse {

@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ForbiddenError } from '@parisian-shopper/common';
 
 import { ApproveContentVersionUseCase } from '../../approvals/application/approve-content-version.use-case.js';
@@ -48,6 +48,10 @@ import {
   type TelegramFormatOptions,
 } from './telegram-formatters.js';
 import {
+  TELEGRAM_VISUAL_CALLBACK_HANDLER,
+  type TelegramVisualCallbackHandler,
+} from './telegram-visual-callback.port.js';
+import {
   TELEGRAM_WORKFLOW_REPOSITORY,
   type TelegramCreateFlow,
   type TelegramWorkflowRepository,
@@ -94,6 +98,9 @@ export class TelegramCommandCenter {
     private readonly rejectContent: RejectContentVersionUseCase,
     private readonly reviewState: GetContentReviewStateQuery,
     private readonly approvalStatus: GetApprovalStatusQuery,
+    @Optional()
+    @Inject(TELEGRAM_VISUAL_CALLBACK_HANDLER)
+    private readonly visualCallbackHandler?: TelegramVisualCallbackHandler,
   ) {}
 
   private get formatOptions(): TelegramFormatOptions {
@@ -318,6 +325,19 @@ export class TelegramCommandCenter {
           return {
             ...(await this.cancelAction(actor)),
             callbackNotice: 'Cancelled.',
+          };
+        case TelegramAction.APPROVE_VISUAL:
+        case TelegramAction.CONFIRM_APPROVE_VISUAL:
+        case TelegramAction.REQUEST_VISUAL_EDIT:
+        case TelegramAction.REGENERATE_VISUAL:
+        case TelegramAction.REJECT_VISUAL:
+        case TelegramAction.CANCEL_VISUAL_ACTION:
+          if (this.visualCallbackHandler !== undefined) {
+            return this.visualCallbackHandler.handleAction(actor, token);
+          }
+          return {
+            ...one('Visual review handler not configured.'),
+            callbackNotice: 'Not configured.',
           };
       }
     } catch (error) {

@@ -51,6 +51,7 @@ export * from './modules/telegram/application/telegram-action-token.service.js';
 export * from './modules/telegram/application/telegram-command-center.js';
 export * from './modules/telegram/application/telegram-error-mapper.js';
 export * from './modules/telegram/application/telegram-formatters.js';
+export * from './modules/telegram/application/telegram-visual-callback.port.js';
 export * from './modules/telegram/application/telegram-workflow.repository.js';
 export * from './modules/telegram/domain/telegram.js';
 export * from './modules/users/users.module.js';

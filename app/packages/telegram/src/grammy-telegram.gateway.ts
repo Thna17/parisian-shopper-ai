@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { type TelegramMessage } from '@parisian-shopper/application';
-import { Bot, InlineKeyboard } from 'grammy';
+import { Bot, InlineKeyboard, InputFile } from 'grammy';
 
 import { GRAMMY_BOT } from './grammy.tokens.js';
 import { type TelegramDeliveryGateway } from './telegram-delivery.gateway.js';
@@ -15,9 +15,20 @@ export class GrammyTelegramGateway implements TelegramDeliveryGateway {
   ): Promise<void> {
     if (this.bot === null) throw new Error('TELEGRAM_DISABLED');
     for (const message of messages) {
-      await this.bot.api.sendMessage(telegramUserId, message.text, {
-        ...(message.buttons === undefined ? {} : { reply_markup: keyboard(message.buttons) }),
-      });
+      if (message.photoBuffer !== undefined) {
+        await this.bot.api.sendPhoto(
+          telegramUserId,
+          new InputFile(message.photoBuffer, 'creative.png'),
+          {
+            caption: message.text,
+            ...(message.buttons === undefined ? {} : { reply_markup: keyboard(message.buttons) }),
+          },
+        );
+      } else {
+        await this.bot.api.sendMessage(telegramUserId, message.text, {
+          ...(message.buttons === undefined ? {} : { reply_markup: keyboard(message.buttons) }),
+        });
+      }
     }
   }
 }

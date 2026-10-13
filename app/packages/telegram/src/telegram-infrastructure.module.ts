@@ -1,5 +1,9 @@
 import { Global, Module } from '@nestjs/common';
-import { ApplicationModule } from '@parisian-shopper/application';
+import {
+  ApplicationModule,
+  TELEGRAM_VISUAL_CALLBACK_HANDLER,
+  VISUAL_REVIEW_NOTIFICATION_DISPATCHER,
+} from '@parisian-shopper/application';
 import { AppConfigService, FeatureFlag, FeatureFlagService } from '@parisian-shopper/config';
 import { Bot } from 'grammy';
 
@@ -9,6 +13,7 @@ import { GrammyTelegramGateway } from './grammy-telegram.gateway.js';
 import { TELEGRAM_DELIVERY_GATEWAY } from './telegram-delivery.gateway.js';
 import { TelegramOutboxDispatcher } from './telegram-outbox.dispatcher.js';
 import { TelegramWebhookController } from './telegram-webhook.controller.js';
+import { VisualReviewCallbackHandler } from './handlers/visual-review-callback.handler.js';
 
 @Global()
 @Module({
@@ -29,7 +34,18 @@ import { TelegramWebhookController } from './telegram-webhook.controller.js';
     GrammyTelegramGateway,
     { provide: TELEGRAM_DELIVERY_GATEWAY, useExisting: GrammyTelegramGateway },
     TelegramOutboxDispatcher,
+    { provide: VISUAL_REVIEW_NOTIFICATION_DISPATCHER, useExisting: TelegramOutboxDispatcher },
+    VisualReviewCallbackHandler,
+    { provide: TELEGRAM_VISUAL_CALLBACK_HANDLER, useExisting: VisualReviewCallbackHandler },
   ],
-  exports: [GRAMMY_BOT, GrammyBotAdapter, TELEGRAM_DELIVERY_GATEWAY, TelegramOutboxDispatcher],
+  exports: [
+    GRAMMY_BOT,
+    GrammyBotAdapter,
+    TELEGRAM_DELIVERY_GATEWAY,
+    TelegramOutboxDispatcher,
+    VISUAL_REVIEW_NOTIFICATION_DISPATCHER,
+    VisualReviewCallbackHandler,
+    TELEGRAM_VISUAL_CALLBACK_HANDLER,
+  ],
 })
 export class TelegramInfrastructureModule {}
