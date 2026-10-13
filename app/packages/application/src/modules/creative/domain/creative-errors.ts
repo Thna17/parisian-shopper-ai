@@ -269,3 +269,34 @@ export class CreativeOutputTooLargeError extends ApplicationError {
     });
   }
 }
+
+export class ContentVersionNotEligibleForCreativeError extends ApplicationError {
+  public constructor(contentVersionId: string, reason: string) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Content version ${contentVersionId} is not eligible for creative generation: ${reason}`,
+      details: { contentVersionId, reason },
+    });
+  }
+}
+
+export class CreativeValidationFailedError extends ApplicationError {
+  public constructor(visualAssetId: string, blockingCount: number) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Visual asset ${visualAssetId} failed validation with ${blockingCount} blocking finding(s)`,
+      details: { visualAssetId, blockingCount },
+    });
+  }
+}
+
+export class CreativeJobNotReadyForApprovalError extends ApplicationError {
+  public constructor(jobId: string, currentStatus: CreativeJobStatus) {
+    super({
+      code: 'CONFLICT',
+      publicMessage: `Creative job ${jobId} is not in a reviewable state (current status: ${currentStatus})`,
+      details: { jobId, currentStatus },
+    });
+  }
+}
+

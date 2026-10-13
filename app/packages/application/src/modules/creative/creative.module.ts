@@ -8,6 +8,18 @@ import { DiskAssetStorageAdapter } from './infrastructure/disk-asset-storage.ada
 import { FakeCreativeProvider } from './infrastructure/fake-creative-provider.js';
 import { SharpHeroCompositor } from './infrastructure/sharp-hero-compositor.adapter.js';
 
+import {
+  DETERMINISTIC_VISUAL_VALIDATOR,
+  DeterministicVisualValidator,
+} from './domain/services/deterministic-visual-validator.js';
+import {
+  VISUAL_SAFETY_SCANNER,
+  VisualSafetyScanner,
+} from './domain/services/visual-safety-scanner.js';
+import { GenerateCreativeUseCase } from './application/generate-creative.use-case.js';
+import { ValidateCreativeUseCase } from './application/validate-creative.use-case.js';
+import { ApproveCreativeUseCase } from './application/approve-creative.use-case.js';
+
 @Module({
   providers: [
     {
@@ -36,7 +48,36 @@ import { SharpHeroCompositor } from './infrastructure/sharp-hero-compositor.adap
         return new SharpHeroCompositor();
       },
     },
+    {
+      provide: DETERMINISTIC_VISUAL_VALIDATOR,
+      useFactory: (): DeterministicVisualValidator => {
+        return new DeterministicVisualValidator();
+      },
+    },
+    {
+      provide: VISUAL_SAFETY_SCANNER,
+      useFactory: (): VisualSafetyScanner => {
+        return new VisualSafetyScanner();
+      },
+    },
+    DeterministicVisualValidator,
+    VisualSafetyScanner,
+    GenerateCreativeUseCase,
+    ValidateCreativeUseCase,
+    ApproveCreativeUseCase,
   ],
-  exports: [CREATIVE_PROVIDER, ASSET_STORAGE, HERO_COMPOSITOR],
+  exports: [
+    CREATIVE_PROVIDER,
+    ASSET_STORAGE,
+    HERO_COMPOSITOR,
+    DETERMINISTIC_VISUAL_VALIDATOR,
+    VISUAL_SAFETY_SCANNER,
+    DeterministicVisualValidator,
+    VisualSafetyScanner,
+    GenerateCreativeUseCase,
+    ValidateCreativeUseCase,
+    ApproveCreativeUseCase,
+  ],
 })
 export class CreativeModule {}
+

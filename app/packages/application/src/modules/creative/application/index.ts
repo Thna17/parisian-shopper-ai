@@ -7,3 +7,6 @@ export * from './visual-asset.repository.js';
 export * from './visual-validation.repository.js';
 export * from './creative-revision.repository.js';
 export * from './creative-approval.repository.js';
+export * from './generate-creative.use-case.js';
+export * from './validate-creative.use-case.js';
+export * from './approve-creative.use-case.js';
