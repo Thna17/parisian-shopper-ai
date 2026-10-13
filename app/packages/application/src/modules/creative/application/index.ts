@@ -10,3 +10,6 @@ export * from './creative-approval.repository.js';
 export * from './generate-creative.use-case.js';
 export * from './validate-creative.use-case.js';
 export * from './approve-creative.use-case.js';
+export * from './creative-generation-enqueuer.port.js';
+export * from './outbox-relay.repository.js';
+export * from './visual-review-notification.port.js';

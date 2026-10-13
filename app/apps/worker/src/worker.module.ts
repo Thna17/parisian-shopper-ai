@@ -7,7 +7,9 @@ import { DatabaseModule } from '@parisian-shopper/database';
 import {
   ContentGenerationWorkerModule,
   ContentValidationWorkerModule,
+  CreativeGenerationWorkerModule,
   JobsModule,
+  OutboxRelayWorkerModule,
 } from '@parisian-shopper/jobs';
 import { LoggerModule } from '@parisian-shopper/logger';
 
@@ -22,6 +24,8 @@ import { LoggerModule } from '@parisian-shopper/logger';
     JobsModule,
     ContentGenerationWorkerModule,
     ContentValidationWorkerModule,
+    CreativeGenerationWorkerModule,
+    OutboxRelayWorkerModule,
   ],
 })
 export class WorkerModule {}

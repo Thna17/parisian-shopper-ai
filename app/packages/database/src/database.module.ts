@@ -11,6 +11,7 @@ import {
   VALIDATION_REPOSITORY,
   VISUAL_ASSET_REPOSITORY,
   VISUAL_VALIDATION_REPOSITORY,
+  OUTBOX_RELAY_REPOSITORY,
 } from '@parisian-shopper/application';
 
 import { DatabaseHealthIndicator } from './database-health.indicator.js';
@@ -18,6 +19,7 @@ import {
   PrismaTransactionManager,
   TRANSACTION_MANAGER,
 } from './outbox/prisma-transaction.manager.js';
+import { PrismaOutboxRelayRepository } from './outbox/prisma-outbox-relay.repository.js';
 import { PrismaService } from './prisma.service.js';
 import { PrismaBrandRuleRepository } from './brand/prisma-brand-rule.repository.js';
 import { PrismaContentGenerationRepository } from './content/prisma-content-generation.repository.js';
@@ -50,6 +52,7 @@ import {
     PrismaVisualValidationRepository,
     PrismaCreativeRevisionRepository,
     PrismaCreativeApprovalRepository,
+    PrismaOutboxRelayRepository,
     { provide: TRANSACTION_MANAGER, useExisting: PrismaTransactionManager },
     { provide: PRODUCT_SNAPSHOT_REPOSITORY, useExisting: PrismaProductSnapshotRepository },
     { provide: BRAND_RULE_REPOSITORY, useExisting: PrismaBrandRuleRepository },
@@ -62,6 +65,7 @@ import {
     { provide: VISUAL_VALIDATION_REPOSITORY, useExisting: PrismaVisualValidationRepository },
     { provide: CREATIVE_REVISION_REPOSITORY, useExisting: PrismaCreativeRevisionRepository },
     { provide: CREATIVE_APPROVAL_REPOSITORY, useExisting: PrismaCreativeApprovalRepository },
+    { provide: OUTBOX_RELAY_REPOSITORY, useExisting: PrismaOutboxRelayRepository },
   ],
   exports: [
     PrismaService,
@@ -78,6 +82,7 @@ import {
     PrismaVisualValidationRepository,
     PrismaCreativeRevisionRepository,
     PrismaCreativeApprovalRepository,
+    PrismaOutboxRelayRepository,
     TRANSACTION_MANAGER,
     PRODUCT_SNAPSHOT_REPOSITORY,
     BRAND_RULE_REPOSITORY,
@@ -90,6 +95,7 @@ import {
     VISUAL_VALIDATION_REPOSITORY,
     CREATIVE_REVISION_REPOSITORY,
     CREATIVE_APPROVAL_REPOSITORY,
+    OUTBOX_RELAY_REPOSITORY,
   ],
 })
 export class DatabaseModule {}
