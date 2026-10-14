@@ -9,6 +9,8 @@ import {
   CREATIVE_GENERATION_ENQUEUER,
   CreativeGenerationQueue,
 } from './creative-generation.queue.js';
+import { AIMetricsTracker } from './metrics/ai-metrics.tracker.js';
+import { PrometheusMetricsService } from './metrics/prometheus-metrics.service.js';
 
 @Global()
 @Module({
@@ -18,6 +20,8 @@ import {
     WorkerRegistry,
     ContentGenerationQueue,
     CreativeGenerationQueue,
+    AIMetricsTracker,
+    PrometheusMetricsService,
     { provide: CONTENT_GENERATION_ENQUEUER, useExisting: ContentGenerationQueue },
     { provide: CREATIVE_GENERATION_ENQUEUER, useExisting: CreativeGenerationQueue },
   ],
@@ -27,9 +31,10 @@ import {
     WorkerRegistry,
     ContentGenerationQueue,
     CreativeGenerationQueue,
+    AIMetricsTracker,
+    PrometheusMetricsService,
     CONTENT_GENERATION_ENQUEUER,
     CREATIVE_GENERATION_ENQUEUER,
   ],
 })
 export class JobsModule {}
-

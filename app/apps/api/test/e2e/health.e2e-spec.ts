@@ -95,4 +95,16 @@ describe('API foundation (e2e)', () => {
     expect(body.error.message).toBe('Cannot GET /not-present');
     expect(body.error.requestId).toEqual(expect.any(String));
   });
+
+  it('exposes prometheus metrics on /metrics', async () => {
+    const response = await request(server)
+      .get('/metrics')
+      .expect(200);
+
+    expect(response.headers['content-type']).toContain('text/plain');
+    expect(response.text).toContain('process_resident_memory_bytes');
+    expect(response.text).toContain('nodejs_heap_used_bytes');
+    expect(response.text).toContain('bullmq_queue_depth');
+    expect(response.text).toContain('ai_token_expenditure_total');
+  });
 });

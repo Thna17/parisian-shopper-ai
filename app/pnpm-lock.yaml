@@ -299,6 +299,9 @@ importers:
       '@parisian-shopper/application':
         specifier: workspace:0.1.0
         version: link:../../packages/application
+      '@parisian-shopper/common':
+        specifier: workspace:0.1.0
+        version: link:../../packages/common
       '@parisian-shopper/config':
         specifier: workspace:0.1.0
         version: link:../../packages/config

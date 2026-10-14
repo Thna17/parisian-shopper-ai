@@ -13,6 +13,8 @@ import {
 } from '@parisian-shopper/jobs';
 import { LoggerModule } from '@parisian-shopper/logger';
 
+import { WorkerHealthService } from './worker-health.service.js';
+
 @Module({
   imports: [
     AppConfigModule,
@@ -27,5 +29,6 @@ import { LoggerModule } from '@parisian-shopper/logger';
     CreativeGenerationWorkerModule,
     OutboxRelayWorkerModule,
   ],
+  providers: [WorkerHealthService],
 })
 export class WorkerModule {}

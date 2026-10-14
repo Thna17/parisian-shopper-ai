@@ -13,6 +13,7 @@
     "@nestjs/core": "12.1.2",
     "@parisian-shopper/ai-providers": "workspace:0.1.0",
     "@parisian-shopper/application": "workspace:0.1.0",
+    "@parisian-shopper/common": "workspace:0.1.0",
     "@parisian-shopper/config": "workspace:0.1.0",
     "@parisian-shopper/creative-providers": "workspace:0.1.0",
     "@parisian-shopper/database": "workspace:0.1.0",

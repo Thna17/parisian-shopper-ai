@@ -8,6 +8,7 @@ import { LoggerModule } from '@parisian-shopper/logger';
 import { TelegramInfrastructureModule } from '@parisian-shopper/telegram';
 
 import { HealthModule } from './health/health.module.js';
+import { MetricsModule } from './metrics/metrics.module.js';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { HealthModule } from './health/health.module.js';
     ApplicationModule,
     TelegramInfrastructureModule,
     HealthModule,
+    MetricsModule,
   ],
 })
 export class AppModule {}
