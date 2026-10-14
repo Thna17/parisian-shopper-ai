@@ -1,7 +1,7 @@
 import { type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { DatabaseHealthIndicator, PrismaService } from '@parisian-shopper/database';
-import { ValkeyConnectionService } from '@parisian-shopper/jobs';
+import { ContentGenerationQueue, CreativeGenerationQueue, ValkeyConnectionService } from '@parisian-shopper/jobs';
 import { jest } from '@jest/globals';
 import { type Server } from 'node:http';
 import request from 'supertest';
@@ -27,6 +27,10 @@ describe('API foundation (e2e)', () => {
       .useValue(databaseHealth)
       .overrideProvider(ValkeyConnectionService)
       .useValue(valkeyHealth)
+      .overrideProvider(CreativeGenerationQueue)
+      .useValue({ enqueue: jest.fn(), onModuleInit: jest.fn() })
+      .overrideProvider(ContentGenerationQueue)
+      .useValue({ enqueue: jest.fn(), onModuleInit: jest.fn() })
       .compile();
 
     application = module.createNestApplication();

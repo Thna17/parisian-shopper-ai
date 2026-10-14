@@ -1,4 +1,5 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, Optional } from '@nestjs/common';
+import { FeatureFlag, FeatureFlagService } from '@parisian-shopper/config';
 import { Queue } from 'bullmq';
 
 import { createBullMqConnection } from './bullmq-connection.js';
@@ -23,9 +24,13 @@ export class CreativeGenerationQueue implements OnModuleInit, CreativeGeneration
   public constructor(
     private readonly valkey: ValkeyConnectionService,
     private readonly registry: QueueRegistry,
+    @Optional() private readonly flags?: Pick<FeatureFlagService, 'isEnabled'>,
   ) {}
 
   public async onModuleInit(): Promise<void> {
+    if (this.flags !== undefined && !this.flags.isEnabled(FeatureFlag.CREATIVE_GENERATION)) {
+      return;
+    }
     const client = await this.valkey.createDedicatedClient('creative-generation-queue');
     const queue = new Queue<CreativeGenerationJobData>(QueueName.CREATIVE_GENERATION, {
       connection: createBullMqConnection(client),

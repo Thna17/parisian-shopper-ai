@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Clean-room foundation for the Parisian Shopper AI Telegram Content System",
+  "type": "module",
   "license": "UNLICENSED",
   "engines": {
     "node": "22.22.2",
@@ -28,6 +29,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "higgsfield:seedance": "node --env-file=.env.local --import tsx examples/higgsfield-seedance/index.ts",
+    "check:licenses": "node scripts/check-licenses.mjs",
     "license:check": "node scripts/check-licenses.mjs",
     "lint": "eslint . --max-warnings 0 && pnpm boundaries",
     "lint:fix": "eslint . --fix && prettier --write .",

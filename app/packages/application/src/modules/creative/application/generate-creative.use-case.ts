@@ -132,23 +132,31 @@ export class GenerateCreativeUseCase {
       // Resolve canonical hero product storage key (from snapshot images or primary convention)
       const images = snapshot.product.product.images;
       const primaryImage = images?.find((img) => img.role === 'primary') ?? images?.[0];
-      const productStorageKey = primaryImage?.sha256
+      const casKey = primaryImage?.sha256 && /^[0-9a-f]{64}$/i.test(primaryImage.sha256)
+        ? `cas/${primaryImage.sha256.slice(0, 2)}/${primaryImage.sha256.slice(2, 4)}/${primaryImage.sha256}.png`
+        : undefined;
+      const productStorageKey = casKey ?? (primaryImage?.sha256
         ? `products/${primaryImage.sha256}.png`
-        : `products/${snapshot.id}.png`;
+        : `products/${snapshot.id}.png`);
 
-      let canonicalProductBuffer = await this.storage.getAssetBuffer(productStorageKey);
-      let canonicalProductSha256 = primaryImage?.sha256;
-
+      let canonicalProductBuffer: Buffer | null = null;
+      if (casKey) {
+        canonicalProductBuffer = await this.storage.getAssetBuffer(casKey).catch(() => null);
+      }
+      if (!canonicalProductBuffer) {
+        canonicalProductBuffer = await this.storage.getAssetBuffer(productStorageKey).catch(() => null);
+      }
       if (!canonicalProductBuffer && primaryImage?.sha256) {
-        canonicalProductBuffer = await this.storage.getAssetBuffer(primaryImage.sha256);
+        canonicalProductBuffer = await this.storage.getAssetBuffer(primaryImage.sha256).catch(() => null);
       }
 
       if (!canonicalProductBuffer) {
-        throw new AssetNotFoundError(productStorageKey);
+        throw new AssetNotFoundError(casKey ?? productStorageKey);
       }
 
-      const productMetadata = await this.storage.getMetadata(productStorageKey);
-      canonicalProductSha256 = productMetadata?.sha256Digest ?? canonicalProductSha256;
+      const resolvedStorageKey = casKey ?? productStorageKey;
+      const productMetadata = await this.storage.getMetadata(resolvedStorageKey).catch(() => null);
+      let canonicalProductSha256 = productMetadata?.sha256Digest ?? primaryImage?.sha256;
       if (!canonicalProductSha256) {
         const { createHash } = await import('node:crypto');
         canonicalProductSha256 = createHash('sha256').update(canonicalProductBuffer).digest('hex');

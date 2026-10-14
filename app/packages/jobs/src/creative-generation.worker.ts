@@ -1,9 +1,9 @@
-import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, Optional } from '@nestjs/common';
 import {
   GenerateCreativeUseCase,
   ValidateCreativeUseCase,
 } from '@parisian-shopper/application';
-import { APPLICATION_LOGGER, type ApplicationLogger } from '@parisian-shopper/common';
+import { APPLICATION_LOGGER, type ApplicationLogger, type OutboxWriter } from '@parisian-shopper/common';
 import { type Job, UnrecoverableError, Worker } from 'bullmq';
 
 import { createBullMqConnection } from './bullmq-connection.js';
@@ -21,6 +21,9 @@ export class CreativeGenerationWorker implements OnModuleInit {
     private readonly validateCreative: ValidateCreativeUseCase,
     @Inject(APPLICATION_LOGGER)
     private readonly logger: ApplicationLogger,
+    @Optional()
+    @Inject('OUTBOX_WRITER')
+    private readonly outboxWriter?: OutboxWriter,
   ) {}
 
   public async onModuleInit(): Promise<void> {
@@ -68,6 +71,7 @@ export class CreativeGenerationWorker implements OnModuleInit {
       const validationResult = await this.validateCreative.execute({
         creativeJobId: creativeJob.id,
         visualAssetId: visualAsset.id,
+        ...(this.outboxWriter !== undefined ? { outboxWriter: this.outboxWriter } : {}),
       });
 
       const completedAt = new Date();
