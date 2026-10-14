@@ -57,6 +57,7 @@ export const environmentSchema = z
     TELEGRAM_WEBHOOK_URL: optionalUrl,
     TELEGRAM_WEBHOOK_SECRET: optionalSecret,
     TELEGRAM_ACTION_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3_600).default(900),
+    TELEGRAM_CHANNEL_ID: z.string().trim().min(1).optional(),
     AI_PROVIDER: z.enum(['fake', 'openai']).default('fake'),
     OPENAI_API_KEY: optionalSecret,
     OPENAI_MODEL: z.preprocess(
@@ -92,6 +93,7 @@ export const environmentSchema = z
     FEATURE_PRODUCT_API: booleanFromEnvironment.default(false),
     FEATURE_AUTO_PUBLISHING: booleanFromEnvironment.default(false),
     FEATURE_META_PUBLISHING: booleanFromEnvironment.default(false),
+    FEATURE_TELEGRAM_CHANNEL_PUBLISHING: booleanFromEnvironment.default(false),
     FEATURE_ANALYTICS: booleanFromEnvironment.default(false),
     DEMO_MODE: booleanFromEnvironment.default(false),
   })

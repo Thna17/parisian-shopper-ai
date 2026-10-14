@@ -6,5 +6,7 @@ export * from './telegram-infrastructure.module.js';
 export * from './telegram-outbox.dispatcher.js';
 export * from './telegram-webhook.controller.js';
 export * from './renderers/visual-review-card.renderer.js';
+export * from './renderers/channel-broadcast.renderer.js';
+export * from './channel-broadcast/telegram-channel-broadcast.adapter.js';
 export * from './keyboards/visual-review.keyboard.js';
 export * from './handlers/visual-review-callback.handler.js';

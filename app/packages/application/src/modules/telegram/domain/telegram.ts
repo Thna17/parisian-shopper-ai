@@ -40,13 +40,15 @@ export interface TelegramUserProfile {
 
 export interface TelegramButton {
   text: string;
-  callbackData: string;
+  callbackData?: string;
+  url?: string;
 }
 
 export interface TelegramMessage {
   text: string;
   buttons?: readonly (readonly TelegramButton[])[];
   photoBuffer?: Buffer | Uint8Array;
+  parseMode?: 'MarkdownV2' | 'HTML' | 'Markdown';
 }
 
 export interface TelegramResponse {

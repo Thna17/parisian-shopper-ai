@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { describe, expect, it, jest } from '@jest/globals';
 import {
   type OutboxRelayRepository,
+  type TelegramChannelBroadcastDispatcher,
   type VisualReviewNotificationDispatcher,
 } from '@parisian-shopper/application';
 import {
@@ -232,4 +234,93 @@ describe('OutboxRelayWorker', () => {
       true, // terminal is true on attempt 5
     );
   });
+
+  it('delegates to channelBroadcaster when CREATIVE_APPROVED occurs', async () => {
+    const event = createMockEvent('CREATIVE_APPROVED', {
+      creativeJobId: 'job-123',
+      visualAssetId: 'asset-456',
+      approvalEventId: 'approval-789',
+      approverUserId: 'admin-1',
+    });
+
+    const claimEventsMock = jest.fn((_t?: readonly string[], _l?: number, _n?: Date) =>
+      Promise.resolve([event]),
+    );
+    const markProcessedMock = jest.fn((_id?: string, _n?: Date) => Promise.resolve());
+    const markFailedMock = jest.fn((_id?: string, _err?: string, _ret?: Date, _term?: boolean) =>
+      Promise.resolve(),
+    );
+
+    const repository: OutboxRelayRepository = {
+      claimEvents: claimEventsMock,
+      markProcessed: markProcessedMock,
+      markFailed: markFailedMock,
+    };
+
+    const creativeQueue: CreativeGenerationEnqueuer = {
+      enqueue: jest.fn(() => Promise.resolve()),
+    };
+
+    const channelBroadcaster: TelegramChannelBroadcastDispatcher = {
+      dispatchBroadcast: jest.fn(() => Promise.resolve()),
+    };
+
+    const worker = new OutboxRelayWorker(
+      repository,
+      creativeQueue,
+      mockLogger,
+      undefined,
+      channelBroadcaster,
+    );
+
+    const count = await worker.dispatchOnce();
+
+    expect(count).toBe(1);
+    expect(channelBroadcaster.dispatchBroadcast).toHaveBeenCalledWith(event);
+    expect(markProcessedMock).toHaveBeenCalledWith('outbox-event-1', expect.any(Date));
+  });
+
+  it('logs fallback message and marks event processed when channelBroadcaster is undefined for CREATIVE_APPROVED', async () => {
+    const event = createMockEvent('CREATIVE_APPROVED', {
+      creativeJobId: 'job-123',
+      visualAssetId: 'asset-456',
+      approvalEventId: 'approval-789',
+      approverUserId: 'admin-1',
+    });
+
+    const claimEventsMock = jest.fn((_t?: readonly string[], _l?: number, _n?: Date) =>
+      Promise.resolve([event]),
+    );
+    const markProcessedMock = jest.fn((_id?: string, _n?: Date) => Promise.resolve());
+    const markFailedMock = jest.fn((_id?: string, _err?: string, _ret?: Date, _term?: boolean) =>
+      Promise.resolve(),
+    );
+
+    const repository: OutboxRelayRepository = {
+      claimEvents: claimEventsMock,
+      markProcessed: markProcessedMock,
+      markFailed: markFailedMock,
+    };
+
+    const creativeQueue: CreativeGenerationEnqueuer = {
+      enqueue: jest.fn(() => Promise.resolve()),
+    };
+
+    const worker = new OutboxRelayWorker(repository, creativeQueue, mockLogger);
+
+    const count = await worker.dispatchOnce();
+
+    expect(count).toBe(1);
+    expect(mockLogger.log).toHaveBeenCalledWith(
+      'Dispatched Telegram channel broadcast event',
+      expect.objectContaining({
+        action: 'telegram_channel_broadcast_dispatched',
+        outboxEventId: 'outbox-event-1',
+        creativeJobId: 'job-123',
+        visualAssetId: 'asset-456',
+      }),
+    );
+    expect(markProcessedMock).toHaveBeenCalledWith('outbox-event-1', expect.any(Date));
+  });
 });
+

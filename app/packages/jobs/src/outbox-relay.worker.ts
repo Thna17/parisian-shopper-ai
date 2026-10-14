@@ -7,6 +7,8 @@ import {
 import {
   OUTBOX_RELAY_REPOSITORY,
   type OutboxRelayRepository,
+  TELEGRAM_CHANNEL_BROADCAST_DISPATCHER,
+  type TelegramChannelBroadcastDispatcher,
   VISUAL_REVIEW_NOTIFICATION_DISPATCHER,
   type VisualReviewNotificationDispatcher,
 } from '@parisian-shopper/application';
@@ -20,6 +22,7 @@ export const OUTBOX_RELAY_TOPICS = [
   'CREATIVE_GENERATION_REQUESTED',
   'CONTENT_APPROVED',
   'CREATIVE_VALIDATED',
+  'CREATIVE_APPROVED',
 ] as const;
 
 @Injectable()
@@ -37,6 +40,9 @@ export class OutboxRelayWorker implements OnModuleInit, OnModuleDestroy {
     @Optional()
     @Inject(VISUAL_REVIEW_NOTIFICATION_DISPATCHER)
     private readonly visualReviewDispatcher?: VisualReviewNotificationDispatcher,
+    @Optional()
+    @Inject(TELEGRAM_CHANNEL_BROADCAST_DISPATCHER)
+    private readonly channelBroadcaster?: TelegramChannelBroadcastDispatcher,
   ) {}
 
   public onModuleInit(): void {
@@ -70,6 +76,8 @@ export class OutboxRelayWorker implements OnModuleInit, OnModuleDestroy {
         await this.handleContentApproved(event);
       } else if (event.topic === 'CREATIVE_VALIDATED') {
         await this.handleCreativeValidated(event);
+      } else if (event.topic === 'CREATIVE_APPROVED') {
+        await this.handleCreativeApproved(event);
       }
       await this.repository.markProcessed(event.id, new Date());
       this.logger.log(`Outbox event ${event.id} (${event.topic}) successfully processed and marked done.`);
@@ -130,6 +138,19 @@ export class OutboxRelayWorker implements OnModuleInit, OnModuleDestroy {
     } else {
       this.logger.log('Dispatched Telegram visual review notification event', {
         action: 'telegram_visual_review_notification_dispatched',
+        outboxEventId: event.id,
+        creativeJobId: event.payload.creativeJobId,
+        visualAssetId: event.payload.visualAssetId,
+      });
+    }
+  }
+
+  private async handleCreativeApproved(event: ClaimedOutboxEvent): Promise<void> {
+    if (this.channelBroadcaster) {
+      await this.channelBroadcaster.dispatchBroadcast(event);
+    } else {
+      this.logger.log('Dispatched Telegram channel broadcast event', {
+        action: 'telegram_channel_broadcast_dispatched',
         outboxEventId: event.id,
         creativeJobId: event.payload.creativeJobId,
         visualAssetId: event.payload.visualAssetId,

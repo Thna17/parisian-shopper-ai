@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import {
   ApplicationModule,
+  TELEGRAM_CHANNEL_BROADCAST_DISPATCHER,
   TELEGRAM_VISUAL_CALLBACK_HANDLER,
   VISUAL_REVIEW_NOTIFICATION_DISPATCHER,
 } from '@parisian-shopper/application';
@@ -14,6 +15,7 @@ import { TELEGRAM_DELIVERY_GATEWAY } from './telegram-delivery.gateway.js';
 import { TelegramOutboxDispatcher } from './telegram-outbox.dispatcher.js';
 import { TelegramWebhookController } from './telegram-webhook.controller.js';
 import { VisualReviewCallbackHandler } from './handlers/visual-review-callback.handler.js';
+import { TelegramChannelBroadcastAdapter } from './channel-broadcast/telegram-channel-broadcast.adapter.js';
 
 @Global()
 @Module({
@@ -37,6 +39,11 @@ import { VisualReviewCallbackHandler } from './handlers/visual-review-callback.h
     { provide: VISUAL_REVIEW_NOTIFICATION_DISPATCHER, useExisting: TelegramOutboxDispatcher },
     VisualReviewCallbackHandler,
     { provide: TELEGRAM_VISUAL_CALLBACK_HANDLER, useExisting: VisualReviewCallbackHandler },
+    TelegramChannelBroadcastAdapter,
+    {
+      provide: TELEGRAM_CHANNEL_BROADCAST_DISPATCHER,
+      useExisting: TelegramChannelBroadcastAdapter,
+    },
   ],
   exports: [
     GRAMMY_BOT,
@@ -46,6 +53,8 @@ import { VisualReviewCallbackHandler } from './handlers/visual-review-callback.h
     VISUAL_REVIEW_NOTIFICATION_DISPATCHER,
     VisualReviewCallbackHandler,
     TELEGRAM_VISUAL_CALLBACK_HANDLER,
+    TelegramChannelBroadcastAdapter,
+    TELEGRAM_CHANNEL_BROADCAST_DISPATCHER,
   ],
 })
 export class TelegramInfrastructureModule {}

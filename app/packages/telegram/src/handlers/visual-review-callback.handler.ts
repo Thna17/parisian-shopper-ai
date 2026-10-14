@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   ApproveCreativeUseCase,
   CREATIVE_APPROVAL_REPOSITORY,
@@ -21,7 +21,7 @@ import {
   type VisualAssetRepository,
   type TelegramVisualCallbackHandler,
 } from '@parisian-shopper/application';
-import { APPLICATION_LOGGER, type ApplicationLogger } from '@parisian-shopper/common';
+import { APPLICATION_LOGGER, type ApplicationLogger, type OutboxWriter } from '@parisian-shopper/common';
 
 import { buildConfirmVisualApprovalKeyboard } from '../keyboards/visual-review.keyboard.js';
 
@@ -43,6 +43,9 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
     private readonly generateCreative: GenerateCreativeUseCase,
     @Inject(APPLICATION_LOGGER)
     private readonly logger: ApplicationLogger,
+    @Optional()
+    @Inject('OUTBOX_WRITER')
+    private readonly outboxWriter?: OutboxWriter,
   ) {}
 
   public async handleCallback(input: TelegramCallbackInput): Promise<TelegramResponse> {
@@ -210,6 +213,7 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
       creativeJobId,
       visualAssetId,
       approvedBy: actor.internalUserId,
+      ...(this.outboxWriter !== undefined ? { outboxWriter: this.outboxWriter } : {}),
     });
 
     await this.workflowRepo.appendAudit({

@@ -35,6 +35,7 @@ export interface TelegramConfig {
   webhookUrl?: string;
   webhookSecret?: string;
   actionTokenTtlSeconds: number;
+  channelId?: string;
 }
 
 export interface CreativeConfig {
@@ -116,12 +117,14 @@ export class AppConfigService {
     const botToken = this.config.get('TELEGRAM_BOT_TOKEN', { infer: true });
     const webhookUrl = this.config.get('TELEGRAM_WEBHOOK_URL', { infer: true });
     const webhookSecret = this.config.get('TELEGRAM_WEBHOOK_SECRET', { infer: true });
+    const channelId = this.config.get('TELEGRAM_CHANNEL_ID', { infer: true });
     return {
       mode: this.config.get('TELEGRAM_MODE', { infer: true }),
       actionTokenTtlSeconds: this.config.get('TELEGRAM_ACTION_TOKEN_TTL_SECONDS', { infer: true }),
       ...(botToken === undefined ? {} : { botToken }),
       ...(webhookUrl === undefined ? {} : { webhookUrl }),
       ...(webhookSecret === undefined ? {} : { webhookSecret }),
+      ...(channelId === undefined ? {} : { channelId }),
     };
   }
 
@@ -157,6 +160,7 @@ export class AppConfigService {
       PRODUCT_API: this.config.get('FEATURE_PRODUCT_API', { infer: true }),
       AUTO_PUBLISHING: this.config.get('FEATURE_AUTO_PUBLISHING', { infer: true }),
       META_PUBLISHING: this.config.get('FEATURE_META_PUBLISHING', { infer: true }),
+      TELEGRAM_CHANNEL_PUBLISHING: this.config.get('FEATURE_TELEGRAM_CHANNEL_PUBLISHING', { infer: true }),
       ANALYTICS: this.config.get('FEATURE_ANALYTICS', { infer: true }),
     });
   }

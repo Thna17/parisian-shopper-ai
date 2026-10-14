@@ -18,8 +18,9 @@ describe('configuration validation', () => {
     expect(configuration.FEATURE_PRODUCT_API).toBe(false);
     expect(configuration.FEATURE_AUTO_PUBLISHING).toBe(false);
     expect(configuration.FEATURE_META_PUBLISHING).toBe(false);
+    expect(configuration.FEATURE_TELEGRAM_CHANNEL_PUBLISHING).toBe(false);
     expect(configuration.FEATURE_ANALYTICS).toBe(false);
-    expect(Object.values(FeatureFlag)).toHaveLength(10);
+    expect(Object.values(FeatureFlag)).toHaveLength(11);
   });
 
   it('parses the string false as false', () => {
