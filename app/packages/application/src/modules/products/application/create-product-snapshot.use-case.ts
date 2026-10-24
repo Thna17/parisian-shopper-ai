@@ -7,7 +7,7 @@ import {
 } from '../domain/product.schema.js';
 import { InvalidProductDataError } from '../domain/product-errors.js';
 import { PRODUCT_METRICS, type ProductMetrics } from './product-metrics.port.js';
-import { calculateProductSnapshotHash } from './product-snapshot-hash.js';
+import { calculateProductDependencyHashes } from './product-snapshot-hash.js';
 import {
   PRODUCT_NORMALIZER_VERSION,
   PRODUCT_SNAPSHOT_REPOSITORY,
@@ -36,9 +36,11 @@ export class CreateProductSnapshotUseCase {
       throw new InvalidProductDataError(parsed.error);
     }
     const product = parsed.data;
+    const dependencyHashes = calculateProductDependencyHashes(product);
     const snapshot = await this.snapshots.create({
       product,
-      snapshotHash: calculateProductSnapshotHash(product),
+      snapshotHash: dependencyHashes.full,
+      dependencyHashes,
       normalizerVersion: PRODUCT_NORMALIZER_VERSION,
     });
     const durationMs = Math.max(0, Math.round((performance.now() - startedAt) * 100) / 100);

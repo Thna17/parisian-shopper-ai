@@ -3,21 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "description": "Clean-room foundation for the Parisian Shopper AI Telegram Content System",
+  "type": "module",
   "license": "UNLICENSED",
   "engines": {
     "node": "22.22.2",
-    "pnpm": "9.15.1"
+    "pnpm": "12.9.1"
   },
-  "packageManager": "pnpm@9.15.1",
-  "pnpm": {
-    "overrides": {
-      "deepmerge-ts": "8.0.0"
-    }
-  },
+  "packageManager": "pnpm@12.9.1",
   "scripts": {
     "build": "tsc -b --force",
     "boundaries": "node scripts/check-boundaries.mjs",
     "boundaries:check": "pnpm boundaries",
+    "codex:live-test": "node --env-file=.env scripts/codex-live-test.mjs",
     "db:generate": "pnpm --filter @parisian-shopper/database prisma:generate",
     "db:migrate": "pnpm --filter @parisian-shopper/database prisma:migrate:dev",
     "db:migrate:deploy": "pnpm --filter @parisian-shopper/database prisma:migrate:deploy",
@@ -33,16 +30,17 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "higgsfield:seedance": "node --env-file=.env.local --import tsx examples/higgsfield-seedance/index.ts",
+    "check:licenses": "node scripts/check-licenses.mjs",
     "license:check": "node scripts/check-licenses.mjs",
-    "lint": "eslint . --max-warnings 0 && pnpm boundaries",
-    "lint:fix": "eslint . --fix && prettier --write .",
+    "lint": "NODE_OPTIONS=--max-old-space-size=4096 eslint . --max-warnings 0 && pnpm boundaries",
+    "lint:fix": "NODE_OPTIONS=--max-old-space-size=4096 eslint . --fix && prettier --write .",
     "outbox:status": "node scripts/outbox-operations.mjs --status",
     "prisma:validate": "pnpm --filter @parisian-shopper/database prisma:validate",
     "prisma:format": "pnpm --filter @parisian-shopper/database prisma:format",
     "queue:status": "node scripts/queue-operations.mjs --status",
     "backup:verify": "node scripts/verify-backup-restore.mjs",
     "security:audit": "pnpm audit --prod",
-    "security:check": "pnpm security:audit",
+    "security:check": "node scripts/check-security.mjs",
     "start:api": "node apps/api/dist/main.js",
     "start:worker": "node apps/worker/dist/main.js",
     "test": "pnpm test:unit && pnpm test:integration && pnpm test:e2e",

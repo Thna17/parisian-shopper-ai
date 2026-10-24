@@ -183,3 +183,212 @@ export class AssetNotFoundError extends ApplicationError {
     });
   }
 }
+
+export class CreativeImageDecodeFailedError extends ApplicationError {
+  public constructor(
+    message = 'Failed to decode input image binary',
+    details?: Readonly<Record<string, unknown>>,
+  ) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Creative image decode failed: ${message}`,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}
+
+export class CreativeUnsupportedImageFormatError extends ApplicationError {
+  public constructor(format: string, expectedFormats: readonly string[]) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Unsupported image format "${format}". Expected one of: ${expectedFormats.join(', ')}`,
+      details: { format, expectedFormats },
+    });
+  }
+}
+
+export class CreativeInputTooLargeError extends ApplicationError {
+  public constructor(byteSize: number, maxBytes: number) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Image input size (${byteSize} bytes) exceeds maximum permitted limit of ${maxBytes} bytes`,
+      details: { byteSize, maxBytes },
+    });
+  }
+}
+
+export class CreativePixelLimitExceededError extends ApplicationError {
+  public constructor(pixels: number, maxPixels: number) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Image pixel count (${pixels} pixels) exceeds maximum permitted limit of ${maxPixels} pixels`,
+      details: { pixels, maxPixels },
+    });
+  }
+}
+
+export class CreativeAlphaRequiredError extends ApplicationError {
+  public constructor(
+    message = 'Canonical product image must contain usable alpha transparency for compositing',
+    details?: Readonly<Record<string, unknown>>,
+  ) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: message,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}
+
+export class CreativeInvalidLayoutError extends ApplicationError {
+  public constructor(reason: string, details?: Readonly<Record<string, unknown>>) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Creative invalid layout: ${reason}`,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}
+
+export class CreativeCompositionFailedError extends ApplicationError {
+  public constructor(reason: string, details?: Readonly<Record<string, unknown>>) {
+    super({
+      code: 'EXTERNAL_SERVICE_ERROR',
+      publicMessage: `Creative composition failed: ${reason}`,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}
+
+export class CreativeOutputTooLargeError extends ApplicationError {
+  public constructor(byteSize: number, maxBytes: number) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Composited output size (${byteSize} bytes) exceeds maximum limit of ${maxBytes} bytes`,
+      details: { byteSize, maxBytes },
+    });
+  }
+}
+
+export class ContentVersionNotEligibleForCreativeError extends ApplicationError {
+  public constructor(contentVersionId: string, reason: string) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Content version ${contentVersionId} is not eligible for creative generation: ${reason}`,
+      details: { contentVersionId, reason },
+    });
+  }
+}
+
+export class CreativeValidationFailedError extends ApplicationError {
+  public constructor(visualAssetId: string, blockingCount: number) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Visual asset ${visualAssetId} failed validation with ${blockingCount} blocking finding(s)`,
+      details: { visualAssetId, blockingCount },
+    });
+  }
+}
+
+export class CreativeJobNotReadyForApprovalError extends ApplicationError {
+  public constructor(jobId: string, currentStatus: CreativeJobStatus) {
+    super({
+      code: 'CONFLICT',
+      publicMessage: `Creative job ${jobId} is not in a reviewable state (current status: ${currentStatus})`,
+      details: { jobId, currentStatus },
+    });
+  }
+}
+
+export class CanonicalProductImageMissingError extends ApplicationError {
+  public constructor(sku?: string, details?: Readonly<Record<string, unknown>>) {
+    super({
+      code: 'NOT_FOUND',
+      publicMessage:
+        'Canonical product image is missing. Upload or seed a transparent PNG before generating the poster.',
+      details: { ...(sku !== undefined ? { sku } : {}), ...(details ?? {}) },
+    });
+  }
+}
+
+export class CanonicalProductOpaqueError extends ApplicationError {
+  public constructor(
+    message = 'Canonical product image has an opaque background. Please supply a transparent PNG.',
+    details?: Readonly<Record<string, unknown>>,
+  ) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: message,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}
+
+export class KnownPlaceholderRejectedError extends ApplicationError {
+  public constructor(digest: string, details?: Readonly<Record<string, unknown>>) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage:
+        'Known placeholder image detected. Authentic canonical product asset required.',
+      details: { digest, ...(details ?? {}) },
+    });
+  }
+}
+
+export class ProductAssetValidationError extends ApplicationError {
+  public constructor(message: string, details?: Readonly<Record<string, unknown>>) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Product asset validation failed: ${message}`,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}
+
+export class InvalidPosterSpecError extends ApplicationError {
+  public constructor(message: string, details?: Readonly<Record<string, unknown>>) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Invalid poster specification: ${message}`,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}
+
+export class PosterLayoutOverflowError extends ApplicationError {
+  public constructor(
+    elementName: string,
+    message: string,
+    details?: Readonly<Record<string, unknown>>,
+  ) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Poster layout overflow for "${elementName}": ${message}`,
+      details: { elementName, ...(details ?? {}) },
+    });
+  }
+}
+
+export class PosterCollisionError extends ApplicationError {
+  public constructor(
+    elementA: string,
+    elementB: string,
+    details?: Readonly<Record<string, unknown>>,
+  ) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Poster layout collision detected between "${elementA}" and "${elementB}"`,
+      details: { elementA, elementB, ...(details ?? {}) },
+    });
+  }
+}
+
+export class PosterFontNotFoundError extends ApplicationError {
+  public constructor(fontFamily: string, searchPaths: readonly string[]) {
+    super({
+      code: 'EXTERNAL_SERVICE_ERROR',
+      publicMessage: `Required font "${fontFamily}" could not be loaded from search paths`,
+      details: { fontFamily, searchPaths },
+    });
+  }
+}

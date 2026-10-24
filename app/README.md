@@ -103,4 +103,71 @@ Tests never contact OpenAI, Telegram, the Parisian Shopper Product API, or Meta.
 - Development/test select eight fictional products while `FEATURE_PRODUCT_API=false`. Production selects a disabled source and never falls back to fixtures. No product HTTP endpoint is exposed.
 - Do not point early development at production Product API or provider accounts.
 
+## Local Codex CLI Integration (Development Only)
+
+For private local development, the system supports invoking the locally installed, ChatGPT-authenticated Codex CLI without requiring `OPENAI_API_KEY` or `CODEX_API_KEY`.
+
+> [!WARNING]
+> This integration is **strictly for private local development**. It is rejected when `NODE_ENV=production`. Usage consumes the authenticated developer's ChatGPT session quota and is neither free nor unlimited.
+
+### Preflight Check
+
+Confirm the local Codex CLI installation and authentication status:
+
+```bash
+codex --version
+codex login status
+```
+
+### Configuration (`.env`)
+
+To enable the Codex CLI for text copy and creative background generation:
+
+```bash
+# AI Text Generation via Codex CLI
+FEATURE_AI_TEXT_GENERATION=true
+AI_PROVIDER=codex_cli
+
+# Creative Background Generation via Codex CLI imagegen skill
+FEATURE_AI_IMAGE_GENERATION=true
+FEATURE_CREATIVE_GENERATION=true
+CREATIVE_PROVIDER=codex_cli
+
+# Process & Timeout Budgets
+CODEX_CLI_TEXT_TIMEOUT_MS=120000
+CODEX_CLI_IMAGE_TIMEOUT_MS=300000
+CODEX_CLI_MAX_CONCURRENCY=1
+```
+
+To revert back to fast, offline mock providers:
+
+```bash
+AI_PROVIDER=fake
+CREATIVE_PROVIDER=fake
+```
+
+### Running the Opt-In Live Smoke Test
+
+The test suite never makes real external AI calls. To run a single opt-in end-to-end smoke test against the local Codex CLI:
+
+```bash
+RUN_CODEX_CLI_LIVE_TESTS=true pnpm codex:live-test
+```
+
+This script:
+
+1. Runs a Codex CLI preflight check.
+2. Selects a fictional development product fixture (`Moonlit River Eau de Parfum`).
+3. Generates bilingual (Khmer & English) structured copy via `CodexCliTextProvider`.
+4. Validates the copy against `aiContentOutputSchema` and language rules.
+5. Generates a 1080×1080 luxury background canvas via `CodexCliCreativeProvider` (Codex `imagegen` skill).
+6. Runs deterministic visual validation and visual safety scans.
+7. Composites the canonical transparent product image with `SharpHeroCompositor`.
+8. Saves artifacts to `.data/codex-live-test/<timestamp>/`:
+   - `content.json` — Validated bilingual copy with facts and warnings.
+   - `background.png` — Pure background canvas (1080×1080).
+   - `final-composite.png` — Completed composite hero asset (1080×1080).
+   - `metadata.json` — Timings, token usage, bounding box, and run provenance.
+9. On macOS, automatically triggers the system image viewer (`open`) for visual review.
+
 See the repository `docs/` directory for boundaries, database, jobs, outbox, errors, security, and dependency-license policy.

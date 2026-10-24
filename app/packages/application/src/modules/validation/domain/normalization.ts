@@ -34,7 +34,15 @@ const CONCENTRATION_ALIASES: Readonly<Record<string, string>> = {
 };
 
 export function normalizeConcentration(value: string): string | null {
-  return CONCENTRATION_ALIASES[normalizeText(value)] ?? null;
+  const normalized = normalizeText(value);
+  const exact = CONCENTRATION_ALIASES[normalized];
+  if (exact !== undefined) return exact;
+
+  if (/\b(?:eau\s+de\s+parfum|edp)\b/u.test(normalized)) return 'EDP';
+  if (/\b(?:eau\s+de\s+toilette|edt)\b/u.test(normalized)) return 'EDT';
+  if (/\b(?:parfum|perfume|extrait)\b/u.test(normalized)) return 'PARFUM';
+
+  return null;
 }
 
 const COUNTRY_ALIASES: Readonly<Record<string, string>> = {

@@ -198,6 +198,15 @@ export const FICTIONAL_PRODUCTS: readonly NormalizedProductEnvelope[] = deepFree
   }),
 ]);
 
+export { GEPARLYS_PRODUCTS } from './geparlys-products.js';
+
+import { GEPARLYS_PRODUCTS } from './geparlys-products.js';
+
+export const ALL_PRODUCTS: readonly NormalizedProductEnvelope[] = deepFreeze([
+  ...FICTIONAL_PRODUCTS,
+  ...GEPARLYS_PRODUCTS,
+]);
+
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
     Object.freeze(value);

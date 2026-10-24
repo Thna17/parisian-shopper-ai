@@ -54,6 +54,13 @@ describe('Creative Ports Contract Tests', () => {
           byteSize: 15,
           sha256: 'a'.repeat(64),
           latencyMs: 45,
+          compositorVersion: 'ps-compositor-v1',
+          heroScale: 0.5,
+          heroPlacement: 'CENTER',
+          heroBoundingBox: { x: 270, y: 270, width: 540, height: 540 },
+          productDigest: input.canonicalProductSha256,
+          backgroundDigest: input.backgroundSha256,
+          outputDigest: 'a'.repeat(64),
         });
       },
     };

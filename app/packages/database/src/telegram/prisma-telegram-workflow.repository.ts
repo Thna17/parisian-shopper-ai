@@ -17,6 +17,7 @@ import {
   type TelegramJobSummary,
   type TelegramOutboxEvent,
   type TelegramUserProfile,
+  type TelegramWorkflowMetadata,
   type TelegramWorkflowRepository,
   Permission,
   ValidationStatus,
@@ -29,7 +30,54 @@ const OUTBOX_LEASE_MS = 5 * 60 * 1_000;
 
 @Injectable()
 export class PrismaTelegramWorkflowRepository implements TelegramWorkflowRepository {
+  private readonly activeMessages = new Map<string, { messageId: number; chatId?: string }>();
+
   public constructor(private readonly prisma: PrismaService) {}
+
+  public setActiveWorkflowMessage(
+    flowIdOrJobId: string,
+    messageId: number,
+    chatId?: string,
+  ): Promise<void> {
+    this.activeMessages.set(flowIdOrJobId, {
+      messageId,
+      ...(chatId !== undefined ? { chatId } : {}),
+    });
+    return Promise.resolve();
+  }
+
+  public getActiveWorkflowMessage(
+    flowIdOrJobId: string,
+  ): Promise<{ messageId: number; chatId?: string } | null> {
+    return Promise.resolve(this.activeMessages.get(flowIdOrJobId) ?? null);
+  }
+
+  public clearActiveWorkflowMessage(flowIdOrJobId: string): Promise<void> {
+    this.activeMessages.delete(flowIdOrJobId);
+    return Promise.resolve();
+  }
+
+  private readonly channelPublications = new Map<
+    string,
+    { channelId: string; messageId: number; publishedAt: Date }
+  >();
+
+  public recordChannelPublication(
+    creativeJobId: string,
+    _visualAssetId: string,
+    channelId: string,
+    messageId: number,
+    publishedAt = new Date(),
+  ): Promise<void> {
+    this.channelPublications.set(creativeJobId, { channelId, messageId, publishedAt });
+    return Promise.resolve();
+  }
+
+  public getChannelPublication(
+    creativeJobId: string,
+  ): Promise<{ channelId: string; messageId: number; publishedAt: Date } | null> {
+    return Promise.resolve(this.channelPublications.get(creativeJobId) ?? null);
+  }
 
   public async claimInboundUpdate(
     updateId: string,
@@ -134,17 +182,76 @@ export class PrismaTelegramWorkflowRepository implements TelegramWorkflowReposit
 
   public async updateFlowSelection(
     id: string,
-    field: 'contentType' | 'language' | 'platform',
-    value: string,
+    field:
+      | 'contentType'
+      | 'language'
+      | 'platform'
+      | 'stylePreset'
+      | 'format'
+      | 'wizardMessageId'
+      | 'step',
+    value: string | number,
   ): Promise<TelegramCreateFlow> {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM telegram_create_flows WHERE id = ${id}::uuid FOR UPDATE`;
       const current = await tx.telegramCreateFlow.findUnique({ where: { id } });
       if (current === null || current.expiresAt <= new Date())
         throw new Error('Telegram flow expired');
-      if (current.status !== expectedFlowStatus(field)) throw new Error('Telegram action is stale');
-      const data = selectionUpdate(field, value);
-      return toFlow(await tx.telegramCreateFlow.update({ where: { id }, data }));
+
+      if (field === 'contentType' || field === 'language' || field === 'platform') {
+        if (current.status !== expectedFlowStatus(field))
+          throw new Error('Telegram action is stale');
+        const data = selectionUpdate(field, String(value));
+        return toFlow(await tx.telegramCreateFlow.update({ where: { id }, data }));
+      }
+
+      const rawData = (current.productData as Record<string, unknown>) ?? {};
+      const envelope = rawData && '_envelope' in rawData ? rawData._envelope : current.productData;
+      const meta =
+        (rawData && '_metadata' in rawData ? (rawData._metadata as Record<string, unknown>) : {}) ??
+        {};
+      meta[field] = value;
+
+      const updated = await tx.telegramCreateFlow.update({
+        where: { id },
+        data: {
+          productData: {
+            _envelope: envelope,
+            _metadata: meta,
+          } as Prisma.InputJsonValue,
+        },
+      });
+      return toFlow(updated);
+    });
+  }
+
+  public async setFlowMetadata(
+    id: string,
+    metadata: Partial<TelegramWorkflowMetadata>,
+  ): Promise<TelegramCreateFlow> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM telegram_create_flows WHERE id = ${id}::uuid FOR UPDATE`;
+      const current = await tx.telegramCreateFlow.findUnique({ where: { id } });
+      if (current === null || current.expiresAt <= new Date())
+        throw new Error('Telegram flow expired');
+
+      const rawData = (current.productData as Record<string, unknown>) ?? {};
+      const envelope = rawData && '_envelope' in rawData ? rawData._envelope : current.productData;
+      const meta =
+        (rawData && '_metadata' in rawData ? (rawData._metadata as Record<string, unknown>) : {}) ??
+        {};
+      Object.assign(meta, metadata);
+
+      const updated = await tx.telegramCreateFlow.update({
+        where: { id },
+        data: {
+          productData: {
+            _envelope: envelope,
+            _metadata: meta,
+          } as Prisma.InputJsonValue,
+        },
+      });
+      return toFlow(updated);
     });
   }
 
@@ -614,14 +721,24 @@ function toJobSummary(record: JobSummaryRecord): TelegramJobSummary {
 function toFlow(
   record: Prisma.TelegramCreateFlowGetPayload<Record<string, never>>,
 ): TelegramCreateFlow {
+  const rawData = record.productData as Record<string, unknown>;
+  const productData = rawData && '_envelope' in rawData ? rawData._envelope : record.productData;
+  const metadata =
+    rawData && '_metadata' in rawData ? (rawData._metadata as Record<string, unknown>) : undefined;
+
   return {
     id: record.id,
     telegramIdentityId: record.telegramIdentityId,
-    product: normalizedProductEnvelopeSchema.parse(record.productData),
+    product: normalizedProductEnvelopeSchema.parse(productData),
     status: record.status,
     ...(record.contentType === null ? {} : { contentType: record.contentType }),
     ...(record.language === null ? {} : { language: record.language }),
     ...(record.platform === null ? {} : { platform: record.platform }),
+    ...(metadata?.stylePreset ? { stylePreset: metadata.stylePreset as string } : {}),
+    ...(metadata?.format ? { format: metadata.format as string } : {}),
+    ...(metadata?.wizardMessageId ? { wizardMessageId: metadata.wizardMessageId as number } : {}),
+    ...(metadata?.step ? { step: metadata.step as number } : {}),
+    ...(metadata !== undefined ? { metadata } : {}),
     expiresAt: record.expiresAt,
     ...(record.completedAt === null ? {} : { completedAt: record.completedAt }),
   };

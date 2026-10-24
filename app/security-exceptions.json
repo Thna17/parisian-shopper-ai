@@ -1,0 +1,52 @@
+{
+  "exceptions": [
+    {
+      "id": "GHSA-f88m-g3jw-g9cj",
+      "package": "sharp",
+      "affectedVersion": "<0.35.0",
+      "severity": "high",
+      "cve": "CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, CVE-2026-35591",
+      "vulnerabilityClass": "Out-of-bounds Read / Integer Overflow in libvips",
+      "attackPrerequisites": "Attacker provides crafted image payloads parsed by libvips decoders.",
+      "reason": "Temporarily accepted under documented mitigations. Sharp 0.33.5 uses bundled libvips 8.15.3 required by our approved license exception (@img/sharp-libvips-*@1.0.4). Upgrading to Sharp 0.35.0+ requires a newer libvips binary (1.1.x+) which is currently unapproved and requires legal/management re-review.",
+      "reviewer": "HONG THAN BRATHNA — TECHNICAL DEVELOPER",
+      "reviewDate": "2026-10-09",
+      "mitigations": "Compositor only accepts image/png, image/webp, image/jpeg raster formats. Hard resource ceilings enforce maximum input size 15 MB, maximum decoded pixels 16,777,216 px (limitInputPixels: 16777216), maximum dimensions 4096x4096px, and single-frame static constraint (pages: 1). Operations are isolated in background workers with 128 MB cache ceiling and concurrency capped at 2.",
+      "residualRisk": "Low. A crafted image payload designed to trigger memory corruption within the 16 MP limit could cause worker process termination (denial of service), mitigated by worker process recycling and lack of synchronous HTTP request exposure.",
+      "upgradeTarget": "sharp@0.35.0 (pending license exception approval for libvips 8.16.x / @img/sharp-libvips-*@1.1.x+)",
+      "reReview": "Re-review upon Sharp upgrade or before exposing image processing to unauthenticated direct public uploads."
+    },
+    {
+      "id": "GHSA-rgj7-g3m4-5g8c",
+      "package": "sharp",
+      "affectedVersion": "<0.35.4",
+      "severity": "high",
+      "cve": "libheif upstream vulnerabilities",
+      "vulnerabilityClass": "Memory Corruption in libheif (AVIF/HEIF decoding)",
+      "attackPrerequisites": "Decoding AVIF/HEIF image files via libvips VipsForeignLoadHeif.",
+      "reason": "Temporarily accepted under documented mitigations. Code path is rendered strictly unreachable by format rejection and native loader blocking.",
+      "reviewer": "HONG THAN BRATHNA — TECHNICAL DEVELOPER",
+      "reviewDate": "2026-10-09",
+      "mitigations": "Input format validation restricts inputs strictly to PNG, WebP, and JPEG. AVIF and HEIF formats are rejected fast. Native mitigation: sharp.block({ operation: ['VipsForeignLoadHeif'] }) is executed at process initialization, completely blocking the libvips HEIF loader from executing in native code.",
+      "residualRisk": "Negligible. VipsForeignLoadHeif is blocked at the native libvips level; libheif code cannot be reached or executed.",
+      "upgradeTarget": "sharp@0.35.4 (pending license exception approval for updated libvips binaries)",
+      "reReview": "Re-review upon Sharp upgrade or if AVIF/HEIF format support is ever requested."
+    },
+    {
+      "id": "GHSA-wq5f-xc86-pv6w",
+      "package": "sharp",
+      "affectedVersion": "<0.35.5",
+      "severity": "high",
+      "cve": "CVE-2026-96889",
+      "vulnerabilityClass": "Memory Corruption in librsvg (SVG vector rendering)",
+      "attackPrerequisites": "Decoding SVG vector graphics via libvips VipsForeignLoadSvg.",
+      "reason": "Temporarily accepted under documented mitigations. Code path is rendered strictly unreachable by format rejection and native loader blocking.",
+      "reviewer": "HONG THAN BRATHNA — TECHNICAL DEVELOPER",
+      "reviewDate": "2026-10-09",
+      "mitigations": "Input format validation restricts inputs strictly to PNG, WebP, and JPEG. SVG inputs are rejected fast (CreativeUnsupportedImageFormatError). Native mitigation: sharp.block({ operation: ['VipsForeignLoadSvg'] }) is executed at process initialization, completely blocking the libvips SVG loader from executing in native code.",
+      "residualRisk": "Negligible. VipsForeignLoadSvg is blocked at the native libvips level; librsvg code cannot be reached or executed.",
+      "upgradeTarget": "sharp@0.35.5 (pending license exception approval for updated libvips binaries)",
+      "reReview": "Re-review upon Sharp upgrade or if SVG rendering is ever requested."
+    }
+  ]
+}

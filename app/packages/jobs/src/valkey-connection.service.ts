@@ -1,4 +1,5 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { withTimeout } from '@parisian-shopper/common';
 import { AppConfigService } from '@parisian-shopper/config';
 import { GlideClient, type GlideClientConfiguration } from '@valkey/valkey-glide';
 
@@ -13,11 +14,31 @@ export class ValkeyConnectionService implements OnModuleInit, OnModuleDestroy {
     await this.connect();
   }
 
-  public onModuleDestroy(): void {
-    for (const client of this.dedicatedClients) client.close();
-    this.dedicatedClients.length = 0;
-    this.client?.close();
-    this.client = undefined;
+  public async onModuleDestroy(): Promise<void> {
+    const cleanup = (): Promise<void> => {
+      for (const client of this.dedicatedClients) {
+        try {
+          client.close();
+        } catch {
+          // ignore error during shutdown
+        }
+      }
+      this.dedicatedClients.length = 0;
+      if (this.client !== undefined) {
+        try {
+          this.client.close();
+        } catch {
+          // ignore error during shutdown
+        }
+        this.client = undefined;
+      }
+      return Promise.resolve();
+    };
+    try {
+      await withTimeout(cleanup(), 30_000, 'Valkey connection shutdown');
+    } catch {
+      // Do not block container termination
+    }
   }
 
   public async createDedicatedClient(suffix: string): Promise<GlideClient> {

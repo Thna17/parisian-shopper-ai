@@ -1,3 +1,5 @@
+import { type LayoutIntent } from '../domain/layout-intent.js';
+
 export const CREATIVE_PROVIDER = Symbol('CREATIVE_PROVIDER');
 
 export interface CreativeBrief {
@@ -10,6 +12,7 @@ export interface CreativeBrief {
   readonly targetHeight: number;
   readonly aspectRatio: string;
   readonly creativeProfile: string;
+  readonly layoutIntent?: LayoutIntent | undefined;
 }
 
 export interface CreativeProviderOptions {

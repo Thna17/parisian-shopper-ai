@@ -359,10 +359,18 @@ describe('Phase 1G Acceptance Golden Path and Operational Resilience', () => {
     commandCenter!.handleCallback({ updateId: nextUpdateId(), profile, callbackData: data });
 
   const button = (response: TelegramResponse, text: string): string => {
+    const norm = text.toLowerCase().trim();
     const found = response.messages
       .flatMap((msg) => msg.buttons ?? [])
       .flat()
-      .find((btn) => btn.text.toLowerCase().includes(text.toLowerCase()));
+      .find((btn) => {
+        const t = btn.text.toLowerCase().trim();
+        if (t === norm || t.includes(norm)) return true;
+        if (norm === 'bilingual' && (t.includes('english') || t.includes('ខ្មែរ'))) return true;
+        if (norm === 'facebook' && t.includes('square')) return true;
+        if (norm === 'telegram' && t.includes('telegram')) return true;
+        return false;
+      });
     if (!found) {
       throw new Error(
         `Button containing "${text}" not found. Available buttons: ${JSON.stringify(
@@ -400,23 +408,36 @@ describe('Phase 1G Acceptance Golden Path and Operational Resilience', () => {
       // Step 1: Editor executes /create FIC-PERF-001
       const createResponse = await command(editorProfile, '/create FIC-PERF-001');
       expect(createResponse.messages[0]?.text).toContain('Moonlit River Eau de Parfum');
-      expect(createResponse.messages[0]?.text).toContain('Choose a content type');
+      expect(createResponse.messages[0]?.text).toContain('Step 2 of 6');
 
       // Step 2 & 3: Select content type PRODUCT_SPOTLIGHT
       const typeResponse = await callback(
         editorProfile,
         button(createResponse, 'Product spotlight'),
       );
-      expect(typeResponse.messages[0]?.text).toContain('Choose a language');
+      expect(typeResponse.messages[0]?.text).toContain('Step 3 of 6');
 
       // Step 4: Select language BILINGUAL
       const langResponse = await callback(editorProfile, button(typeResponse, 'Bilingual'));
-      expect(langResponse.messages[0]?.text).toContain('platform');
+      expect(langResponse.messages[0]?.text).toContain('Step 4 of 6');
 
-      // Step 5: Select platform TELEGRAM -> triggers creation
-      const completedV1 = completion();
+      // Step 5: Select platform TELEGRAM
       const platformResponse = await callback(editorProfile, button(langResponse, 'Telegram'));
-      expect(platformResponse.messages[0]?.text).toContain('Generating content');
+      expect(platformResponse.messages[0]?.text).toContain('Step 5 of 6');
+
+      // Step 6: Select visual style & Confirm generation
+      const styleResponse = await callback(
+        editorProfile,
+        button(platformResponse, 'Parisian Morning'),
+      );
+      expect(styleResponse.messages[0]?.text).toContain('Step 6 of 6');
+
+      const completedV1 = completion();
+      const confirmResponse = await callback(
+        editorProfile,
+        button(styleResponse, 'Generate Poster'),
+      );
+      expect(confirmResponse.messages[0]?.text).toContain('Generating Poster & Copy');
       await completedV1;
 
       // Step 6 & 7 & 8: Verify snapshot created immutably and BullMQ job enqueued
@@ -440,7 +461,7 @@ describe('Phase 1G Acceptance Golden Path and Operational Resilience', () => {
       const editorMessages = gateway!.popMessages(editorProfile.telegramUserId);
       expect(editorMessages.length).toBeGreaterThan(0);
       const v1DraftMessage = editorMessages[0]!;
-      expect(v1DraftMessage.text).toContain('DRAFT');
+      expect(v1DraftMessage.text).toContain('Draft Copy Review');
       expect(v1DraftMessage.text).toContain('V1');
       expect(v1DraftMessage.text).toContain('Facts checked — no blocking issues');
 
@@ -449,8 +470,8 @@ describe('Phase 1G Acceptance Golden Path and Operational Resilience', () => {
       expect(draftButtons.some((b) => b.text.includes('Edit'))).toBe(true);
       expect(draftButtons.some((b) => b.text.includes('Regenerate'))).toBe(true);
       expect(draftButtons.some((b) => b.text.includes('Approve'))).toBe(true);
-      expect(draftButtons.some((b) => b.text.includes('View Source'))).toBe(true);
-      expect(draftButtons.some((b) => b.text.includes('View Validation'))).toBe(true);
+      expect(draftButtons.some((b) => b.text.includes('Source'))).toBe(true);
+      expect(draftButtons.some((b) => b.text.includes('Validation'))).toBe(true);
 
       // Step 14: Editor triggers Edit action
       const editButton = draftButtons.find((b) => b.text.includes('Edit'))!;
@@ -566,9 +587,11 @@ describe('Phase 1G Acceptance Golden Path and Operational Resilience', () => {
       const create = await command(editorProfile, '/create FIC-PERF-001');
       const type = await callback(editorProfile, button(create, 'Product spotlight'));
       const lang = await callback(editorProfile, button(type, 'Bilingual'));
-      const completedNegV1 = completion();
       const plat = await callback(editorProfile, button(lang, 'Telegram'));
-      expect(plat.messages[0]?.text).toContain('Generating content');
+      const style = await callback(editorProfile, button(plat, 'Parisian Morning'));
+      const completedNegV1 = completion();
+      const confirm = await callback(editorProfile, button(style, 'Generate Poster'));
+      expect(confirm.messages[0]?.text).toContain('Generating Poster & Copy');
       await completedNegV1;
 
       const job = await getPrisma().contentJob.findFirstOrThrow({
@@ -615,7 +638,7 @@ describe('Phase 1G Acceptance Golden Path and Operational Resilience', () => {
       ).rejects.toThrow(ContentNotApprovalEligibleError);
 
       // Step 7: Editor inspects View Validation
-      const valBtn = buttons.find((b) => b.text.includes('View Validation'))!;
+      const valBtn = buttons.find((b) => b.text.includes('Validation'))!;
       const valView = await callback(editorProfile, valBtn.callbackData);
       expect(valView.messages[0]?.text).toContain('PRICE_MISMATCH');
 
@@ -661,8 +684,10 @@ describe('Phase 1G Acceptance Golden Path and Operational Resilience', () => {
       const create = await command(editorProfile, '/create FIC-WATCH-001');
       const type = await callback(editorProfile, button(create, 'Product spotlight'));
       const lang = await callback(editorProfile, button(type, 'Bilingual'));
+      const plat = await callback(editorProfile, button(lang, 'Telegram'));
+      const style = await callback(editorProfile, button(plat, 'Parisian Morning'));
       const completedWatch = completion();
-      await callback(editorProfile, button(lang, 'Telegram'));
+      await callback(editorProfile, button(style, 'Generate Poster'));
       await completedWatch;
 
       const job = await getPrisma().contentJob.findFirstOrThrow({
@@ -690,8 +715,10 @@ describe('Phase 1G Acceptance Golden Path and Operational Resilience', () => {
       const create = await command(editorProfile, '/create FIC-PERF-001');
       const type = await callback(editorProfile, button(create, 'Product spotlight'));
       const lang = await callback(editorProfile, button(type, 'Bilingual'));
+      const plat = await callback(editorProfile, button(lang, 'Telegram'));
+      const style = await callback(editorProfile, button(plat, 'Parisian Morning'));
       const completedStale = completion();
-      await callback(editorProfile, button(lang, 'Telegram'));
+      await callback(editorProfile, button(style, 'Generate Poster'));
       await completedStale;
 
       const job = await getPrisma().contentJob.findFirstOrThrow({

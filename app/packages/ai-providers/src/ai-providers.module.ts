@@ -10,6 +10,7 @@ import {
 } from '@parisian-shopper/application';
 import { AppConfigService, FeatureFlag, FeatureFlagService } from '@parisian-shopper/config';
 
+import { CodexCliTextProvider } from './codex-cli-text-provider.js';
 import { OpenAITextProvider } from './openai-text-provider.js';
 
 @Global()
@@ -33,6 +34,11 @@ import { OpenAITextProvider } from './openai-text-provider.js';
           };
         }
         if (config.ai.provider === 'fake') return new FakeAITextProvider();
+        if (config.ai.provider === 'codex_cli') {
+          return new CodexCliTextProvider({
+            timeoutMs: config.codexCli.textTimeoutMs,
+          });
+        }
         const apiKey = config.ai.openaiApiKey;
         const model = config.ai.openaiModel;
         if (apiKey === undefined)

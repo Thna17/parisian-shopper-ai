@@ -6,5 +6,10 @@
     "rootDir": "src"
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../common" }, { "path": "../config" }, { "path": "../application" }]
+  "references": [
+    { "path": "../common" },
+    { "path": "../config" },
+    { "path": "../codex-cli" },
+    { "path": "../application" }
+  ]
 }

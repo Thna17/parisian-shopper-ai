@@ -13,6 +13,16 @@ import {
 
 export const TELEGRAM_WORKFLOW_REPOSITORY = Symbol('TELEGRAM_WORKFLOW_REPOSITORY');
 
+export interface TelegramWorkflowMetadata {
+  wizardMessageId?: number;
+  chatId?: string;
+  step?: number;
+  stylePreset?: string;
+  format?: string;
+  history?: readonly string[];
+  [key: string]: unknown;
+}
+
 export interface TelegramCreateFlow {
   id: string;
   telegramIdentityId: string;
@@ -26,6 +36,11 @@ export interface TelegramCreateFlow {
   contentType?: ContentType;
   language?: ContentLanguage;
   platform?: ContentPlatform;
+  stylePreset?: string;
+  format?: string;
+  wizardMessageId?: number;
+  step?: number;
+  metadata?: TelegramWorkflowMetadata;
   expiresAt: Date;
   completedAt?: Date;
 }
@@ -125,9 +140,39 @@ export interface TelegramWorkflowRepository {
   findFlowById(id: string): Promise<TelegramCreateFlow | null>;
   updateFlowSelection(
     id: string,
-    field: 'contentType' | 'language' | 'platform',
-    value: string,
+    field:
+      | 'contentType'
+      | 'language'
+      | 'platform'
+      | 'stylePreset'
+      | 'format'
+      | 'wizardMessageId'
+      | 'step',
+    value: string | number,
   ): Promise<TelegramCreateFlow>;
+  setFlowMetadata?(
+    id: string,
+    metadata: Partial<TelegramWorkflowMetadata>,
+  ): Promise<TelegramCreateFlow>;
+  setActiveWorkflowMessage?(
+    flowIdOrJobId: string,
+    messageId: number,
+    chatId?: string,
+  ): Promise<void>;
+  getActiveWorkflowMessage?(
+    flowIdOrJobId: string,
+  ): Promise<{ messageId: number; chatId?: string } | null>;
+  clearActiveWorkflowMessage?(flowIdOrJobId: string): Promise<void>;
+  recordChannelPublication?(
+    creativeJobId: string,
+    visualAssetId: string,
+    channelId: string,
+    messageId: number,
+    publishedAt?: Date,
+  ): Promise<void>;
+  getChannelPublication?(
+    creativeJobId: string,
+  ): Promise<{ channelId: string; messageId: number; publishedAt: Date } | null>;
   completeFlow(id: string): Promise<void>;
   storeActionTokens(inputs: readonly StoreActionTokenInput[]): Promise<void>;
   consumeActionToken(

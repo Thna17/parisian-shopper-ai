@@ -15,6 +15,13 @@ export const Permission = {
   REGENERATE_CONTENT: 'REGENERATE_CONTENT',
   APPROVE_CONTENT: 'APPROVE_CONTENT',
   REJECT_CONTENT: 'REJECT_CONTENT',
+  EDIT_CREATIVE: 'EDIT_CREATIVE',
+  REGENERATE_CREATIVE: 'REGENERATE_CREATIVE',
+  APPROVE_CREATIVE: 'APPROVE_CREATIVE',
+  REJECT_CREATIVE: 'REJECT_CREATIVE',
+  EXPORT_CREATIVE: 'EXPORT_CREATIVE',
+  PUBLISH_CREATIVE: 'PUBLISH_CREATIVE',
+  VERIFY_PRODUCT_ASSET_RIGHTS: 'VERIFY_PRODUCT_ASSET_RIGHTS',
 } as const;
 export type Permission = (typeof Permission)[keyof typeof Permission];
 
@@ -26,6 +33,8 @@ const ROLE_PERMISSIONS: Readonly<Record<RoleCode, readonly Permission[]>> = {
     Permission.CREATE_CONTENT,
     Permission.EDIT_CONTENT,
     Permission.REGENERATE_CONTENT,
+    Permission.EDIT_CREATIVE,
+    Permission.REGENERATE_CREATIVE,
   ],
   MARKETING_APPROVER: [
     Permission.VIEW_PRODUCTS,
@@ -35,6 +44,12 @@ const ROLE_PERMISSIONS: Readonly<Record<RoleCode, readonly Permission[]>> = {
     Permission.REGENERATE_CONTENT,
     Permission.APPROVE_CONTENT,
     Permission.REJECT_CONTENT,
+    Permission.EDIT_CREATIVE,
+    Permission.REGENERATE_CREATIVE,
+    Permission.APPROVE_CREATIVE,
+    Permission.REJECT_CREATIVE,
+    Permission.EXPORT_CREATIVE,
+    Permission.VERIFY_PRODUCT_ASSET_RIGHTS,
   ],
   ADMIN: [
     Permission.VIEW_PRODUCTS,
@@ -45,6 +60,13 @@ const ROLE_PERMISSIONS: Readonly<Record<RoleCode, readonly Permission[]>> = {
     Permission.REGENERATE_CONTENT,
     Permission.APPROVE_CONTENT,
     Permission.REJECT_CONTENT,
+    Permission.EDIT_CREATIVE,
+    Permission.REGENERATE_CREATIVE,
+    Permission.APPROVE_CREATIVE,
+    Permission.REJECT_CREATIVE,
+    Permission.EXPORT_CREATIVE,
+    Permission.PUBLISH_CREATIVE,
+    Permission.VERIFY_PRODUCT_ASSET_RIGHTS,
   ],
 };
 
@@ -55,9 +77,10 @@ export class PermissionService {
 }
 
 export function hasAnyRolePermission(roles: readonly string[], permission: Permission): boolean {
-  return roles.some((role) =>
-    isRoleCode(role) ? ROLE_PERMISSIONS[role].includes(permission) : false,
-  );
+  return roles.some((role) => {
+    const normalized = role.toUpperCase();
+    return isRoleCode(normalized) ? ROLE_PERMISSIONS[normalized].includes(permission) : false;
+  });
 }
 
 function isRoleCode(value: string): value is RoleCode {

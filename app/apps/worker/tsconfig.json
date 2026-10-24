@@ -9,6 +9,7 @@
   "references": [
     { "path": "../../packages/application" },
     { "path": "../../packages/ai-providers" },
+    { "path": "../../packages/common" },
     { "path": "../../packages/config" },
     { "path": "../../packages/creative-providers" },
     { "path": "../../packages/database" },

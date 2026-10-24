@@ -1,7 +1,11 @@
 import { type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { DatabaseHealthIndicator, PrismaService } from '@parisian-shopper/database';
-import { ValkeyConnectionService } from '@parisian-shopper/jobs';
+import {
+  ContentGenerationQueue,
+  CreativeGenerationQueue,
+  ValkeyConnectionService,
+} from '@parisian-shopper/jobs';
 import { jest } from '@jest/globals';
 import { type Server } from 'node:http';
 import request from 'supertest';
@@ -18,11 +22,19 @@ describe('API foundation (e2e)', () => {
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)
-      .useValue({ $connect: jest.fn(), $disconnect: jest.fn() })
+      .useValue({
+        $connect: jest.fn(),
+        $disconnect: jest.fn(),
+        $transaction: jest.fn().mockImplementation(() => Promise.resolve([])),
+      })
       .overrideProvider(DatabaseHealthIndicator)
       .useValue(databaseHealth)
       .overrideProvider(ValkeyConnectionService)
       .useValue(valkeyHealth)
+      .overrideProvider(CreativeGenerationQueue)
+      .useValue({ enqueue: jest.fn(), onModuleInit: jest.fn() })
+      .overrideProvider(ContentGenerationQueue)
+      .useValue({ enqueue: jest.fn(), onModuleInit: jest.fn() })
       .compile();
 
     application = module.createNestApplication();
@@ -86,5 +98,15 @@ describe('API foundation (e2e)', () => {
     expect(body.error.code).toBe('HTTP_404');
     expect(body.error.message).toBe('Cannot GET /not-present');
     expect(body.error.requestId).toEqual(expect.any(String));
+  });
+
+  it('exposes prometheus metrics on /metrics', async () => {
+    const response = await request(server).get('/metrics').expect(200);
+
+    expect(response.headers['content-type']).toContain('text/plain');
+    expect(response.text).toContain('process_resident_memory_bytes');
+    expect(response.text).toContain('nodejs_heap_used_bytes');
+    expect(response.text).toContain('bullmq_queue_depth');
+    expect(response.text).toContain('ai_token_expenditure_total');
   });
 });

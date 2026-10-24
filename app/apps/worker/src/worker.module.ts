@@ -7,9 +7,13 @@ import { DatabaseModule } from '@parisian-shopper/database';
 import {
   ContentGenerationWorkerModule,
   ContentValidationWorkerModule,
+  CreativeGenerationWorkerModule,
   JobsModule,
+  OutboxRelayWorkerModule,
 } from '@parisian-shopper/jobs';
 import { LoggerModule } from '@parisian-shopper/logger';
+
+import { WorkerHealthService } from './worker-health.service.js';
 
 @Module({
   imports: [
@@ -22,6 +26,9 @@ import { LoggerModule } from '@parisian-shopper/logger';
     JobsModule,
     ContentGenerationWorkerModule,
     ContentValidationWorkerModule,
+    CreativeGenerationWorkerModule,
+    OutboxRelayWorkerModule,
   ],
+  providers: [WorkerHealthService],
 })
 export class WorkerModule {}

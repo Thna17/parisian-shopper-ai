@@ -24,6 +24,9 @@ describe('factual validation normalization', () => {
   it('normalizes controlled size, concentration, country, and note values', () => {
     expect(normalizeSize('100.0', 'ML')).toBe('100 ml');
     expect(normalizeConcentration('Eau de Parfum')).toBe('EDP');
+    expect(normalizeConcentration('Eau de Parfum (EDP)')).toBe('EDP');
+    expect(normalizeConcentration('EDP (Eau de Parfum)')).toBe('EDP');
+    expect(normalizeConcentration('Eau de Toilette (EDT)')).toBe('EDT');
     expect(normalizeConcentration('unknown intense')).toBeNull();
     expect(normalizeCountry('បារាំង')).toBe('FR');
     expect(normalizeCountry('unknown')).toBeNull();

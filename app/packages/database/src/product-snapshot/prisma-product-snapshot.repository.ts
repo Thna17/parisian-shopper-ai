@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import {
+  calculateProductDependencyHashes,
   normalizedProductEnvelopeSchema,
   type CreateProductSnapshotRecord,
   type NormalizedProductEnvelope,
+  type ProductDependencyHashes,
   type ProductSnapshot,
   type ProductSnapshotRepository,
 } from '@parisian-shopper/application';
@@ -17,6 +19,8 @@ export class PrismaProductSnapshotRepository implements ProductSnapshotRepositor
   public async create(input: CreateProductSnapshotRecord): Promise<ProductSnapshot> {
     const source = normalizedProductEnvelopeSchema.parse(input.product);
     const product = source.product;
+    const hashes = input.dependencyHashes ?? calculateProductDependencyHashes(source);
+
     const record = await this.prisma.productSnapshot.create({
       data: {
         sku: product.sku,
@@ -44,21 +48,35 @@ export class PrismaProductSnapshotRepository implements ProductSnapshotRepositor
         retrievedAt: new Date(source.retrieved_at),
         sourceEtag: source.etag ?? null,
         lifecycleStatus: source.lifecycle_status,
-        snapshotHash: input.snapshotHash,
+        snapshotHash: hashes.full,
+        catalogPriceHash: hashes.catalogPrice,
+        campaignPriceHash: hashes.campaignPrice,
+        stockHash: hashes.stock,
+        promotionHash: hashes.promotion,
+        permanentFactsHash: hashes.permanentFacts,
+        visualAssetHash: hashes.visualAssets,
         normalizerVersion: input.normalizerVersion,
       },
     });
 
-    return toDomain(record);
+    return toSnapshotDomain(record);
   }
 
   public async findById(id: string): Promise<ProductSnapshot | null> {
     const record = await this.prisma.productSnapshot.findUnique({ where: { id } });
-    return record === null ? null : toDomain(record);
+    return record === null ? null : toSnapshotDomain(record);
+  }
+
+  public async findLatestBySku(sku: string): Promise<ProductSnapshot | null> {
+    const record = await this.prisma.productSnapshot.findFirst({
+      where: { sku },
+      orderBy: { createdAt: 'desc' },
+    });
+    return record === null ? null : toSnapshotDomain(record);
   }
 }
 
-function toDomain(record: PrismaProductSnapshot): ProductSnapshot {
+export function toSnapshotDomain(record: PrismaProductSnapshot): ProductSnapshot {
   const optionalProductFields = {
     ...(record.promoPrice === null ? {} : { promo_price: record.promoPrice.toString() }),
     ...(record.discount === null ? {} : { discount: record.discount }),
@@ -95,10 +113,33 @@ function toDomain(record: PrismaProductSnapshot): ProductSnapshot {
     },
   });
 
+  const calculatedHashes = calculateProductDependencyHashes(product);
+  const dependencyHashes: ProductDependencyHashes =
+    record.catalogPriceHash &&
+    record.campaignPriceHash &&
+    record.stockHash &&
+    record.promotionHash &&
+    record.permanentFactsHash &&
+    record.visualAssetHash
+      ? {
+          full: record.snapshotHash,
+          catalogPrice: record.catalogPriceHash,
+          campaignPrice: record.campaignPriceHash,
+          stock: record.stockHash,
+          promotion: record.promotionHash,
+          permanentFacts: record.permanentFactsHash,
+          visualAssets: record.visualAssetHash,
+        }
+      : {
+          ...calculatedHashes,
+          full: record.snapshotHash,
+        };
+
   return {
     id: record.id,
     product,
     snapshotHash: record.snapshotHash,
+    dependencyHashes,
     normalizerVersion: record.normalizerVersion,
     createdAt: record.createdAt,
   };

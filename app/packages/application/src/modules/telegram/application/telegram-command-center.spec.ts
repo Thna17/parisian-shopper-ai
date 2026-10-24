@@ -167,8 +167,8 @@ describe('TelegramCommandCenter Phase 1F Review Workflow', () => {
   const appendAudit = jest.fn((_input: unknown): Promise<void> => Promise.resolve());
 
   const createTokens = jest.fn(
-    (_identityId: string, _defs: unknown[], _expiresAt: Date): Promise<string[]> =>
-      Promise.resolve(['token-abc', 'token-def']),
+    (_identityId: string, defs: unknown[], _expiresAt: Date): Promise<string[]> =>
+      Promise.resolve(defs.map((_, i) => `token-mock-${i}`)),
   );
   const executeEdit = jest.fn((input: RequestContentEditInput): Promise<RevisionRequestRecord> =>
     Promise.resolve({
@@ -604,6 +604,273 @@ describe('TelegramCommandCenter Phase 1F Review Workflow', () => {
 
       expect(cancelPendingInteraction).toHaveBeenCalledWith('pi-cancel', expect.any(Date));
       expect(response.messages[0]?.text).toContain('Action cancelled.');
+    });
+  });
+
+  describe('Telegram Creation Flow with Style Presets', () => {
+    const creatorActor: TelegramActor = {
+      identityId: 'ident-creator',
+      internalUserId: 'user-creator',
+      telegramUserId: '987654321',
+      displayName: 'Creator Charlie',
+      roles: [RoleCode.MARKETING_EDITOR],
+    };
+
+    const creatorProfile: TelegramUserProfile = {
+      telegramUserId: '987654321',
+      username: 'creator_charlie',
+      displayName: 'Creator Charlie',
+    };
+
+    const sampleFragranceProduct = {
+      schema_version: '1.0',
+      source_system: 'manual',
+      retrieved_at: new Date().toISOString(),
+      source_updated_at: new Date().toISOString(),
+      lifecycle_status: 'ACTIVE' as const,
+      product: {
+        sku: 'GEP-KING-EDP-100',
+        product_name: 'Yes I Am The King',
+        brand: 'Geparlys',
+        category: 'fragrance',
+        price: '48.00',
+        currency: 'USD',
+        stock_status: 'IN_STOCK' as const,
+      },
+    };
+
+    const sampleFlow = {
+      id: 'flow-123',
+      telegramIdentityId: 'ident-creator',
+      product: sampleFragranceProduct,
+      status: 'SELECTING_PLATFORM' as const,
+      contentType: 'SCENT_PYRAMID' as const,
+      language: 'EN' as const,
+      platform: 'FACEBOOK' as const,
+      expiresAt: new Date(Date.now() + 600_000),
+    };
+
+    it('presents Step 5 of 6 with visual style presets upon selecting channel and format', async () => {
+      resolveActor.mockResolvedValueOnce(creatorActor);
+      consumeActionToken.mockResolvedValueOnce({
+        disposition: 'VALID',
+        token: {
+          id: 'tok-platform',
+          telegramIdentityId: creatorActor.identityId,
+          action: TelegramAction.SELECT_PLATFORM,
+          resourceId: 'flow-123',
+          metadata: { value: 'FACEBOOK', format: 'FEED_SQUARE' },
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+      (mockRepository as unknown as Record<string, unknown>).updateFlowSelection = jest.fn(() =>
+        Promise.resolve({
+          ...sampleFlow,
+          platform: 'FACEBOOK' as const,
+          format: 'FEED_SQUARE',
+          step: 5,
+        }),
+      );
+      (mockRepository as unknown as Record<string, unknown>).findJobByFlowId = jest.fn(() =>
+        Promise.resolve(null),
+      );
+
+      const response = await commandCenter.handleCallback({
+        updateId: 'up-platform-1',
+        profile: creatorProfile,
+        callbackData: 'ps:mocktokenplatform1234567890',
+      });
+
+      expect(response.callbackNotice).toBe('Channel & format selected.');
+      expect(response.messages[0]?.text).toContain('Step 5 of 6');
+      expect(response.messages[0]?.text).toContain('Choose an art-direction visual style');
+      expect(response.messages[0]?.action).toBe('EDIT_TEXT');
+      // 5 style presets + 1 navigation row
+      expect(response.messages[0]?.buttons?.length).toBe(6);
+    });
+
+    it('presents Step 6 of 6 review summary upon selecting style preset', async () => {
+      resolveActor.mockResolvedValueOnce(creatorActor);
+      consumeActionToken.mockResolvedValueOnce({
+        disposition: 'VALID',
+        token: {
+          id: 'tok-style',
+          telegramIdentityId: creatorActor.identityId,
+          action: TelegramAction.SELECT_STYLE_PRESET,
+          resourceId: 'flow-123',
+          metadata: { value: 'NOCTURNE_OBSIDIAN' },
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+      (mockRepository as unknown as Record<string, unknown>).findFlowById = jest.fn(() =>
+        Promise.resolve({
+          ...sampleFlow,
+          stylePreset: 'NOCTURNE_OBSIDIAN',
+          step: 5,
+        }),
+      );
+      (mockRepository as unknown as Record<string, unknown>).setFlowMetadata = jest.fn(() =>
+        Promise.resolve(),
+      );
+
+      const response = await commandCenter.handleCallback({
+        updateId: 'up-style-1',
+        profile: creatorProfile,
+        callbackData: 'ps:mocktokenstyle1234567890',
+      });
+
+      expect(response.callbackNotice).toBe('Visual style selected.');
+      expect(response.messages[0]?.text).toContain('Step 6 of 6');
+      expect(response.messages[0]?.text).toContain('Review & Confirm');
+      expect(response.messages[0]?.action).toBe('EDIT_TEXT');
+      // Generate button + navigation row
+      expect(response.messages[0]?.buttons?.length).toBe(2);
+      expect(response.messages[0]?.buttons?.[0]?.[0]?.text).toContain('Generate Poster');
+    });
+
+    it('enqueues generation and returns progress card upon confirming generation', async () => {
+      resolveActor.mockResolvedValueOnce(creatorActor);
+      consumeActionToken.mockResolvedValueOnce({
+        disposition: 'VALID',
+        token: {
+          id: 'tok-confirm',
+          telegramIdentityId: creatorActor.identityId,
+          action: TelegramAction.CONFIRM_GENERATION,
+          resourceId: 'flow-123',
+          metadata: {},
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+      (mockRepository as unknown as Record<string, unknown>).findFlowById = jest.fn(() =>
+        Promise.resolve({
+          ...sampleFlow,
+          stylePreset: 'NOCTURNE_OBSIDIAN',
+          step: 6,
+        }),
+      );
+      (mockRepository as unknown as Record<string, unknown>).findJobByFlowId = jest.fn(() =>
+        Promise.resolve(null),
+      );
+      const completeFlowMock = jest.fn(() => Promise.resolve());
+      (mockRepository as unknown as Record<string, unknown>).completeFlow = completeFlowMock;
+
+      const mockSnapshots = {
+        execute: jest.fn(() => Promise.resolve({ id: 'snapshot-123' })),
+      };
+      const mockBrandRules = {
+        findActive: jest.fn(() => Promise.resolve({ id: 'brand-1' })),
+      };
+      const mockCreateJob = {
+        execute: jest.fn(() => Promise.resolve({ id: 'job-999' })),
+      };
+      const mockEnqueuer = {
+        enqueue: jest.fn(() => Promise.resolve()),
+      };
+
+      const customCommandCenter = new TelegramCommandCenter(
+        mockRepository,
+        new PermissionService(),
+        {} as never,
+        {} as never,
+        mockSnapshots as never,
+        mockCreateJob as never,
+        mockBrandRules as never,
+        mockEnqueuer,
+        mockTokens,
+        policy,
+        mockRequestEdit,
+        mockRequestRegenerate,
+        mockApprove,
+        mockReject,
+        mockReviewState,
+        mockApprovalStatus,
+      );
+
+      const response = await customCommandCenter.handleCallback({
+        updateId: 'up-confirm-1',
+        profile: creatorProfile,
+        callbackData: 'ps:mocktokenconfirm1234567890',
+      });
+
+      expect(mockCreateJob.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          campaignContext: 'NOCTURNE_OBSIDIAN',
+        }),
+      );
+      expect(completeFlowMock).toHaveBeenCalledWith('flow-123');
+      expect(mockEnqueuer.enqueue).toHaveBeenCalledWith('job-999');
+
+      expect(response.messages[0]?.text).toContain('Generating Poster & Copy');
+      expect(response.messages[0]?.text).toContain('Preparing verified product facts');
+      expect(response.messages[0]?.action).toBe('EDIT_TEXT');
+      expect(response.callbackNotice).toBe('Generation started!');
+    });
+
+    it('navigates back to previous step when WIZARD_BACK is clicked', async () => {
+      resolveActor.mockResolvedValueOnce(creatorActor);
+      consumeActionToken.mockResolvedValueOnce({
+        disposition: 'VALID',
+        token: {
+          id: 'tok-back',
+          telegramIdentityId: creatorActor.identityId,
+          action: TelegramAction.WIZARD_BACK,
+          resourceId: 'flow-123',
+          metadata: { toStep: 4 },
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+      (mockRepository as unknown as Record<string, unknown>).findFlowById = jest.fn(() =>
+        Promise.resolve({
+          ...sampleFlow,
+          step: 5,
+        }),
+      );
+      (mockRepository as unknown as Record<string, unknown>).setFlowMetadata = jest.fn(() =>
+        Promise.resolve(),
+      );
+
+      const response = await commandCenter.handleCallback({
+        updateId: 'up-back-1',
+        profile: creatorProfile,
+        callbackData: 'ps:mocktokenback1234567890',
+      });
+
+      expect(response.callbackNotice).toBe('Previous step.');
+      expect(response.messages[0]?.text).toContain('Step 4 of 6');
+      expect(response.messages[0]?.action).toBe('EDIT_TEXT');
+    });
+
+    it('cancels wizard when WIZARD_CANCEL is clicked', async () => {
+      resolveActor.mockResolvedValueOnce(creatorActor);
+      consumeActionToken.mockResolvedValueOnce({
+        disposition: 'VALID',
+        token: {
+          id: 'tok-cancel',
+          telegramIdentityId: creatorActor.identityId,
+          action: TelegramAction.WIZARD_CANCEL,
+          resourceId: 'flow-123',
+          metadata: {},
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+      (mockRepository as unknown as Record<string, unknown>).completeFlow = jest.fn(() =>
+        Promise.resolve(),
+      );
+
+      const response = await commandCenter.handleCallback({
+        updateId: 'up-cancel-1',
+        profile: creatorProfile,
+        callbackData: 'ps:mocktokencancel1234567890',
+      });
+
+      expect(response.callbackNotice).toBe('Creation cancelled.');
+      expect(response.messages[0]?.text).toContain('Creation Cancelled');
+      expect(response.messages[0]?.action).toBe('EDIT_TEXT');
     });
   });
 });

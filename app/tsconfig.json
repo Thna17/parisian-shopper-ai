@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/common" },
     { "path": "packages/config" },
+    { "path": "packages/codex-cli" },
     { "path": "packages/ai-providers" },
     { "path": "packages/creative-providers" },
     { "path": "packages/database" },

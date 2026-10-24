@@ -11,6 +11,7 @@
     { "path": "../../packages/ai-providers" },
     { "path": "../../packages/common" },
     { "path": "../../packages/config" },
+    { "path": "../../packages/creative-providers" },
     { "path": "../../packages/database" },
     { "path": "../../packages/jobs" },
     { "path": "../../packages/logger" },
