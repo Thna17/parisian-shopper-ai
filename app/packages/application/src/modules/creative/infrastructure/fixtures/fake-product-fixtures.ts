@@ -22,8 +22,11 @@ export interface TransparentProductFixtureOptions {
 
 /**
  * Generates an RGBA PNG with a transparent perimeter and an opaque interior product shape.
+ * STRICTLY FOR UNIT TEST FIXTURES ONLY. PROHIBITED IN PRODUCTION PATHS.
  */
-export function generateTransparentProductPng(options: TransparentProductFixtureOptions): Buffer {
+export function generateTransparentProductPng_TEST_ONLY(
+  options: TransparentProductFixtureOptions,
+): Buffer {
   const { width, height } = options;
   const prodW = options.productWidth ?? Math.floor(width * 0.6);
   const prodH = options.productHeight ?? Math.floor(height * 0.6);
@@ -144,3 +147,8 @@ export function generateOpaqueProductPng(width = 400, height = 400): Buffer {
 
   return Buffer.concat([signature, ihdrChunk, idatChunk, iendChunk]);
 }
+
+/**
+ * @deprecated Use generateTransparentProductPng_TEST_ONLY instead.
+ */
+export const generateTransparentProductPng = generateTransparentProductPng_TEST_ONLY;

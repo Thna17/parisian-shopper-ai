@@ -1,17 +1,13 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   type ApplicationLogger,
   APPLICATION_LOGGER,
   type OutboxWriter,
+  ForbiddenError,
 } from '@parisian-shopper/common';
-import {
-  CREATIVE_JOB_REPOSITORY,
-  type CreativeJobRepository,
-} from './creative-job.repository.js';
-import {
-  VISUAL_ASSET_REPOSITORY,
-  type VisualAssetRepository,
-} from './visual-asset.repository.js';
+import { Permission, PermissionService } from '../../auth/domain/permissions.js';
+import { CREATIVE_JOB_REPOSITORY, type CreativeJobRepository } from './creative-job.repository.js';
+import { VISUAL_ASSET_REPOSITORY, type VisualAssetRepository } from './visual-asset.repository.js';
 import {
   CREATIVE_APPROVAL_REPOSITORY,
   type CreativeApprovalRepository,
@@ -32,6 +28,7 @@ export interface ApproveCreativeInput {
   readonly creativeJobId: string;
   readonly visualAssetId: string;
   readonly approvedBy: string;
+  readonly approverRoles: readonly string[];
   readonly comment?: string;
   readonly outboxWriter?: OutboxWriter;
 }
@@ -53,10 +50,17 @@ export class ApproveCreativeUseCase {
     private readonly validationRepo: VisualValidationRepository,
     @Inject(APPLICATION_LOGGER)
     private readonly logger: ApplicationLogger,
+    @Optional()
+    private readonly permissions: PermissionService = new PermissionService(),
   ) {}
 
   public async execute(input: ApproveCreativeInput): Promise<ApproveCreativeResult> {
     const { creativeJobId, visualAssetId, approvedBy, comment } = input;
+
+    // 0. Enforce authorization: require Permission.APPROVE_CREATIVE
+    if (!this.permissions.hasAnyRolePermission(input.approverRoles, Permission.APPROVE_CREATIVE)) {
+      throw new ForbiddenError({ publicMessage: 'Permission denied: Cannot approve creative.' });
+    }
 
     // 1. Verify CreativeJob exists and is in reviewable state (READY_FOR_REVIEW)
     const job = await this.jobRepo.findById(creativeJobId);
@@ -75,11 +79,11 @@ export class ApproveCreativeUseCase {
 
     // 3. Invariant: Only valid assets with PASSED / PASSED_WITH_WARNINGS validation results can be transitioned to APPROVED
     const validationResult = await this.validationRepo.findLatestByAssetId(visualAssetId);
-    if (!validationResult || (validationResult.status !== 'PASSED' && validationResult.status !== 'PASSED_WITH_WARNINGS')) {
-      throw new CreativeValidationFailedError(
-        visualAssetId,
-        validationResult?.blockingCount ?? 1,
-      );
+    if (
+      !validationResult ||
+      (validationResult.status !== 'PASSED' && validationResult.status !== 'PASSED_WITH_WARNINGS')
+    ) {
+      throw new CreativeValidationFailedError(visualAssetId, validationResult?.blockingCount ?? 1);
     }
 
     // 4. Record CreativeApprovalEvent

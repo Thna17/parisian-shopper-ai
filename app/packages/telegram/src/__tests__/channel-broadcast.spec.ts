@@ -1,9 +1,6 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import { describe, expect, it, jest, beforeEach } from '@jest/globals';
-import {
-  type ApplicationLogger,
-  type ClaimedOutboxEvent,
-} from '@parisian-shopper/common';
+import { type ApplicationLogger, type ClaimedOutboxEvent } from '@parisian-shopper/common';
 import {
   type AssetStoragePort,
   type CreativeJobRecord,
@@ -29,7 +26,8 @@ import { FakeTelegramGateway } from '../telegram-delivery.gateway.js';
 describe('Telegram Channel Broadcast Publishing', () => {
   describe('escapeMarkdownV2', () => {
     it('escapes all Telegram MarkdownV2 reserved characters', () => {
-      const specialText = 'Hermès Birkin 25 (Gold/Togo) - €18,500.00! [Limited ~Edition~] `VIP` > #luxury + special | {2026}';
+      const specialText =
+        'Hermès Birkin 25 (Gold/Togo) - €18,500.00! [Limited ~Edition~] `VIP` > #luxury + special | {2026}';
       const escaped = escapeMarkdownV2(specialText);
 
       expect(escaped).toContain('\\(');
@@ -262,7 +260,32 @@ describe('Telegram Channel Broadcast Publishing', () => {
       };
     });
 
-    it('skips publication if TELEGRAM_CHANNEL_PUBLISHING feature flag is false', async () => {
+    it('never publishes externally on CREATIVE_APPROVED even when TELEGRAM_CHANNEL_PUBLISHING is true (fails closed in W02)', async () => {
+      mockFlags.isEnabled.mockReturnValue(true);
+
+      const adapter = new TelegramChannelBroadcastAdapter(
+        mockConfig,
+        mockFlags,
+        gateway,
+        mockLogger,
+        mockWorkflowRepo as TelegramWorkflowRepository,
+        mockCreativeJobs as CreativeJobRepository,
+        mockVisualAssets as VisualAssetRepository,
+        mockProductSnapshots as ProductSnapshotRepository,
+        mockAssetStorage as AssetStoragePort,
+      );
+
+      await adapter.dispatchBroadcast(createOutboxEvent());
+
+      // In W02: Auto-publishing is permanently disabled; 0 messages sent to gateway
+      expect(gateway.sent).toHaveLength(0);
+      expect(mockLogger.log).toHaveBeenCalledWith(
+        expect.stringContaining('auto-publishing on CREATIVE_APPROVED is disabled pending W61'),
+        expect.any(Object),
+      );
+    });
+
+    it('never publishes externally when TELEGRAM_CHANNEL_PUBLISHING is false', async () => {
       mockFlags.isEnabled.mockReturnValue(false);
 
       const adapter = new TelegramChannelBroadcastAdapter(
@@ -280,15 +303,9 @@ describe('Telegram Channel Broadcast Publishing', () => {
       await adapter.dispatchBroadcast(createOutboxEvent());
 
       expect(gateway.sent).toHaveLength(0);
-      expect(mockLogger.log).toHaveBeenCalledWith(
-        'Telegram channel publishing skipped: feature flag is disabled',
-        expect.any(Object),
-      );
     });
 
-    it('skips publication if TELEGRAM_CHANNEL_ID is missing or empty', async () => {
-      delete mockConfig.telegram.channelId;
-
+    it('fails closed in publishManual() before invoking Telegram delivery gateway', async () => {
       const adapter = new TelegramChannelBroadcastAdapter(
         mockConfig,
         mockFlags,
@@ -301,120 +318,23 @@ describe('Telegram Channel Broadcast Publishing', () => {
         mockAssetStorage as AssetStoragePort,
       );
 
-      await adapter.dispatchBroadcast(createOutboxEvent());
+      await expect(
+        adapter.publishManual({
+          creativeJobId: 'creative-job-42',
+          visualAssetId: 'visual-asset-77',
+          actor: {
+            identityId: 'id-1',
+            internalUserId: 'u-1',
+            telegramUserId: '123',
+            displayName: 'Test User',
+            roles: ['ADMIN'],
+          },
+        }),
+      ).rejects.toThrow(
+        'Direct manual publishing is disabled pending controlled publishing implementation (W61 PublishIntent required).',
+      );
 
       expect(gateway.sent).toHaveLength(0);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Telegram channel publishing skipped: TELEGRAM_CHANNEL_ID is not configured',
-        expect.any(Object),
-      );
-    });
-
-    it('skips publication if the event was already dispatched (in-memory deduplication)', async () => {
-      const adapter = new TelegramChannelBroadcastAdapter(
-        mockConfig,
-        mockFlags,
-        gateway,
-        mockLogger,
-        mockWorkflowRepo as TelegramWorkflowRepository,
-        mockCreativeJobs as CreativeJobRepository,
-        mockVisualAssets as VisualAssetRepository,
-        mockProductSnapshots as ProductSnapshotRepository,
-        mockAssetStorage as AssetStoragePort,
-      );
-
-      const event = createOutboxEvent();
-      await adapter.dispatchBroadcast(event);
-      expect(gateway.sent).toHaveLength(1);
-
-      // Second invocation for same outbox event
-      await adapter.dispatchBroadcast(event);
-      expect(gateway.sent).toHaveLength(1);
-      expect(mockLogger.log).toHaveBeenCalledWith(
-        expect.stringContaining('already processed'),
-        expect.any(Object),
-      );
-    });
-
-    it('skips publication if database record indicates ALREADY_SENT (db deduplication)', async () => {
-      mockWorkflowRepo.beginNotificationDelivery = jest.fn<TelegramWorkflowRepository['beginNotificationDelivery']>(
-        () => Promise.resolve('ALREADY_SENT'),
-      );
-
-      const adapter = new TelegramChannelBroadcastAdapter(
-        mockConfig,
-        mockFlags,
-        gateway,
-        mockLogger,
-        mockWorkflowRepo as TelegramWorkflowRepository,
-        mockCreativeJobs as CreativeJobRepository,
-        mockVisualAssets as VisualAssetRepository,
-        mockProductSnapshots as ProductSnapshotRepository,
-        mockAssetStorage as AssetStoragePort,
-      );
-
-      await adapter.dispatchBroadcast(createOutboxEvent());
-
-      expect(gateway.sent).toHaveLength(0);
-      expect(mockLogger.log).toHaveBeenCalledWith(
-        expect.stringContaining('delivery already recorded'),
-        expect.any(Object),
-      );
-    });
-
-    it('successfully publishes high-resolution visual broadcast to channel with photo, caption, and buttons', async () => {
-      const adapter = new TelegramChannelBroadcastAdapter(
-        mockConfig,
-        mockFlags,
-        gateway,
-        mockLogger,
-        mockWorkflowRepo as TelegramWorkflowRepository,
-        mockCreativeJobs as CreativeJobRepository,
-        mockVisualAssets as VisualAssetRepository,
-        mockProductSnapshots as ProductSnapshotRepository,
-        mockAssetStorage as AssetStoragePort,
-      );
-
-      const event = createOutboxEvent();
-      await adapter.dispatchBroadcast(event);
-
-      expect(gateway.sent).toHaveLength(1);
-      const sentMessage = gateway.sent[0];
-      expect(sentMessage?.telegramUserId).toBe('@parisian_vip_channel');
-      expect(sentMessage?.message.photoBuffer).toBeDefined();
-      expect(sentMessage?.message.parseMode).toBe('MarkdownV2');
-      expect(sentMessage?.message.text).toContain('✨ *PARISIAN LUXURY SELECTION* ✨');
-      expect(sentMessage?.message.text).toContain('💎 *Hermès Birkin 25 Togo Gold*');
-      expect(sentMessage?.message.buttons).toBeDefined();
-      expect(sentMessage?.message.buttons?.[0]?.[0]?.text).toBe('💬 Inquire with Concierge');
-      expect(sentMessage?.message.buttons?.[0]?.[0]?.url).toBe('https://t.me/parisian_concierge');
-
-      expect(mockWorkflowRepo.markNotificationSent).toHaveBeenCalledWith(event.id, expect.any(Date));
-    });
-
-    it('rethrows errors if Telegram gateway delivery fails to allow outbox relay retries', async () => {
-      const failingGateway: FakeTelegramGateway = {
-        sent: [],
-        callbackAnswers: [],
-        sendMessages: jest.fn(() => Promise.reject(new Error('Telegram API Network Timeout'))),
-        answerCallback: jest.fn(),
-      };
-
-      const adapter = new TelegramChannelBroadcastAdapter(
-        mockConfig,
-        mockFlags,
-        failingGateway,
-        mockLogger,
-        mockWorkflowRepo as TelegramWorkflowRepository,
-        mockCreativeJobs as CreativeJobRepository,
-        mockVisualAssets as VisualAssetRepository,
-        mockProductSnapshots as ProductSnapshotRepository,
-        mockAssetStorage as AssetStoragePort,
-      );
-
-      await expect(adapter.dispatchBroadcast(createOutboxEvent())).rejects.toThrow(
-        'Telegram API Network Timeout',
-      );
     });
   });
 });

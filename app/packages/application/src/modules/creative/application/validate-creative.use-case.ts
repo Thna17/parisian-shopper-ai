@@ -4,23 +4,14 @@ import {
   APPLICATION_LOGGER,
   type OutboxWriter,
 } from '@parisian-shopper/common';
-import {
-  CREATIVE_JOB_REPOSITORY,
-  type CreativeJobRepository,
-} from './creative-job.repository.js';
-import {
-  VISUAL_ASSET_REPOSITORY,
-  type VisualAssetRepository,
-} from './visual-asset.repository.js';
+import { CREATIVE_JOB_REPOSITORY, type CreativeJobRepository } from './creative-job.repository.js';
+import { VISUAL_ASSET_REPOSITORY, type VisualAssetRepository } from './visual-asset.repository.js';
 import {
   VISUAL_VALIDATION_REPOSITORY,
   type VisualValidationRepository,
   type VisualValidationResultRecord,
 } from './visual-validation.repository.js';
-import {
-  ASSET_STORAGE,
-  type AssetStoragePort,
-} from './asset-storage.port.js';
+import { ASSET_STORAGE, type AssetStoragePort } from './asset-storage.port.js';
 import {
   DETERMINISTIC_VISUAL_VALIDATOR,
   DeterministicVisualValidator,
@@ -183,7 +174,9 @@ export class ValidateCreativeUseCase {
         });
       }
 
-      this.logger.warn(`Creative job ${creativeJobId} failed visual validation (${blockingCount} blocking findings)`);
+      this.logger.warn(
+        `Creative job ${creativeJobId} failed visual validation (${blockingCount} blocking findings)`,
+      );
     }
 
     return {

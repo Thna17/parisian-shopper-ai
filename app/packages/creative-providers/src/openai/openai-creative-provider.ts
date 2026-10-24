@@ -322,7 +322,9 @@ export class OpenAiCreativeProvider implements CreativeProvider {
 
     const parsed = new URL(item.url);
     if (parsed.protocol !== 'https:') {
-      throw new OpenAiProviderError('Insecure download URL: TLS is required for downloading creative assets');
+      throw new OpenAiProviderError(
+        'Insecure download URL: TLS is required for downloading creative assets',
+      );
     }
 
     const response = await this.fetchFn(item.url, { method: 'GET', signal });
@@ -386,10 +388,14 @@ export class OpenAiCreativeProvider implements CreativeProvider {
       : '';
 
     // Enforce prompt sandboxing: clean background scene only, without foreground objects or products
+    const layoutGuidance = brief.layoutIntent
+      ? ` Spatial layout: ${brief.layoutIntent.promptGuidance} Reserved copy space: ${brief.layoutIntent.reservedNegativeSpace.guidance}`
+      : '';
+
     const prompt =
-      `Ultra-luxury Parisian background scene. ${rawPrompt}. ` +
+      `Ultra-luxury Parisian background scene. ${rawPrompt}.${layoutGuidance} ` +
       `Photorealistic, soft architectural daylight, elegant textures, clean studio aesthetic. ` +
-      `Strictly an empty background environment with open negative space in the center, absolutely no foreground products, no bottles, no handbags, no people, no text, no watermarks, no logos.${avoidances}`;
+      `Strictly an empty background environment with open negative space in the center, absolutely no foreground products, no bottles, no handbags, no people, no text, no watermarks, no logos, no guide lines.${avoidances}`;
 
     return prompt.slice(0, 4000);
   }
@@ -399,7 +405,11 @@ export class OpenAiCreativeProvider implements CreativeProvider {
     width: number;
     height: number;
   } {
-    if (brief.aspectRatio === '4:5' || brief.aspectRatio === '9:16' || brief.targetHeight > brief.targetWidth) {
+    if (
+      brief.aspectRatio === '4:5' ||
+      brief.aspectRatio === '9:16' ||
+      brief.targetHeight > brief.targetWidth
+    ) {
       return { sizeString: '1024x1792', width: 1024, height: 1792 };
     }
     if (brief.aspectRatio === '16:9' || brief.targetWidth > brief.targetHeight) {

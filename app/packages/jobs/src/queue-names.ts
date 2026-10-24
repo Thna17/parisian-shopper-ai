@@ -17,4 +17,3 @@ export const ContentValidationJobName = Object.freeze({
 export const CreativeGenerationJobName = Object.freeze({
   GENERATE_CREATIVE: 'GENERATE_CREATIVE',
 } as const);
-

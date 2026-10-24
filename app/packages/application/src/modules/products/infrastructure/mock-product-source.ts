@@ -10,14 +10,14 @@ import {
   type ProductSource,
   type ProductSourceSearchInput,
 } from '../application/product-source.port.js';
-import { FICTIONAL_PRODUCTS } from '../testing/fictional-products.js';
+import { ALL_PRODUCTS } from '../testing/fictional-products.js';
 
 @Injectable()
 export class MockProductSource implements ProductSource {
   public readonly adapterName = 'mock-fixture';
   private readonly products: readonly NormalizedProductEnvelope[];
 
-  public constructor(products: readonly NormalizedProductEnvelope[] = FICTIONAL_PRODUCTS) {
+  public constructor(products: readonly NormalizedProductEnvelope[] = ALL_PRODUCTS) {
     this.products = products.map((product) => normalizedProductEnvelopeSchema.parse(product));
   }
 

@@ -8,9 +8,10 @@ import {
   VISUAL_ASSET_REPOSITORY,
   VISUAL_VALIDATION_REPOSITORY,
   callbackData,
-  formatDraft,
+  formatDraftCompact,
   hasAnyRolePermission,
   splitTelegramMessage,
+  resolveStylePreset,
   Permission,
   type AssetStoragePort,
   type CreateTelegramActionInput,
@@ -23,7 +24,11 @@ import {
   type VisualValidationRepository,
 } from '@parisian-shopper/application';
 import { AppConfigService, FeatureFlag, FeatureFlagService } from '@parisian-shopper/config';
-import { APPLICATION_LOGGER, type ApplicationLogger, type ClaimedOutboxEvent } from '@parisian-shopper/common';
+import {
+  APPLICATION_LOGGER,
+  type ApplicationLogger,
+  type ClaimedOutboxEvent,
+} from '@parisian-shopper/common';
 import { GrammyError, HttpError } from 'grammy';
 
 import {
@@ -36,13 +41,14 @@ import { VisualReviewCardRenderer } from './renderers/visual-review-card.rendere
 const TOPICS = [
   'CONTENT_VALIDATION_COMPLETED',
   'CONTENT_GENERATION_FAILED',
-  'CONTENT_APPROVED',
   'CONTENT_REJECTED',
   'CREATIVE_VALIDATED',
 ] as const;
 
 @Injectable()
-export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy, VisualReviewNotificationDispatcher {
+export class TelegramOutboxDispatcher
+  implements OnModuleInit, OnModuleDestroy, VisualReviewNotificationDispatcher
+{
   private timer: ReturnType<typeof setInterval> | undefined;
   private active = false;
 
@@ -70,7 +76,11 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy, 
 
   public onModuleInit(): void {
     if (!this.flags.isEnabled(FeatureFlag.TELEGRAM)) return;
-    this.timer = setInterval(() => void this.dispatchOnce(), 1_000);
+    this.timer = setInterval(() => {
+      this.dispatchOnce().catch((err: unknown) => {
+        this.logger.warn(`Unhandled telegram dispatch error: ${(err as Error).message}`);
+      });
+    }, 1_000);
     this.timer.unref();
   }
 
@@ -84,6 +94,8 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy, 
     try {
       const events = await this.repository.claimOutboxEvents(TOPICS, 10, new Date());
       for (const event of events) await this.dispatch(event);
+    } catch (error) {
+      this.logger.warn(`Telegram outbox dispatch error: ${(error as Error).message}`);
     } finally {
       this.active = false;
     }
@@ -98,7 +110,6 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy, 
     try {
       if (event.topic === 'CREATIVE_VALIDATED') await this.sendVisualReview(event);
       else if (event.topic === 'CONTENT_VALIDATION_COMPLETED') await this.sendDraft(event);
-      else if (event.topic === 'CONTENT_APPROVED') await this.sendApproval(event);
       else if (event.topic === 'CONTENT_REJECTED') await this.sendRejection(event);
       else await this.sendFailure(event);
       await this.repository.markOutboxProcessed(event.id, new Date());
@@ -210,8 +221,8 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy, 
 
     const buttonRows: TelegramButton[][] = [
       [
-        { text: 'View Source', callbackData: callbackData(required(sourceToken)) },
-        { text: 'View Validation', callbackData: callbackData(required(validationToken)) },
+        { text: '📋 Source Facts', callbackData: callbackData(required(sourceToken)) },
+        { text: '🛡️ Validation Details', callbackData: callbackData(required(validationToken)) },
       ],
     ];
 
@@ -238,7 +249,7 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy, 
     }
 
     const texts = splitTelegramMessage(
-      formatDraft(view, { demoMode: Boolean(this.config.demoMode) }),
+      formatDraftCompact(view, { demoMode: Boolean(this.config.demoMode) }),
     );
     const messages: TelegramMessage[] = texts.map((text, index) => ({
       text,
@@ -325,7 +336,8 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy, 
     const visualAssetId = stringPayload(event.payload, 'visualAssetId');
     const job = this.creativeJobs ? await this.creativeJobs.findById(creativeJobId) : null;
     const view = job ? await this.repository.getDraftViewByVersionId(job.contentVersionId) : null;
-    if (view === null) throw new PermanentTelegramDeliveryError('VISUAL_REVIEW_RECIPIENT_NOT_FOUND');
+    if (view === null)
+      throw new PermanentTelegramDeliveryError('VISUAL_REVIEW_RECIPIENT_NOT_FOUND');
     if (
       (await this.repository.beginNotificationDelivery(event.id, view.telegramIdentityId)) ===
       'ALREADY_SENT'
@@ -349,7 +361,19 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy, 
         singleUse: true,
       },
       {
+        action: TelegramAction.EDIT_VISUAL_LAYOUT,
+        resourceId: creativeJobId,
+        metadata: { creativeJobId, visualAssetId, productName: view.productName },
+        singleUse: true,
+      },
+      {
         action: TelegramAction.REQUEST_VISUAL_EDIT,
+        resourceId: creativeJobId,
+        metadata: { creativeJobId, visualAssetId, productName: view.productName },
+        singleUse: true,
+      },
+      {
+        action: TelegramAction.CHANGE_VISUAL_STYLE,
         resourceId: creativeJobId,
         metadata: { creativeJobId, visualAssetId, productName: view.productName },
         singleUse: true,
@@ -366,16 +390,32 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy, 
         metadata: { creativeJobId, visualAssetId, productName: view.productName },
         singleUse: true,
       },
+      {
+        action: TelegramAction.VIEW_VISUAL_DETAILS,
+        resourceId: creativeJobId,
+        metadata: { creativeJobId, visualAssetId, productName: view.productName },
+        singleUse: false,
+      },
     ];
 
-    const [approveToken, requestEditToken, regenerateToken, rejectToken] =
-      await this.tokens.create(view.telegramIdentityId, tokenDefs, expiresAt);
+    const [
+      approveToken,
+      editLayoutToken,
+      editTextToken,
+      changeStyleToken,
+      newBackgroundToken,
+      rejectToken,
+      detailsToken,
+    ] = await this.tokens.create(view.telegramIdentityId, tokenDefs, expiresAt);
 
     const buttonRows = buildVisualReviewKeyboard({
       approveToken: approveToken ?? '',
-      requestEditToken: requestEditToken ?? '',
-      regenerateToken: regenerateToken ?? '',
+      editLayoutToken,
+      editTextToken,
+      changeStyleToken,
+      newBackgroundToken,
       rejectToken: rejectToken ?? '',
+      detailsToken,
     });
 
     const dimensionsPassed =
@@ -385,18 +425,14 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy, 
           )
         : true;
     const containmentPassed =
-      validation !== null
-        ? !validation.findings.some((f) => f.code.includes('CONTAINMENT'))
-        : true;
+      validation !== null ? !validation.findings.some((f) => f.code.includes('CONTAINMENT')) : true;
     const safetyPassed =
-      validation !== null
-        ? !validation.findings.some((f) => f.code.includes('SAFETY'))
-        : true;
+      validation !== null ? !validation.findings.some((f) => f.code.includes('SAFETY')) : true;
 
     const caption = VisualReviewCardRenderer.renderCaption({
       productName: view.productName,
       brand: view.productName,
-      targetFormat: '1:1 Feed Post',
+      targetFormat: job?.aspectRatio === '9:16' ? 'Story · 1080×1920' : 'Square Post · 1080×1080',
       compositorVersion: 'ps-compositor-v1',
       width: asset.width,
       height: asset.height,
@@ -404,6 +440,10 @@ export class TelegramOutboxDispatcher implements OnModuleInit, OnModuleDestroy, 
       containmentPassed,
       safetyPassed,
       casSha256: asset.sha256,
+      stylePresetName: resolveStylePreset(job?.creativeProfile).buttonText,
+      templateId: 'Editorial Split',
+      version: 1,
+      reviewStatus: 'Ready for Review',
     });
 
     let photoBuffer: Buffer | undefined;

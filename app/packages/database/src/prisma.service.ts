@@ -12,7 +12,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   public async onModuleDestroy(): Promise<void> {
     try {
-      await withTimeout(this.$disconnect(), SHUTDOWN_TIMEOUT_MS, 'Prisma connection pool disconnect');
+      await withTimeout(
+        this.$disconnect(),
+        SHUTDOWN_TIMEOUT_MS,
+        'Prisma connection pool disconnect',
+      );
     } catch {
       // Do not block container termination
     }

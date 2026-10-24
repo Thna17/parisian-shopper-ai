@@ -9,9 +9,7 @@ import {
 import { type ApplicationLogger } from '@parisian-shopper/common';
 import { type Job, UnrecoverableError } from 'bullmq';
 
-import {
-  type CreativeGenerationJobData,
-} from '../creative-generation.queue.js';
+import { type CreativeGenerationJobData } from '../creative-generation.queue.js';
 import { CreativeGenerationWorker } from '../creative-generation.worker.js';
 import { CreativeGenerationJobName } from '../queue-names.js';
 import { type ValkeyConnectionService } from '../valkey-connection.service.js';
@@ -169,9 +167,7 @@ describe('CreativeGenerationWorker', () => {
   });
 
   it('wraps not found error into UnrecoverableError', async () => {
-    const generateExecuteMock = jest.fn(() =>
-      Promise.reject(new Error('Content job not found')),
-    );
+    const generateExecuteMock = jest.fn(() => Promise.reject(new Error('Content job not found')));
     const generateCreative = { execute: generateExecuteMock } as unknown as GenerateCreativeUseCase;
     const validateCreative = { execute: jest.fn() } as unknown as ValidateCreativeUseCase;
 

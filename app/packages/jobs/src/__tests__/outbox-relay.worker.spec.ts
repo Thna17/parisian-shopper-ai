@@ -5,10 +5,7 @@ import {
   type TelegramChannelBroadcastDispatcher,
   type VisualReviewNotificationDispatcher,
 } from '@parisian-shopper/application';
-import {
-  type ApplicationLogger,
-  type ClaimedOutboxEvent,
-} from '@parisian-shopper/common';
+import { type ApplicationLogger, type ClaimedOutboxEvent } from '@parisian-shopper/common';
 
 import { type CreativeGenerationEnqueuer } from '../creative-generation.queue.js';
 import { OutboxRelayWorker } from '../outbox-relay.worker.js';
@@ -179,7 +176,9 @@ describe('OutboxRelayWorker', () => {
       markFailed: markFailedMock,
     };
 
-    const enqueueMock = jest.fn((_data?: unknown) => Promise.reject(new Error('Valkey connection reset')));
+    const enqueueMock = jest.fn((_data?: unknown) =>
+      Promise.reject(new Error('Valkey connection reset')),
+    );
     const creativeQueue: CreativeGenerationEnqueuer = {
       enqueue: enqueueMock,
     };
@@ -323,4 +322,3 @@ describe('OutboxRelayWorker', () => {
     expect(markProcessedMock).toHaveBeenCalledWith('outbox-event-1', expect.any(Date));
   });
 });
-

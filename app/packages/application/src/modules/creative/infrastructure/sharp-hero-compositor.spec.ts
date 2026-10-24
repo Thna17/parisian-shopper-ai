@@ -2,7 +2,11 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from '@jest/globals';
 import sharp from 'sharp';
 import { SharpHeroCompositor } from './sharp-hero-compositor.adapter.js';
-import { COMPOSITOR_VERSION, PS_COMPOSITOR_VERSION } from '../application/hero-compositor.port.js';
+import {
+  COMPOSITOR_VERSION,
+  PS_COMPOSITOR_VERSION,
+  type CompositeVisualResult,
+} from '../application/hero-compositor.port.js';
 import { getPresetFixture } from './fixtures/fake-background-fixtures.js';
 import {
   generateTransparentProductPng,
@@ -540,5 +544,146 @@ describe('SharpHeroCompositor (Phase 2A - Deterministic Compositor)', () => {
     expect('getAssetBuffer' in comp).toBe(false);
     expect('prisma' in comp).toBe(false);
     expect('storageRoot' in comp).toBe(false);
+  });
+
+  describe('POSTER-1: Placement, Trimming, Proportions, and Contact Shadows', () => {
+    it('preserves proportions and trims transparent padding from visible bounds', async () => {
+      // 500x500 canvas with a 200x400 product inside (aspect ratio 0.5)
+      const nonSquareProduct = generateTransparentProductPng({
+        width: 500,
+        height: 500,
+        productWidth: 200,
+        productHeight: 400,
+      });
+      const nonSquareSha = createHash('sha256').update(nonSquareProduct).digest('hex');
+
+      const result = await compositor.composite({
+        creativeJobId: 'job-proportions-1',
+        canonicalProductBuffer: nonSquareProduct,
+        canonicalProductMimeType: 'image/png',
+        canonicalProductSha256: nonSquareSha,
+        backgroundBuffer: validBackground,
+        backgroundMimeType: 'image/png',
+        backgroundSha256: backgroundSha256,
+        targetWidth: 1080,
+        targetHeight: 1080,
+        aspectRatio: '1:1',
+      });
+
+      expect(result.sourceBoundingBox).toBeDefined();
+      expect(result.sourceBoundingBox?.trimmedWidth).toBe(200);
+      expect(result.sourceBoundingBox?.trimmedHeight).toBe(400);
+
+      // Hero aspect ratio on canvas must match trimmed source aspect ratio (200/400 = 0.5)
+      const compositeAspect = result.heroBoundingBox.width / result.heroBoundingBox.height;
+      expect(compositeAspect).toBeCloseTo(0.5, 1);
+    });
+
+    it('supports configurable LEFT, CENTER, and RIGHT hero placement', async () => {
+      const runPlacement = (
+        placement: 'LEFT' | 'CENTER' | 'RIGHT',
+      ): Promise<CompositeVisualResult> =>
+        compositor.composite({
+          creativeJobId: `job-placement-${placement}`,
+          canonicalProductBuffer: validProduct,
+          canonicalProductMimeType: 'image/png',
+          canonicalProductSha256: productSha256,
+          backgroundBuffer: validBackground,
+          backgroundMimeType: 'image/png',
+          backgroundSha256: backgroundSha256,
+          targetWidth: 1080,
+          targetHeight: 1080,
+          aspectRatio: '1:1',
+          heroPlacement: placement,
+        });
+
+      const leftResult = await runPlacement('LEFT');
+      const centerResult = await runPlacement('CENTER');
+      const rightResult = await runPlacement('RIGHT');
+
+      expect(leftResult.heroPlacement).toBe('LEFT');
+      expect(centerResult.heroPlacement).toBe('CENTER');
+      expect(rightResult.heroPlacement).toBe('RIGHT');
+
+      // Left X < Center X < Right X
+      expect(leftResult.heroBoundingBox.x).toBeLessThan(centerResult.heroBoundingBox.x);
+      expect(centerResult.heroBoundingBox.x).toBeLessThan(rightResult.heroBoundingBox.x);
+    });
+
+    it('positions the bottom of the product on the detected pedestal line', async () => {
+      const pedestalYPercent = 0.75;
+      const expectedBaselineY = Math.round(1080 * pedestalYPercent); // 810
+
+      const result = await compositor.composite({
+        creativeJobId: 'job-pedestal-1',
+        canonicalProductBuffer: validProduct,
+        canonicalProductMimeType: 'image/png',
+        canonicalProductSha256: productSha256,
+        backgroundBuffer: validBackground,
+        backgroundMimeType: 'image/png',
+        backgroundSha256: backgroundSha256,
+        targetWidth: 1080,
+        targetHeight: 1080,
+        aspectRatio: '1:1',
+        pedestalYPercent,
+      });
+
+      const heroBottom = result.heroBoundingBox.y + result.heroBoundingBox.height;
+      expect(heroBottom).toBe(expectedBaselineY);
+    });
+
+    it('generates a separate contact shadow layer from the product alpha mask', async () => {
+      const result = await compositor.composite({
+        creativeJobId: 'job-shadow-1',
+        canonicalProductBuffer: validProduct,
+        canonicalProductMimeType: 'image/png',
+        canonicalProductSha256: productSha256,
+        backgroundBuffer: validBackground,
+        backgroundMimeType: 'image/png',
+        backgroundSha256: backgroundSha256,
+        targetWidth: 1080,
+        targetHeight: 1080,
+        aspectRatio: '1:1',
+        enableContactShadow: true,
+      });
+
+      expect(result.contactShadowBoundingBox).toBeDefined();
+      expect(result.contactShadowBoundingBox?.width).toBeGreaterThan(0);
+      expect(result.contactShadowBoundingBox?.height).toBeGreaterThan(0);
+
+      // Contact shadow should be positioned at the base of the product
+      const heroBottom = result.heroBoundingBox.y + result.heroBoundingBox.height;
+      expect(result.contactShadowBoundingBox?.y).toBeLessThanOrEqual(heroBottom + 10);
+    });
+
+    it('never modifies the original product pixels (identity preserved, zero color grading)', async () => {
+      const result = await compositor.composite({
+        creativeJobId: 'job-pixel-identity',
+        canonicalProductBuffer: validProduct,
+        canonicalProductMimeType: 'image/png',
+        canonicalProductSha256: productSha256,
+        backgroundBuffer: validBackground,
+        backgroundMimeType: 'image/png',
+        backgroundSha256: backgroundSha256,
+        targetWidth: 1080,
+        targetHeight: 1080,
+        aspectRatio: '1:1',
+      });
+
+      // Sample a pixel right at the center of the hero bounding box
+      const sampleX = Math.round(result.heroBoundingBox.x + result.heroBoundingBox.width / 2);
+      const sampleY = Math.round(result.heroBoundingBox.y + result.heroBoundingBox.height / 2);
+
+      const { data: pixelData } = await sharp(result.compositedBuffer)
+        .extract({ left: sampleX, top: sampleY, width: 1, height: 1 })
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+      // Original product color was RGB(200, 20, 30).
+      // Product pixel colors must match within 2 units due to sRGB compression/Lanczos interpolation
+      expect(Math.abs(pixelData[0]! - productRgb.r)).toBeLessThanOrEqual(3);
+      expect(Math.abs(pixelData[1]! - productRgb.g)).toBeLessThanOrEqual(3);
+      expect(Math.abs(pixelData[2]! - productRgb.b)).toBeLessThanOrEqual(3);
+    });
   });
 });

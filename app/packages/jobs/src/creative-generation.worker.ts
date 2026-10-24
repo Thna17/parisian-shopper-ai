@@ -1,9 +1,10 @@
 import { Inject, Injectable, OnModuleInit, Optional } from '@nestjs/common';
+import { GenerateCreativeUseCase, ValidateCreativeUseCase } from '@parisian-shopper/application';
 import {
-  GenerateCreativeUseCase,
-  ValidateCreativeUseCase,
-} from '@parisian-shopper/application';
-import { APPLICATION_LOGGER, type ApplicationLogger, type OutboxWriter } from '@parisian-shopper/common';
+  APPLICATION_LOGGER,
+  type ApplicationLogger,
+  type OutboxWriter,
+} from '@parisian-shopper/common';
 import { type Job, UnrecoverableError, Worker } from 'bullmq';
 
 import { createBullMqConnection } from './bullmq-connection.js';

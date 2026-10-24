@@ -66,27 +66,35 @@ export class PrometheusMetricsService {
       if (typeof cacheFn === 'function') {
         const cache = cacheFn();
 
-      lines.push('# HELP sharp_libvips_memory_bytes Memory currently allocated by libvips in bytes');
-      lines.push('# TYPE sharp_libvips_memory_bytes gauge');
-      lines.push(`sharp_libvips_memory_bytes ${cache.memory.current}`);
-      lines.push('');
+        lines.push(
+          '# HELP sharp_libvips_memory_bytes Memory currently allocated by libvips in bytes',
+        );
+        lines.push('# TYPE sharp_libvips_memory_bytes gauge');
+        lines.push(`sharp_libvips_memory_bytes ${cache.memory.current}`);
+        lines.push('');
 
-      lines.push('# HELP sharp_libvips_memory_highwater_bytes High-water mark of memory allocated by libvips in bytes');
-      lines.push('# TYPE sharp_libvips_memory_highwater_bytes gauge');
-      lines.push(`sharp_libvips_memory_highwater_bytes ${cache.memory.high}`);
-      lines.push('');
+        lines.push(
+          '# HELP sharp_libvips_memory_highwater_bytes High-water mark of memory allocated by libvips in bytes',
+        );
+        lines.push('# TYPE sharp_libvips_memory_highwater_bytes gauge');
+        lines.push(`sharp_libvips_memory_highwater_bytes ${cache.memory.high}`);
+        lines.push('');
 
-      lines.push('# HELP sharp_libvips_memory_max_bytes Maximum memory budget for libvips in bytes');
-      lines.push('# TYPE sharp_libvips_memory_max_bytes gauge');
-      lines.push(`sharp_libvips_memory_max_bytes ${cache.memory.max}`);
-      lines.push('');
+        lines.push(
+          '# HELP sharp_libvips_memory_max_bytes Maximum memory budget for libvips in bytes',
+        );
+        lines.push('# TYPE sharp_libvips_memory_max_bytes gauge');
+        lines.push(`sharp_libvips_memory_max_bytes ${cache.memory.max}`);
+        lines.push('');
 
-      lines.push('# HELP sharp_libvips_files_open Number of files currently opened by libvips');
-      lines.push('# TYPE sharp_libvips_files_open gauge');
-      lines.push(`sharp_libvips_files_open ${cache.files.current}`);
-      lines.push('');
+        lines.push('# HELP sharp_libvips_files_open Number of files currently opened by libvips');
+        lines.push('# TYPE sharp_libvips_files_open gauge');
+        lines.push(`sharp_libvips_files_open ${cache.files.current}`);
+        lines.push('');
 
-        lines.push('# HELP sharp_libvips_items_cached Number of operations currently cached by libvips');
+        lines.push(
+          '# HELP sharp_libvips_items_cached Number of operations currently cached by libvips',
+        );
         lines.push('# TYPE sharp_libvips_items_cached gauge');
         lines.push(`sharp_libvips_items_cached ${cache.items.current}`);
         lines.push('');
@@ -127,7 +135,9 @@ export class PrometheusMetricsService {
         queueActive.push(`bullmq_active_jobs{queue="${name}"} ${active}`);
         queueCompleted.push(`bullmq_completed_jobs_total{queue="${name}"} ${completed}`);
         queueFailed.push(`bullmq_failed_jobs_total{queue="${name}"} ${failed}`);
-        queueLatencies.push(`bullmq_queue_latency_seconds{queue="${name}"} ${latencySec.toFixed(3)}`);
+        queueLatencies.push(
+          `bullmq_queue_latency_seconds{queue="${name}"} ${latencySec.toFixed(3)}`,
+        );
       } catch {
         // Queue may be disconnected during test/shutdown
       }
@@ -151,7 +161,9 @@ export class PrometheusMetricsService {
     lines.push(...queueFailed);
     lines.push('');
 
-    lines.push('# HELP bullmq_queue_latency_seconds Latency of the oldest waiting job in queue in seconds');
+    lines.push(
+      '# HELP bullmq_queue_latency_seconds Latency of the oldest waiting job in queue in seconds',
+    );
     lines.push('# TYPE bullmq_queue_latency_seconds gauge');
     lines.push(...queueLatencies);
     lines.push('');
@@ -185,7 +197,9 @@ export class PrometheusMetricsService {
     }
     lines.push('');
 
-    lines.push('# HELP ai_request_latency_seconds Latency of the most recent AI request in seconds');
+    lines.push(
+      '# HELP ai_request_latency_seconds Latency of the most recent AI request in seconds',
+    );
     lines.push('# TYPE ai_request_latency_seconds gauge');
     for (const s of aiSummaries) {
       lines.push(
@@ -194,7 +208,9 @@ export class PrometheusMetricsService {
     }
     lines.push('');
 
-    lines.push('# HELP ai_request_latency_seconds_sum Cumulative latency of AI requests in seconds');
+    lines.push(
+      '# HELP ai_request_latency_seconds_sum Cumulative latency of AI requests in seconds',
+    );
     lines.push('# TYPE ai_request_latency_seconds_sum counter');
     for (const s of aiSummaries) {
       lines.push(
@@ -203,7 +219,9 @@ export class PrometheusMetricsService {
     }
     lines.push('');
 
-    lines.push('# HELP ai_request_latency_seconds_count Total count of observed AI requests for latency calculation');
+    lines.push(
+      '# HELP ai_request_latency_seconds_count Total count of observed AI requests for latency calculation',
+    );
     lines.push('# TYPE ai_request_latency_seconds_count counter');
     for (const s of aiSummaries) {
       lines.push(

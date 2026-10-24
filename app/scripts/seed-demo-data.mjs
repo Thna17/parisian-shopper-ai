@@ -20,7 +20,7 @@ const appRoot = path.resolve(__dirname, '..');
 const { PrismaClient } = await import(
   path.join(appRoot, 'packages/database/node_modules/@prisma/client/index.js')
 );
-const { DEVELOPMENT_BRAND_RULES } = await import(
+const { DEVELOPMENT_BRAND_RULES, GEPARLYS_PRODUCTS, DiskAssetStorageAdapter } = await import(
   path.join(appRoot, 'packages/application/dist/index.js')
 );
 
@@ -173,6 +173,42 @@ async function main() {
           `[Identity] Successfully enrolled new identity: ${nameInput} (Telegram ID: ${targetId}) with MARKETING_APPROVER`,
         );
       }
+    }
+
+    // 5. Display available Geparlys catalog
+    if (Array.isArray(GEPARLYS_PRODUCTS) && GEPARLYS_PRODUCTS.length > 0) {
+      console.log(
+        `\n[Geparlys Parfums Paris Catalog] Seeded ${GEPARLYS_PRODUCTS.length} perfumes:`,
+      );
+      for (const item of GEPARLYS_PRODUCTS) {
+        const prod = item.product;
+        console.log(
+          `  • SKU: ${prod.sku.padEnd(18)} | ${prod.product_name} (${prod.price} ${prod.currency})`,
+        );
+      }
+    }
+
+    // 6. Pre-seed product cutouts into CAS storage
+    const productsDir = path.join(appRoot, '.data/assets/products');
+    const fs = await import('node:fs');
+    if (fs.existsSync(productsDir)) {
+      const storage = new DiskAssetStorageAdapter({
+        storageRoot: path.join(appRoot, '.data/assets'),
+      });
+      const productFiles = fs.readdirSync(productsDir).filter((f) => f.endsWith('.png'));
+      let seededAssets = 0;
+      for (const f of productFiles) {
+        const buf = fs.readFileSync(path.join(productsDir, f));
+        await storage.saveAsset({
+          buffer: buf,
+          mimeType: 'image/png',
+          assetRole: 'CANONICAL_PRODUCT',
+        });
+        seededAssets++;
+      }
+      console.log(
+        `\n[CAS Storage] Seeded and verified ${seededAssets} product assets in Content Addressable Storage.`,
+      );
     }
 
     console.log('\n======================================================');

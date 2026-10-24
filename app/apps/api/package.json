@@ -17,6 +17,7 @@
     "@parisian-shopper/application": "workspace:0.1.0",
     "@parisian-shopper/common": "workspace:0.1.0",
     "@parisian-shopper/config": "workspace:0.1.0",
+    "@parisian-shopper/creative-providers": "workspace:0.1.0",
     "@parisian-shopper/database": "workspace:0.1.0",
     "@parisian-shopper/jobs": "workspace:0.1.0",
     "@parisian-shopper/logger": "workspace:0.1.0",

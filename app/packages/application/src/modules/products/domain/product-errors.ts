@@ -69,3 +69,32 @@ export class ProductSourceResponseInvalidError extends ApplicationError {
     });
   }
 }
+
+export class AmbiguousProductIdentifierError extends ApplicationError {
+  public constructor(identifier: string, matchingIds: readonly string[]) {
+    super({
+      code: 'AMBIGUOUS_PRODUCT_IDENTIFIER',
+      publicMessage: `Multiple distinct products match identifier '${identifier}'`,
+      details: { identifier, matchingIds },
+    });
+  }
+}
+
+export class ProductSnapshotNotFoundError extends ApplicationError {
+  public constructor(identifier: string) {
+    super({
+      code: 'PRODUCT_SNAPSHOT_NOT_FOUND',
+      publicMessage: `Product snapshot '${identifier}' was not found`,
+      details: { identifier },
+    });
+  }
+}
+
+export class FreshnessPolicyMissingError extends ApplicationError {
+  public constructor(message = 'Active freshness policy is missing') {
+    super({
+      code: 'FRESHNESS_POLICY_MISSING',
+      publicMessage: message,
+    });
+  }
+}

@@ -1,5 +1,7 @@
 # Phased delivery plan
 
+> **Superseded for new implementation work (2026-10-16).** This document describes the earlier approval-only MVP sequence. Use [`master-engineering-blueprint-v3.md`](./master-engineering-blueprint-v3.md) for product direction and [`implementation-plan-v1.md`](./implementation-plan-v1.md) for the current AI execution plan. Retain this file as historical planning context.
+
 **Strategy:** deliver one independently designed, testable vertical slice from fictional product data to `APPROVED`, then harden it before any creative or publishing expansion.
 
 ## Global gates

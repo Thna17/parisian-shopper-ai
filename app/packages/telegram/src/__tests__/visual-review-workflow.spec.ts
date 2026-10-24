@@ -1,20 +1,23 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
+import { type ApplicationLogger, type OutboxWriter } from '@parisian-shopper/common';
 import {
-  type ApplicationLogger,
-} from '@parisian-shopper/common';
-import {
+  type AssetStoragePort,
   type CreativeApprovalRepository,
   type CreativeJobRecord,
   type CreativeJobRepository,
   type CreativeRevisionRepository,
   type TelegramActionTokenRecord,
   type TelegramActor,
+  type TelegramChannelBroadcastDispatcher,
   type TelegramWorkflowRepository,
   type VisualAssetRepository,
   TelegramAction,
   ApproveCreativeUseCase,
+  RejectCreativeUseCase,
   GenerateCreativeUseCase,
+  RevisePosterUseCase,
+  ExportPosterUseCase,
   TelegramActionTokenService,
 } from '@parisian-shopper/application';
 
@@ -55,8 +58,31 @@ describe('Telegram Visual Review Workflow', () => {
   };
 
   describe('VisualReviewCardRenderer', () => {
-    it('renders caption with all validation badges PASS and abbreviated CAS digest', () => {
+    it('renders clean concise caption with product, template, format, version, and status', () => {
       const caption = VisualReviewCardRenderer.renderCaption({
+        productName: 'CHANEL Classic Flap Bag',
+        brand: 'CHANEL',
+        templateId: 'EDITORIAL_SPLIT',
+        version: 1,
+        reviewStatus: 'Ready for Review',
+        width: 1080,
+        height: 1080,
+        dimensionsPassed: true,
+        containmentPassed: true,
+        safetyPassed: true,
+        casSha256: 'abc12345',
+      });
+
+      expect(caption).toContain('🎨 *Visual Creative Review*');
+      expect(caption).toContain('📦 *Product:* CHANEL Classic Flap Bag • CHANEL');
+      expect(caption).toContain('📐 *Template:* Editorial Split');
+      expect(caption).toContain('🖼️ *Format:* Square Post · 1080×1080');
+      expect(caption).toContain('🔢 *Version:* V1');
+      expect(caption).toContain('📋 *Status:* Ready for Review');
+    });
+
+    it('renders technical QA details behind details view with validation badges and CAS digest', () => {
+      const details = VisualReviewCardRenderer.renderDetails({
         productName: 'CHANEL Classic Flap Bag',
         brand: 'CHANEL',
         targetFormat: '1:1 Feed Post',
@@ -69,18 +95,16 @@ describe('Telegram Visual Review Workflow', () => {
         casSha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
       });
 
-      expect(caption).toContain('🎨 *Visual Creative Review*');
-      expect(caption).toContain('📦 *CHANEL Classic Flap Bag* • CHANEL');
-      expect(caption).toContain('📐 *Target Format:* 1:1 Feed Post (1080x1080)');
-      expect(caption).toContain('🏷 *Compositor:* [ps-compositor-v1]');
-      expect(caption).toContain('• Dimensions: [1080x1080 PASS]');
-      expect(caption).toContain('• Hero Containment: [PASS]');
-      expect(caption).toContain('• Safety: [PASS]');
-      expect(caption).toContain('🔐 *Storage CAS Fingerprint:* `#e3b0c442`');
+      expect(details).toContain('ℹ️ *Visual QA & Technical Details*');
+      expect(details).toContain('• Dimensions: [1080×1080 PASS]');
+      expect(details).toContain('• Hero Containment: [PASS]');
+      expect(details).toContain('• Safety: [PASS]');
+      expect(details).toContain('🏷️ *Compositor:* [ps-compositor-v1]');
+      expect(details).toContain('🔐 *Storage CAS Fingerprint:* `#e3b0c442`');
     });
 
-    it('renders caption with FAIL badges when validation checks fail', () => {
-      const caption = VisualReviewCardRenderer.renderCaption({
+    it('renders details with FAIL badges when validation checks fail', () => {
+      const details = VisualReviewCardRenderer.renderDetails({
         productName: 'Dior Saddle Bag',
         brand: 'Dior',
         targetFormat: '4:5 Feed Portrait',
@@ -93,10 +117,10 @@ describe('Telegram Visual Review Workflow', () => {
         casSha256: '12345678abcdef',
       });
 
-      expect(caption).toContain('• Dimensions: [1080x1350 FAIL]');
-      expect(caption).toContain('• Hero Containment: [FAIL]');
-      expect(caption).toContain('• Safety: [FAIL]');
-      expect(caption).toContain('`#12345678`');
+      expect(details).toContain('• Dimensions: [1080×1350 FAIL]');
+      expect(details).toContain('• Hero Containment: [FAIL]');
+      expect(details).toContain('• Safety: [FAIL]');
+      expect(details).toContain('`#12345678`');
     });
   });
 
@@ -120,11 +144,32 @@ describe('Telegram Visual Review Workflow', () => {
       expect(keyboard[1]?.[1]?.callbackData).toBe('ps:token_rej');
     });
 
+    it('builds extended visual review inline keyboard with 7 actions when tokens provided', () => {
+      const keyboard = buildVisualReviewKeyboard({
+        approveToken: 'token_app',
+        rejectToken: 'token_rej',
+        editLayoutToken: 'token_layout',
+        editTextToken: 'token_text',
+        changeStyleToken: 'token_style',
+        newBackgroundToken: 'token_bg',
+        detailsToken: 'token_details',
+      });
+
+      expect(keyboard).toHaveLength(4);
+      expect(keyboard[0]?.[0]?.text).toBe('✅ Approve Poster');
+      expect(keyboard[1]?.[0]?.text).toBe('✏️ Edit Layout');
+      expect(keyboard[1]?.[1]?.text).toBe('📝 Edit Text');
+      expect(keyboard[2]?.[0]?.text).toBe('🎨 Change Style');
+      expect(keyboard[2]?.[1]?.text).toBe('🔄 New Background');
+      expect(keyboard[3]?.[0]?.text).toBe('❌ Reject');
+      expect(keyboard[3]?.[1]?.text).toBe('ℹ️ Details');
+    });
+
     it('builds two-step confirmation keyboard with Confirm and Cancel', () => {
       const keyboard = buildConfirmVisualApprovalKeyboard('token_confirm', 'token_cancel');
 
       expect(keyboard).toHaveLength(1);
-      expect(keyboard[0]?.[0]?.text).toBe('✅ Confirm Approval');
+      expect(keyboard[0]?.[0]?.text).toBe('✅ Approve Design');
       expect(keyboard[0]?.[0]?.callbackData).toBe('ps:token_confirm');
       expect(keyboard[0]?.[1]?.text).toBe('❌ Cancel');
       expect(keyboard[0]?.[1]?.callbackData).toBe('ps:token_cancel');
@@ -145,16 +190,39 @@ describe('Telegram Visual Review Workflow', () => {
     beforeEach(() => {
       jobRepo = {
         createJob: jest.fn<CreativeJobRepository['createJob']>(),
-        findById: jest.fn<CreativeJobRepository['findById']>((_id: string) => Promise.resolve(sampleJob)),
-        findByContentVersionId: jest.fn<CreativeJobRepository['findByContentVersionId']>(),
-        transitionStatus: jest.fn<CreativeJobRepository['transitionStatus']>((id: string, _exp: unknown, target: unknown) =>
-          Promise.resolve({ ...sampleJob, id, status: target as CreativeJobRecord['status'] }),
+        findById: jest.fn<CreativeJobRepository['findById']>((_id: string) =>
+          Promise.resolve(sampleJob),
         ),
+        findByContentVersionId: jest.fn<CreativeJobRepository['findByContentVersionId']>(),
+        transitionStatus: jest.fn<CreativeJobRepository['transitionStatus']>(
+          (id: string, _exp: unknown, target: unknown) =>
+            Promise.resolve({ ...sampleJob, id, status: target as CreativeJobRecord['status'] }),
+        ),
+      };
+
+      const sampleAsset = {
+        id: 'asset-1',
+        creativeJobId: sampleJob.id,
+        versionNumber: 1,
+        assetRole: 'COMPOSITED_CREATIVE' as const,
+        mimeType: 'image/png',
+        width: 1080,
+        height: 1080,
+        byteSize: 1024,
+        sha256: 'hash-1',
+        storageKey: 'storage-1',
+        sourceProductAssetDigest: 'digest-1',
+        createdAt: new Date(),
       };
 
       assetRepo = {
         createAsset: jest.fn<VisualAssetRepository['createAsset']>(),
-        findById: jest.fn<VisualAssetRepository['findById']>(),
+        findById: jest.fn<VisualAssetRepository['findById']>((id: string) =>
+          Promise.resolve({
+            ...sampleAsset,
+            id,
+          }),
+        ),
         findByJobAndVersion: jest.fn<VisualAssetRepository['findByJobAndVersion']>(),
         listByJobId: jest.fn<VisualAssetRepository['listByJobId']>(),
         findLatestByJobId: jest.fn<VisualAssetRepository['findLatestByJobId']>(),
@@ -195,10 +263,18 @@ describe('Telegram Visual Review Workflow', () => {
       };
 
       workflowRepo = {
-        claimInboundUpdate: jest.fn<TelegramWorkflowRepository['claimInboundUpdate']>(() => Promise.resolve(true)),
-        resolveActor: jest.fn<TelegramWorkflowRepository['resolveActor']>(() => Promise.resolve(actor)),
-        recordDeniedAccess: jest.fn<TelegramWorkflowRepository['recordDeniedAccess']>(() => Promise.resolve()),
-        consumeRateLimit: jest.fn<TelegramWorkflowRepository['consumeRateLimit']>(() => Promise.resolve(true)),
+        claimInboundUpdate: jest.fn<TelegramWorkflowRepository['claimInboundUpdate']>(() =>
+          Promise.resolve(true),
+        ),
+        resolveActor: jest.fn<TelegramWorkflowRepository['resolveActor']>(() =>
+          Promise.resolve(actor),
+        ),
+        recordDeniedAccess: jest.fn<TelegramWorkflowRepository['recordDeniedAccess']>(() =>
+          Promise.resolve(),
+        ),
+        consumeRateLimit: jest.fn<TelegramWorkflowRepository['consumeRateLimit']>(() =>
+          Promise.resolve(true),
+        ),
         createFlow: jest.fn<TelegramWorkflowRepository['createFlow']>(),
         findFlowById: jest.fn<TelegramWorkflowRepository['findFlowById']>(),
         updateFlowSelection: jest.fn<TelegramWorkflowRepository['updateFlowSelection']>(),
@@ -213,20 +289,25 @@ describe('Telegram Visual Review Workflow', () => {
         getDraftViewByVersionId: jest.fn<TelegramWorkflowRepository['getDraftViewByVersionId']>(),
         getFailureViewByJobId: jest.fn<TelegramWorkflowRepository['getFailureViewByJobId']>(),
         claimOutboxEvents: jest.fn<TelegramWorkflowRepository['claimOutboxEvents']>(),
-        beginNotificationDelivery: jest.fn<TelegramWorkflowRepository['beginNotificationDelivery']>(),
+        beginNotificationDelivery:
+          jest.fn<TelegramWorkflowRepository['beginNotificationDelivery']>(),
         markNotificationSent: jest.fn<TelegramWorkflowRepository['markNotificationSent']>(),
         markNotificationFailed: jest.fn<TelegramWorkflowRepository['markNotificationFailed']>(),
         markOutboxProcessed: jest.fn<TelegramWorkflowRepository['markOutboxProcessed']>(),
         createPendingInteraction: jest.fn<TelegramWorkflowRepository['createPendingInteraction']>(),
-        findActivePendingInteraction: jest.fn<TelegramWorkflowRepository['findActivePendingInteraction']>(),
-        completePendingInteraction: jest.fn<TelegramWorkflowRepository['completePendingInteraction']>(),
+        findActivePendingInteraction:
+          jest.fn<TelegramWorkflowRepository['findActivePendingInteraction']>(),
+        completePendingInteraction:
+          jest.fn<TelegramWorkflowRepository['completePendingInteraction']>(),
         cancelPendingInteraction: jest.fn<TelegramWorkflowRepository['cancelPendingInteraction']>(),
         getPreviousVersions: jest.fn<TelegramWorkflowRepository['getPreviousVersions']>(),
         appendAudit: jest.fn<TelegramWorkflowRepository['appendAudit']>(() => Promise.resolve()),
       };
 
       tokens = {
-        create: jest.fn<TelegramActionTokenService['create']>(() => Promise.resolve(['token_conf_1', 'token_canc_1'])),
+        create: jest.fn<TelegramActionTokenService['create']>(() =>
+          Promise.resolve(['token_conf_1', 'token_canc_1']),
+        ),
       } as unknown as jest.Mocked<TelegramActionTokenService>;
 
       approveCreative = {
@@ -300,7 +381,9 @@ describe('Telegram Visual Review Workflow', () => {
           callbackData: 'ps:123456789012345678901234567890',
         });
 
-        expect(response.callbackNotice).toBe('This action has expired. Please reopen the latest job.');
+        expect(response.callbackNotice).toBe(
+          'This action has expired. Please reopen the latest job.',
+        );
       });
 
       it('rejects consumed action token (replay attack attempt)', async () => {
@@ -312,7 +395,9 @@ describe('Telegram Visual Review Workflow', () => {
           callbackData: 'ps:123456789012345678901234567890',
         });
 
-        expect(response.callbackNotice).toBe('This action has expired. Please reopen the latest job.');
+        expect(response.callbackNotice).toBe(
+          'This action has expired. Please reopen the latest job.',
+        );
         expect(approveCreative.execute).not.toHaveBeenCalled();
       });
 
@@ -404,6 +489,7 @@ describe('Telegram Visual Review Workflow', () => {
           creativeJobId: sampleJob.id,
           visualAssetId: 'asset-1',
           approvedBy: actor.internalUserId,
+          approverRoles: actor.roles,
         });
         expect(workflowRepo.appendAudit).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -599,6 +685,7 @@ describe('Telegram Visual Review Workflow', () => {
           contentVersionId: sampleJob.contentVersionId,
           requestedBy: actor.internalUserId,
           format: 'FEED_SQUARE',
+          stylePreset: sampleJob.creativeProfile,
         });
         expect(workflowRepo.appendAudit).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -643,6 +730,445 @@ describe('Telegram Visual Review Workflow', () => {
             action: 'TELEGRAM_VISUAL_REJECTED',
           }),
         );
+      });
+    });
+
+    describe('W02 Authorization & Integrity & Publishing Guards', () => {
+      const viewerActor: TelegramActor = {
+        identityId: 'id-actor-viewer',
+        internalUserId: 'user-viewer-1',
+        telegramUserId: '987654321',
+        displayName: 'Just A Viewer',
+        roles: ['VIEWER'],
+      };
+
+      it('denies visual approval for viewer and appends audit', async () => {
+        const token: TelegramActionTokenRecord = {
+          id: 'tok-perm-1',
+          telegramIdentityId: viewerActor.identityId,
+          action: TelegramAction.CONFIRM_APPROVE_VISUAL,
+          resourceId: sampleJob.id,
+          metadata: {
+            creativeJobId: sampleJob.id,
+            visualAssetId: 'asset-1',
+          },
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        };
+
+        const response = await handler.handleAction(viewerActor, token);
+
+        expect(response.callbackNotice).toBe('Access denied.');
+        expect(response.messages[0]?.text).toContain('Access denied');
+        expect(approveCreative.execute).not.toHaveBeenCalled();
+        expect(workflowRepo.appendAudit).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'TELEGRAM_VISUAL_ACTION_DENIED',
+            resourceType: 'CreativeJob',
+            resourceId: sampleJob.id,
+            metadata: expect.objectContaining({
+              attemptedAction: TelegramAction.CONFIRM_APPROVE_VISUAL,
+              reason: 'INSUFFICIENT_PERMISSIONS',
+              requiredPermission: 'APPROVE_CREATIVE',
+            }),
+          }),
+        );
+      });
+
+      it('denies visual rejection for viewer and appends audit', async () => {
+        const token: TelegramActionTokenRecord = {
+          id: 'tok-perm-2',
+          telegramIdentityId: viewerActor.identityId,
+          action: TelegramAction.REJECT_VISUAL,
+          resourceId: sampleJob.id,
+          metadata: {
+            creativeJobId: sampleJob.id,
+            visualAssetId: 'asset-1',
+          },
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        };
+
+        const response = await handler.handleAction(viewerActor, token);
+
+        expect(response.callbackNotice).toBe('Access denied.');
+        expect(response.messages[0]?.text).toContain('Access denied');
+        expect(approvalRepo.recordApproval).not.toHaveBeenCalled();
+        expect(jobRepo.transitionStatus).not.toHaveBeenCalled();
+        expect(workflowRepo.appendAudit).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'TELEGRAM_VISUAL_ACTION_DENIED',
+            resourceType: 'CreativeJob',
+            resourceId: sampleJob.id,
+            metadata: expect.objectContaining({
+              attemptedAction: TelegramAction.REJECT_VISUAL,
+              reason: 'INSUFFICIENT_PERMISSIONS',
+              requiredPermission: 'REJECT_CREATIVE',
+            }),
+          }),
+        );
+      });
+
+      it('denies visual editing for viewer and appends audit', async () => {
+        const token: TelegramActionTokenRecord = {
+          id: 'tok-perm-3',
+          telegramIdentityId: viewerActor.identityId,
+          action: TelegramAction.REQUEST_VISUAL_EDIT,
+          resourceId: sampleJob.id,
+          metadata: {
+            creativeJobId: sampleJob.id,
+            visualAssetId: 'asset-1',
+          },
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        };
+
+        const response = await handler.handleAction(viewerActor, token);
+
+        expect(response.callbackNotice).toBe('Access denied.');
+        expect(response.messages[0]?.text).toContain('Access denied');
+        expect(revisionRepo.createRequest).not.toHaveBeenCalled();
+      });
+
+      it('denies action when token creativeJobId does not match token resourceId', async () => {
+        const token: TelegramActionTokenRecord = {
+          id: 'tok-integ-1',
+          telegramIdentityId: actor.identityId,
+          action: TelegramAction.APPROVE_VISUAL,
+          resourceId: sampleJob.id,
+          metadata: {
+            creativeJobId: 'job-mismatched-999',
+            visualAssetId: 'asset-1',
+          },
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        };
+
+        const response = await handler.handleAction(actor, token);
+
+        expect(response.callbackNotice).toBe('Invalid action.');
+        expect(response.messages[0]?.text).toContain('resource identifier mismatch');
+        expect(workflowRepo.appendAudit).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'TELEGRAM_VISUAL_ACTION_DENIED',
+            resourceType: 'CreativeJob',
+            resourceId: sampleJob.id,
+            metadata: expect.objectContaining({
+              attemptedAction: TelegramAction.APPROVE_VISUAL,
+              reason: 'RESOURCE_INTEGRITY_MISMATCH',
+              details: 'creativeJobId does not match token resourceId',
+            }),
+          }),
+        );
+      });
+
+      it('denies action when visual asset does not belong to creativeJobId', async () => {
+        assetRepo.findById.mockResolvedValueOnce({
+          id: 'asset-alien',
+          creativeJobId: 'job-alien-888',
+          versionNumber: 1,
+          assetRole: 'COMPOSITED_CREATIVE',
+          mimeType: 'image/png',
+          width: 1080,
+          height: 1080,
+          byteSize: 1024,
+          sha256: 'hash-alien',
+          storageKey: 'storage-alien',
+          sourceProductAssetDigest: 'digest-alien',
+          createdAt: new Date(),
+        });
+
+        const token: TelegramActionTokenRecord = {
+          id: 'tok-integ-2',
+          telegramIdentityId: actor.identityId,
+          action: TelegramAction.APPROVE_VISUAL,
+          resourceId: sampleJob.id,
+          metadata: {
+            creativeJobId: sampleJob.id,
+            visualAssetId: 'asset-alien',
+          },
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        };
+
+        const response = await handler.handleAction(actor, token);
+
+        expect(response.callbackNotice).toBe('Invalid action.');
+        expect(response.messages[0]?.text).toContain('asset does not belong to this creative job');
+        expect(workflowRepo.appendAudit).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'TELEGRAM_VISUAL_ACTION_DENIED',
+            resourceType: 'CreativeJob',
+            resourceId: sampleJob.id,
+            metadata: expect.objectContaining({
+              attemptedAction: TelegramAction.APPROVE_VISUAL,
+              reason: 'RESOURCE_INTEGRITY_MISMATCH',
+              details: 'visualAssetId does not belong to creativeJobId',
+            }),
+          }),
+        );
+      });
+
+      it('fails closed on PROMPT_PUBLISH_CHANNEL and appends audit', async () => {
+        const token: TelegramActionTokenRecord = {
+          id: 'tok-pub-1',
+          telegramIdentityId: actor.identityId,
+          action: TelegramAction.PROMPT_PUBLISH_CHANNEL,
+          resourceId: sampleJob.id,
+          metadata: {
+            creativeJobId: sampleJob.id,
+            visualAssetId: 'asset-1',
+          },
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        };
+
+        const response = await handler.handleAction(actor, token);
+
+        expect(response.callbackNotice).toBe('Publishing disabled.');
+        expect(response.messages[0]?.text).toContain('Publishing to Telegram channel is disabled');
+        expect(workflowRepo.appendAudit).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'TELEGRAM_VISUAL_ACTION_DENIED',
+            resourceType: 'CreativeJob',
+            resourceId: sampleJob.id,
+            metadata: expect.objectContaining({
+              attemptedAction: TelegramAction.PROMPT_PUBLISH_CHANNEL,
+              reason: 'CONTROLLED_PUBLISHING_DISABLED',
+            }),
+          }),
+        );
+      });
+
+      it('fails closed on CONFIRM_PUBLISH_CHANNEL and appends audit', async () => {
+        const token: TelegramActionTokenRecord = {
+          id: 'tok-pub-2',
+          telegramIdentityId: actor.identityId,
+          action: TelegramAction.CONFIRM_PUBLISH_CHANNEL,
+          resourceId: sampleJob.id,
+          metadata: {
+            creativeJobId: sampleJob.id,
+            visualAssetId: 'asset-1',
+          },
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        };
+
+        const response = await handler.handleAction(actor, token);
+
+        expect(response.callbackNotice).toBe('Publishing disabled.');
+        expect(response.messages[0]?.text).toContain('Publishing to Telegram channel is disabled');
+        expect(workflowRepo.appendAudit).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'TELEGRAM_VISUAL_ACTION_DENIED',
+            resourceType: 'CreativeJob',
+            resourceId: sampleJob.id,
+            metadata: expect.objectContaining({
+              attemptedAction: TelegramAction.CONFIRM_PUBLISH_CHANNEL,
+              reason: 'CONTROLLED_PUBLISHING_DISABLED',
+            }),
+          }),
+        );
+      });
+
+      it('does not include channel publishing tokens or buttons when visual is approved', async () => {
+        const token: TelegramActionTokenRecord = {
+          id: 'tok-app-nopub',
+          telegramIdentityId: actor.identityId,
+          action: TelegramAction.CONFIRM_APPROVE_VISUAL,
+          resourceId: sampleJob.id,
+          metadata: {
+            creativeJobId: sampleJob.id,
+            visualAssetId: 'asset-1',
+            productName: 'CHANEL Bag',
+          },
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        };
+
+        const response = await handler.handleAction(actor, token);
+
+        expect(response.callbackNotice).toBe('Visual approved!');
+        expect(tokens.create).not.toHaveBeenCalledWith(
+          expect.anything(),
+          expect.arrayContaining([
+            expect.objectContaining({
+              action: TelegramAction.PROMPT_PUBLISH_CHANNEL,
+            }),
+          ]),
+          expect.anything(),
+        );
+        const buttons = response.messages[0]?.buttons;
+        const flattenedButtons = buttons?.flat() ?? [];
+        for (const button of flattenedButtons) {
+          expect(button.text.toLowerCase()).not.toContain('publish');
+        }
+      });
+
+      describe('Token ownership verification and zero side-effects', () => {
+        let mockRejectCreative: jest.Mocked<RejectCreativeUseCase>;
+        let mockRevisePoster: jest.Mocked<RevisePosterUseCase>;
+        let mockExportPoster: jest.Mocked<ExportPosterUseCase>;
+        let mockBroadcaster: jest.Mocked<TelegramChannelBroadcastDispatcher>;
+        let mockStorage: jest.Mocked<AssetStoragePort>;
+        let mockOutbox: jest.Mocked<OutboxWriter>;
+        let guardedHandler: VisualReviewCallbackHandler;
+
+        beforeEach(() => {
+          mockRejectCreative = {
+            execute: jest.fn(),
+          } as unknown as jest.Mocked<RejectCreativeUseCase>;
+
+          mockRevisePoster = {
+            editText: jest.fn(),
+            editLayout: jest.fn(),
+            changeStyle: jest.fn(),
+            newBackground: jest.fn(),
+          } as unknown as jest.Mocked<RevisePosterUseCase>;
+
+          mockExportPoster = {
+            execute: jest.fn(),
+          } as unknown as jest.Mocked<ExportPosterUseCase>;
+
+          mockBroadcaster = {
+            dispatchBroadcast: jest.fn(),
+            publishManual: jest.fn(),
+          } as unknown as jest.Mocked<TelegramChannelBroadcastDispatcher>;
+
+          mockStorage = {
+            saveAssetBuffer: jest.fn(),
+            getAssetBuffer: jest.fn(),
+            deleteAsset: jest.fn(),
+            assetExists: jest.fn(),
+          } as unknown as jest.Mocked<AssetStoragePort>;
+
+          mockOutbox = {
+            append: jest.fn(),
+          } as unknown as jest.Mocked<OutboxWriter>;
+
+          guardedHandler = new VisualReviewCallbackHandler(
+            jobRepo,
+            assetRepo,
+            revisionRepo,
+            approvalRepo,
+            workflowRepo,
+            tokens,
+            approveCreative,
+            generateCreative,
+            mockLogger,
+            mockOutbox,
+            mockStorage,
+            mockRevisePoster,
+            mockExportPoster,
+            mockBroadcaster,
+            undefined,
+            mockRejectCreative,
+          );
+        });
+
+        it('rejects normal visual review action on token owner mismatch with zero business or external side effects', async () => {
+          const token: TelegramActionTokenRecord = {
+            id: 'tok-diff-user-normal',
+            telegramIdentityId: 'different-identity-id-999',
+            action: TelegramAction.CONFIRM_APPROVE_VISUAL,
+            resourceId: sampleJob.id,
+            metadata: {
+              creativeJobId: sampleJob.id,
+              visualAssetId: 'asset-1',
+            },
+            singleUse: true,
+            expiresAt: new Date(Date.now() + 60_000),
+          };
+
+          const response = await guardedHandler.handleAction(actor, token);
+
+          expect(response.callbackNotice).toBe('This action belongs to another user.');
+          expect(response.messages[0]?.text).toBe('This action belongs to another user.');
+          expect(workflowRepo.appendAudit).toHaveBeenCalledWith(
+            expect.objectContaining({
+              actor,
+              action: 'TELEGRAM_VISUAL_ACTION_DENIED',
+              resourceType: 'CreativeJob',
+              resourceId: sampleJob.id,
+              metadata: expect.objectContaining({
+                attemptedAction: TelegramAction.CONFIRM_APPROVE_VISUAL,
+                reason: 'TOKEN_OWNER_MISMATCH',
+                details: 'token does not belong to actor',
+              }),
+            }),
+          );
+
+          // Prove zero downstream business or external side effects
+          expect(jobRepo.findById).not.toHaveBeenCalled();
+          expect(jobRepo.transitionStatus).not.toHaveBeenCalled();
+          expect(assetRepo.findById).not.toHaveBeenCalled();
+          expect(tokens.create).not.toHaveBeenCalled();
+          expect(approvalRepo.recordApproval).not.toHaveBeenCalled();
+          expect(approveCreative.execute).not.toHaveBeenCalled();
+          expect(mockRejectCreative.execute).not.toHaveBeenCalled();
+          expect(generateCreative.execute).not.toHaveBeenCalled();
+          expect(mockRevisePoster.editText).not.toHaveBeenCalled();
+          expect(mockRevisePoster.editLayout).not.toHaveBeenCalled();
+          expect(mockRevisePoster.changeStyle).not.toHaveBeenCalled();
+          expect(mockRevisePoster.newBackground).not.toHaveBeenCalled();
+          expect(mockExportPoster.execute).not.toHaveBeenCalled();
+          expect(mockBroadcaster.dispatchBroadcast).not.toHaveBeenCalled();
+          expect(mockBroadcaster.publishManual).not.toHaveBeenCalled();
+          expect(mockOutbox.append).not.toHaveBeenCalled();
+          expect(revisionRepo.createRequest).not.toHaveBeenCalled();
+        });
+
+        it('rejects legacy publish callback on token owner mismatch with zero business or external side effects before publish check', async () => {
+          const token: TelegramActionTokenRecord = {
+            id: 'tok-diff-user-pub',
+            telegramIdentityId: 'different-identity-id-999',
+            action: TelegramAction.CONFIRM_PUBLISH_CHANNEL,
+            resourceId: sampleJob.id,
+            metadata: {
+              creativeJobId: sampleJob.id,
+              visualAssetId: 'asset-1',
+            },
+            singleUse: true,
+            expiresAt: new Date(Date.now() + 60_000),
+          };
+
+          const response = await guardedHandler.handleAction(actor, token);
+
+          expect(response.callbackNotice).toBe('This action belongs to another user.');
+          expect(response.messages[0]?.text).toBe('This action belongs to another user.');
+          expect(workflowRepo.appendAudit).toHaveBeenCalledWith(
+            expect.objectContaining({
+              actor,
+              action: 'TELEGRAM_VISUAL_ACTION_DENIED',
+              resourceType: 'CreativeJob',
+              resourceId: sampleJob.id,
+              metadata: expect.objectContaining({
+                attemptedAction: TelegramAction.CONFIRM_PUBLISH_CHANNEL,
+                reason: 'TOKEN_OWNER_MISMATCH',
+                details: 'token does not belong to actor',
+              }),
+            }),
+          );
+
+          // Prove zero downstream business or external side effects
+          expect(jobRepo.findById).not.toHaveBeenCalled();
+          expect(jobRepo.transitionStatus).not.toHaveBeenCalled();
+          expect(assetRepo.findById).not.toHaveBeenCalled();
+          expect(tokens.create).not.toHaveBeenCalled();
+          expect(approvalRepo.recordApproval).not.toHaveBeenCalled();
+          expect(approveCreative.execute).not.toHaveBeenCalled();
+          expect(mockRejectCreative.execute).not.toHaveBeenCalled();
+          expect(generateCreative.execute).not.toHaveBeenCalled();
+          expect(mockRevisePoster.editText).not.toHaveBeenCalled();
+          expect(mockRevisePoster.editLayout).not.toHaveBeenCalled();
+          expect(mockRevisePoster.changeStyle).not.toHaveBeenCalled();
+          expect(mockRevisePoster.newBackground).not.toHaveBeenCalled();
+          expect(mockExportPoster.execute).not.toHaveBeenCalled();
+          expect(mockBroadcaster.dispatchBroadcast).not.toHaveBeenCalled();
+          expect(mockBroadcaster.publishManual).not.toHaveBeenCalled();
+          expect(mockOutbox.append).not.toHaveBeenCalled();
+          expect(revisionRepo.createRequest).not.toHaveBeenCalled();
+        });
       });
     });
   });

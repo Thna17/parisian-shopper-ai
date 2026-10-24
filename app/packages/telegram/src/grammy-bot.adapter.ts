@@ -7,7 +7,7 @@ import {
 } from '@parisian-shopper/application';
 import { AppConfigService, FeatureFlag, FeatureFlagService } from '@parisian-shopper/config';
 import { APPLICATION_LOGGER, type ApplicationLogger } from '@parisian-shopper/common';
-import { Bot, type Context } from 'grammy';
+import { Bot, type Context, InputFile } from 'grammy';
 
 import { GRAMMY_BOT } from './grammy.tokens.js';
 import { keyboard } from './grammy-telegram.gateway.js';
@@ -59,24 +59,50 @@ export class GrammyBotAdapter implements OnModuleInit, OnModuleDestroy {
     bot.on('message:text', async (context) => {
       const profile = profileFromContext(context);
       if (profile === null) return;
+      const messageId = context.message.message_id;
       const response = await this.commands.handleCommand({
         updateId: String(context.update.update_id),
         profile,
         text: context.message.text,
+        messageId,
       });
       await reply(context, response);
     });
+
     bot.on('callback_query:data', async (context) => {
-      await context.answerCallbackQuery({ text: 'Processing…' });
+      // Immediately acknowledge callback query so Telegram clears the loading spinner
+      try {
+        await context.answerCallbackQuery();
+      } catch {
+        // Ignore if already answered or timed out
+      }
       const profile = profileFromContext(context);
       if (profile === null) return;
+      const callbackMessageId = context.callbackQuery.message?.message_id;
+      const chatId = context.callbackQuery.message?.chat
+        ? String(context.callbackQuery.message.chat.id)
+        : undefined;
+
       const response = await this.commands.handleCallback({
         updateId: String(context.update.update_id),
         profile,
         callbackData: context.callbackQuery.data,
+        messageId: callbackMessageId,
+        chatId,
       });
-      await reply(context, response);
+
+      // If response requested a specific notification toast, show it
+      if (response.callbackNotice) {
+        try {
+          await context.answerCallbackQuery({ text: response.callbackNotice });
+        } catch {
+          // Ignore
+        }
+      }
+
+      await reply(context, response, callbackMessageId);
     });
+
     bot.catch((error) => {
       this.logger.error('Telegram update handling failed', {
         action: 'telegram_update_failed',
@@ -87,11 +113,71 @@ export class GrammyBotAdapter implements OnModuleInit, OnModuleDestroy {
   }
 }
 
-async function reply(context: Context, response: TelegramResponse): Promise<void> {
+async function reply(
+  context: Context,
+  response: TelegramResponse,
+  callbackMessageId?: number,
+): Promise<void> {
+  const chatId = context.chat?.id ?? context.from?.id;
+
   for (const message of response.messages) {
-    await context.reply(message.text, {
-      ...(message.buttons === undefined ? {} : { reply_markup: keyboard(message.buttons) }),
-    });
+    const replyMarkup = message.buttons === undefined ? undefined : keyboard(message.buttons);
+    const targetMessageId = message.messageId ?? callbackMessageId;
+    const action =
+      message.action ?? (callbackMessageId && !message.photoBuffer ? 'EDIT_TEXT' : 'SEND');
+
+    if (action === 'DELETE' && targetMessageId && chatId !== undefined) {
+      try {
+        await context.api.deleteMessage(chatId, targetMessageId);
+      } catch {
+        // Ignore deletion failure
+      }
+      continue;
+    }
+
+    if (action === 'EDIT_TEXT' && targetMessageId && !message.photoBuffer && chatId !== undefined) {
+      try {
+        await context.api.editMessageText(chatId, targetMessageId, message.text, {
+          ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
+          ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
+        });
+        continue;
+      } catch (err: unknown) {
+        // If content did not change, ignore cleanly
+        if (err instanceof Error && err.message.toLowerCase().includes('not modified')) {
+          continue;
+        }
+        // Fall back to sending message if edit failed (e.g. message expired or deleted)
+      }
+    }
+
+    if (action === 'EDIT_CAPTION' && targetMessageId && chatId !== undefined) {
+      try {
+        await context.api.editMessageCaption(chatId, targetMessageId, {
+          caption: message.text,
+          ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
+          ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
+        });
+        continue;
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message.toLowerCase().includes('not modified')) {
+          continue;
+        }
+      }
+    }
+
+    if (message.photoBuffer !== undefined) {
+      await context.replyWithPhoto(new InputFile(message.photoBuffer, 'poster.png'), {
+        caption: message.text,
+        ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
+        ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
+      });
+    } else {
+      await context.reply(message.text, {
+        ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
+        ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
+      });
+    }
   }
 }
 

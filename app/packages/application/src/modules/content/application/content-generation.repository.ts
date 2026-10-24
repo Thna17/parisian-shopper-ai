@@ -110,12 +110,22 @@ export interface FailGenerationInput {
   latencyMs: number;
 }
 
+export interface CreateDirectVersionInput {
+  contentJobId: string;
+  output: AIContentOutput;
+  provider: string;
+  model: string;
+  promptVersion: string;
+  revisionRequestId?: string;
+}
+
 export interface ContentGenerationRepository {
   createJob(input: CreateContentJobInput): Promise<ContentJob>;
   findJobById(id: string): Promise<ContentJob | null>;
   findVersionById(id: string): Promise<ContentVersion | null>;
   beginGeneration(input: BeginGenerationInput): Promise<BeginGenerationResult>;
   completeGeneration(input: CompleteGenerationInput): Promise<ContentVersion>;
+  createDirectVersion?(input: CreateDirectVersionInput): Promise<ContentVersion>;
   failGeneration(input: FailGenerationInput): Promise<void>;
   findVersionsByJobId(contentJobId: string): Promise<readonly ContentVersion[]>;
   findAttemptsByJobId(contentJobId: string): Promise<readonly GenerationAttempt[]>;

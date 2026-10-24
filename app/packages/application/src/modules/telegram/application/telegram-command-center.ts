@@ -14,10 +14,16 @@ import {
 } from '../../brand/application/brand-rule.repository.js';
 import { CreateContentJobUseCase } from '../../content/application/create-content-job.use-case.js';
 import {
+  ReviseContentUseCase,
+  type CopyEditableField,
+} from '../../content/application/revise-content.use-case.js';
+import {
+  type ContentLanguage,
   contentLanguageSchema,
   contentPlatformSchema,
   contentTypeSchema,
 } from '../../content/domain/content.js';
+import { resolveStylePreset } from '../../creative/domain/style-presets.js';
 import { CreateProductSnapshotUseCase } from '../../products/application/create-product-snapshot.use-case.js';
 import { GetProductBySkuUseCase } from '../../products/application/get-product-by-sku.use-case.js';
 import { SearchProductsUseCase } from '../../products/application/search-products.use-case.js';
@@ -25,6 +31,8 @@ import { parseSku } from '../../products/domain/product-input.js';
 import {
   TelegramAction,
   type TelegramActor,
+  type TelegramButton,
+  type TelegramMessageAction,
   type TelegramResponse,
   type TelegramUserProfile,
   parseTelegramCommand,
@@ -40,10 +48,15 @@ import {
 import { telegramSafeError } from './telegram-error-mapper.js';
 import {
   callbackData,
+  formatDraft,
   formatJobSummary,
   formatPreviousVersions,
   formatProduct,
+  formatProductCardCompact,
+  formatProgressCard,
   formatValidation,
+  formatWizardStep,
+  friendlyContentType,
   splitTelegramMessage,
   type TelegramFormatOptions,
 } from './telegram-formatters.js';
@@ -65,22 +78,63 @@ export interface TelegramWorkflowPolicy {
 
 const ACCESS_DENIED = 'Access denied. This bot is restricted to authorized Parisian Shopper staff.';
 const ACTION_EXPIRED = 'This action has expired. Please reopen the latest job.';
-const PAGE_SIZE = 5;
+
+const LANGUAGE_CHOICES = [
+  { value: 'KM' as const, label: '🇰🇭 ខ្មែរ' },
+  { value: 'EN' as const, label: '🇬🇧 English' },
+  { value: 'BILINGUAL' as const, label: '🌐 ខ្មែរ + English' },
+];
+
+const CHANNEL_CHOICES = [
+  {
+    platform: 'INSTAGRAM' as const,
+    format: 'PORTRAIT_4_5' as const,
+    label: 'Instagram Portrait · 1080×1350',
+  },
+  {
+    platform: 'FACEBOOK' as const,
+    format: 'FEED_SQUARE' as const,
+    label: 'Square Post · 1080×1080',
+  },
+  { platform: 'GENERIC' as const, format: 'STORY_VERTICAL' as const, label: 'Story · 1080×1920' },
+  {
+    platform: 'TELEGRAM' as const,
+    format: 'FEED_SQUARE' as const,
+    label: 'Telegram Post · 1080×1080',
+  },
+];
+
+const STYLE_CHOICES = [
+  { key: 'PARISIAN_MORNING_ATELIER', label: '🏛 Parisian Morning Atelier' },
+  { key: 'NOCTURNE_OBSIDIAN', label: '👑 Nocturne Obsidian' },
+  { key: 'BOTANICAL_SCENT_STORY', label: '🌿 Botanical Scent Story' },
+  { key: 'CAMBODIAN_IVORY_CELEBRATION', label: '🇰🇭 Cambodian Ivory Celebration' },
+  { key: 'CLEAN_EDITORIAL_STUDIO', label: '✨ Clean Editorial Studio' },
+];
 
 export interface TelegramCommandInput {
   updateId: string;
   profile: TelegramUserProfile;
   text: string;
+  messageId?: number | undefined;
+  chatId?: string | undefined;
 }
 
 export interface TelegramCallbackInput {
   updateId: string;
   profile: TelegramUserProfile;
   callbackData: string;
+  messageId?: number | undefined;
+  chatId?: string | undefined;
 }
 
 @Injectable()
 export class TelegramCommandCenter {
+  private readonly pendingEditFields = new Map<
+    string,
+    { field: CopyEditableField; versionId: string; jobId: string }
+  >();
+
   public constructor(
     @Inject(TELEGRAM_WORKFLOW_REPOSITORY) private readonly repository: TelegramWorkflowRepository,
     private readonly permissions: PermissionService,
@@ -101,6 +155,8 @@ export class TelegramCommandCenter {
     @Optional()
     @Inject(TELEGRAM_VISUAL_CALLBACK_HANDLER)
     private readonly visualCallbackHandler?: TelegramVisualCallbackHandler,
+    @Optional()
+    private readonly reviseContent?: ReviseContentUseCase,
   ) {}
 
   private get formatOptions(): TelegramFormatOptions {
@@ -129,6 +185,7 @@ export class TelegramCommandCenter {
 
     if (pending !== null) {
       if (command.name === 'cancel' || input.text.trim().toLowerCase() === '/cancel') {
+        this.pendingEditFields.delete(actor.identityId);
         await this.repository.cancelPendingInteraction(pending.id, now);
         await this.repository.appendAudit({
           actor,
@@ -140,6 +197,69 @@ export class TelegramCommandCenter {
       }
 
       if (pending.action === 'EDIT') {
+        const text = input.text.trim();
+        const pendingField = this.pendingEditFields.get(actor.identityId);
+        this.pendingEditFields.delete(actor.identityId);
+
+        let fieldToEdit: CopyEditableField | undefined = pendingField?.field;
+        let newValueToSet = text;
+
+        if (fieldToEdit === undefined) {
+          const prefixMatch = text.match(/^(headline|english|khmer|cta):\s*(.+)$/i);
+          if (prefixMatch) {
+            const matchedField = prefixMatch[1]!.toLowerCase();
+            fieldToEdit =
+              matchedField === 'headline'
+                ? 'headline'
+                : matchedField === 'khmer'
+                  ? 'khmerCaption'
+                  : matchedField === 'english'
+                    ? 'englishCaption'
+                    : 'cta';
+            newValueToSet = prefixMatch[2]!.trim();
+          }
+        }
+
+        if (fieldToEdit !== undefined && this.reviseContent !== undefined) {
+          try {
+            const result = await this.reviseContent.editField({
+              contentJobId: pending.contentJobId,
+              contentVersionId: pending.contentVersionId,
+              field: fieldToEdit,
+              newValue: newValueToSet,
+              actorUserId: actor.internalUserId,
+              actorRoles: actor.roles,
+            });
+            await this.repository.completePendingInteraction(pending.id, now);
+            await this.repository.appendAudit({
+              actor,
+              action: 'TELEGRAM_CONTENT_FIELD_EDITED',
+              resourceType: 'ContentVersion',
+              resourceId: result.version.id,
+              metadata: {
+                contentJobId: pending.contentJobId,
+                field: fieldToEdit,
+                versionNumber: result.version.versionNumber,
+              },
+            });
+            const fieldFriendly =
+              fieldToEdit === 'headline'
+                ? 'Headline'
+                : fieldToEdit === 'englishCaption'
+                  ? 'English copy'
+                  : fieldToEdit === 'khmerCaption'
+                    ? 'Khmer copy'
+                    : 'CTA';
+            return await this.renderDraftCardResponse(
+              actor,
+              result.version.id,
+              `✏️ *${fieldFriendly} updated!* (Version V${String(result.version.versionNumber)})`,
+            );
+          } catch (error) {
+            return one(telegramSafeError(error));
+          }
+        }
+
         try {
           const revision = await this.requestContentEdit.execute({
             contentJobId: pending.contentJobId,
@@ -191,6 +311,7 @@ export class TelegramCommandCenter {
     }
 
     if (command.name === 'cancel') {
+      this.pendingEditFields.delete(actor.identityId);
       return one('There is no active pending action to cancel.');
     }
 
@@ -258,13 +379,13 @@ export class TelegramCommandCenter {
       switch (token.action) {
         case TelegramAction.SELECT_PRODUCT:
           return {
-            ...(await this.beginCreate(actor, token.resourceId)),
+            ...(await this.selectProduct(actor, token.resourceId)),
             callbackNotice: 'Product selected.',
           };
         case TelegramAction.SELECT_CONTENT_TYPE:
           return {
             ...(await this.selectContentType(actor, token.resourceId, token.metadata)),
-            callbackNotice: 'Content type selected.',
+            callbackNotice: 'Content goal selected.',
           };
         case TelegramAction.SELECT_LANGUAGE:
           return {
@@ -274,7 +395,32 @@ export class TelegramCommandCenter {
         case TelegramAction.SELECT_PLATFORM:
           return {
             ...(await this.selectPlatform(actor, token.resourceId, token.metadata)),
-            callbackNotice: 'Generation requested.',
+            callbackNotice: 'Channel & format selected.',
+          };
+        case TelegramAction.SELECT_STYLE_PRESET:
+          return {
+            ...(await this.selectStylePreset(actor, token.resourceId, token.metadata)),
+            callbackNotice: 'Visual style selected.',
+          };
+        case TelegramAction.CONFIRM_GENERATION:
+          return {
+            ...(await this.confirmGeneration(actor, token.resourceId, token.metadata)),
+            callbackNotice: 'Generation started!',
+          };
+        case TelegramAction.WIZARD_BACK:
+          return {
+            ...(await this.handleWizardBack(actor, token.resourceId, token.metadata)),
+            callbackNotice: 'Previous step.',
+          };
+        case TelegramAction.WIZARD_CANCEL:
+          return {
+            ...(await this.handleWizardCancel(actor, token.resourceId)),
+            callbackNotice: 'Creation cancelled.',
+          };
+        case TelegramAction.WIZARD_RETRY:
+          return {
+            ...(await this.handleWizardRetry(actor, token.resourceId, token.metadata)),
+            callbackNotice: 'Retrying generation...',
           };
         case TelegramAction.VIEW_SOURCE:
           return {
@@ -321,6 +467,21 @@ export class TelegramCommandCenter {
             ...(await this.viewPrevious(actor, token.resourceId)),
             callbackNotice: 'Previous versions loaded.',
           };
+        case TelegramAction.EDIT_CONTENT_FIELD:
+          return {
+            ...(await this.promptEditField(actor, token.resourceId, token.metadata)),
+            callbackNotice: 'Awaiting field input...',
+          };
+        case TelegramAction.CHANGE_CONTENT_LANGUAGE:
+          return {
+            ...(await this.promptChangeLanguage(actor, token.resourceId, token.metadata)),
+            callbackNotice: 'Language updated.',
+          };
+        case TelegramAction.RESTORE_CONTENT_VERSION:
+          return {
+            ...(await this.promptRestoreVersion(actor, token.resourceId, token.metadata)),
+            callbackNotice: 'Version restored.',
+          };
         case TelegramAction.CANCEL_ACTION:
           return {
             ...(await this.cancelAction(actor)),
@@ -329,9 +490,18 @@ export class TelegramCommandCenter {
         case TelegramAction.APPROVE_VISUAL:
         case TelegramAction.CONFIRM_APPROVE_VISUAL:
         case TelegramAction.REQUEST_VISUAL_EDIT:
+        case TelegramAction.EDIT_VISUAL_LAYOUT:
+        case TelegramAction.CHANGE_VISUAL_STYLE:
+        case TelegramAction.CONFIRM_CHANGE_STYLE:
+        case TelegramAction.VIEW_VISUAL_DETAILS:
         case TelegramAction.REGENERATE_VISUAL:
         case TelegramAction.REJECT_VISUAL:
         case TelegramAction.CANCEL_VISUAL_ACTION:
+        case TelegramAction.EXPORT_POSTER:
+        case TelegramAction.SELECT_EXPORT_FORMAT:
+        case TelegramAction.PROMPT_PUBLISH_CHANNEL:
+        case TelegramAction.CONFIRM_PUBLISH_CHANNEL:
+        case TelegramAction.REPLACE_PRODUCT_ASSET:
           if (this.visualCallbackHandler !== undefined) {
             return this.visualCallbackHandler.handleAction(actor, token);
           }
@@ -346,56 +516,157 @@ export class TelegramCommandCenter {
     }
   }
 
-  private async beginCreate(actor: TelegramActor, sku: string): Promise<TelegramResponse> {
+  private async beginCreate(
+    actor: TelegramActor,
+    skuOrQuery?: string,
+    action: TelegramMessageAction = 'SEND',
+  ): Promise<TelegramResponse> {
     this.require(actor, Permission.CREATE_CONTENT);
     if (!(await this.repository.consumeRateLimit(actor.identityId, 'create', 5, 60))) {
-      return one('Creation limit reached. Please wait before requesting another draft.');
+      return one('Creation limit reached. Please wait before requesting another draft.', action);
     }
-    const trimmedSku = sku?.trim() ?? '';
-    if (trimmedSku.length === 0) {
-      const result = await this.searchProducts.execute({ query: '', limit: 8 });
-      if (result.items.length === 0) {
-        return one('No products found in catalogue. Please use /search to find items.');
+    const trimmed = skuOrQuery?.trim() ?? '';
+    if (trimmed.length > 0) {
+      try {
+        const product = await this.products.execute({ sku: trimmed });
+        if (product) {
+          const expiresAt = this.expiry();
+          const flow = await this.repository.createFlow(actor.identityId, product, expiresAt);
+          await this.repository.setFlowMetadata?.(flow.id, { step: 2 });
+          await this.repository.appendAudit({
+            actor,
+            action: 'TELEGRAM_PRODUCT_SELECTED',
+            resourceType: 'Product',
+            resourceId: product.product.sku,
+          });
+          return this.renderStep2(actor, flow, action);
+        }
+      } catch {
+        // Not a direct SKU match, proceed to search
       }
-      const expiresAt = this.expiry();
-      const itemTokens = await this.tokens.create(
-        actor.identityId,
-        result.items.map((item) => ({
-          action: TelegramAction.SELECT_PRODUCT,
-          resourceId: item.product.sku,
-        })),
-        expiresAt,
-      );
-      const rows = result.items.map((item, index) => [
-        {
-          text: `Select ${item.product.sku} — ${item.product.product_name}`,
-          callbackData: callbackData(required(itemTokens[index])),
-        },
-      ]);
+      return this.renderProductSelection(actor, trimmed, 0, action);
+    }
+    return this.renderProductSelection(actor, '', 0, action);
+  }
+
+  private async renderProductSelection(
+    actor: TelegramActor,
+    query = '',
+    page = 0,
+    action: TelegramMessageAction = 'SEND',
+  ): Promise<TelegramResponse> {
+    const PAGE_SIZE_PRODUCTS = 4;
+    const result = await this.searchProducts.execute({ query, limit: 20 });
+    const offset = page * PAGE_SIZE_PRODUCTS;
+    const items = result.items.slice(offset, offset + PAGE_SIZE_PRODUCTS);
+    if (items.length === 0) {
       return {
         messages: [
           {
-            text: [
-              '🛍️ *Create Content — Select a Product*',
-              '',
-              'Tap any product below to start generating content, or type `/create <SKU>` directly:',
-              '',
-              ...result.items.map(
-                (item, index) =>
-                  `${index + 1}. *${item.product.product_name}* (\`${item.product.sku}\`)\n` +
-                  `   • Brand: ${item.product.brand} • Price: $${item.product.price}` +
-                  (item.product.promo_price ? ` (Promo: $${item.product.promo_price})` : ''),
-              ),
-            ].join('\n'),
-            buttons: rows,
+            text: `No products found${query ? ` matching "${query}"` : ''}. Use /create to browse products.`,
+            action,
           },
         ],
       };
     }
-    const product = await this.products.execute({ sku: trimmedSku });
+
+    const expiresAt = this.expiry();
+    const itemTokens = await this.tokens.create(
+      actor.identityId,
+      items.map((item) => ({
+        action: TelegramAction.SELECT_PRODUCT,
+        resourceId: item.product.sku,
+      })),
+      expiresAt,
+    );
+
+    const productButtons: TelegramButton[][] = items.map((item, index) => [
+      {
+        text: `🛍️ ${item.product.product_name.slice(0, 24)}…`,
+        callbackData: callbackData(required(itemTokens[index])),
+      },
+    ]);
+
+    const navRow: TelegramButton[] = [];
+    if (page > 0) {
+      const [prevToken] = await this.tokens.create(
+        actor.identityId,
+        [
+          {
+            action: TelegramAction.SEARCH_PAGE,
+            resourceId: 'page',
+            metadata: { query, page: page - 1 },
+          },
+        ],
+        expiresAt,
+      );
+      navRow.push({ text: '⬅️ Prev', callbackData: callbackData(required(prevToken)) });
+    }
+    if (offset + PAGE_SIZE_PRODUCTS < result.items.length) {
+      const [nextToken] = await this.tokens.create(
+        actor.identityId,
+        [
+          {
+            action: TelegramAction.SEARCH_PAGE,
+            resourceId: 'page',
+            metadata: { query, page: page + 1 },
+          },
+        ],
+        expiresAt,
+      );
+      navRow.push({ text: 'Next ➡️', callbackData: callbackData(required(nextToken)) });
+    }
+    if (navRow.length > 0) {
+      productButtons.push(navRow);
+    }
+
+    const cardsText = items
+      .map((item, idx) => formatProductCardCompact(item, offset + idx, this.formatOptions))
+      .join('\n\n');
+
+    const totalPages = Math.ceil(result.items.length / PAGE_SIZE_PRODUCTS);
+    const pageIndicator = totalPages > 1 ? ` (Page ${page + 1}/${totalPages})` : '';
+
+    return {
+      messages: [
+        {
+          text: [
+            `🛍️ *Content Creation Wizard* · Step 1 of 6${pageIndicator}`,
+            '*Select a Product*',
+            '',
+            'Choose a product below or type `/create <SKU>` to begin:',
+            '',
+            cardsText,
+          ].join('\n'),
+          buttons: productButtons,
+          action,
+        },
+      ],
+    };
+  }
+
+  private async selectProduct(actor: TelegramActor, sku: string): Promise<TelegramResponse> {
+    this.require(actor, Permission.CREATE_CONTENT);
+    const product = await this.products.execute({ sku });
     const expiresAt = this.expiry();
     const flow = await this.repository.createFlow(actor.identityId, product, expiresAt);
-    const choices = applicableContentTypes(product);
+    await this.repository.setFlowMetadata?.(flow.id, { step: 2 });
+    await this.repository.appendAudit({
+      actor,
+      action: 'TELEGRAM_PRODUCT_SELECTED',
+      resourceType: 'Product',
+      resourceId: product.product.sku,
+    });
+    return this.renderStep2(actor, flow, 'EDIT_TEXT');
+  }
+
+  private async renderStep2(
+    actor: TelegramActor,
+    flow: TelegramCreateFlow,
+    action: TelegramMessageAction = 'EDIT_TEXT',
+  ): Promise<TelegramResponse> {
+    const choices = applicableContentTypes(flow.product);
+    const expiresAt = this.expiry();
     const tokenValues = await this.tokens.create(
       actor.identityId,
       choices.map((value) => ({
@@ -405,22 +676,417 @@ export class TelegramCommandCenter {
       })),
       expiresAt,
     );
+
+    const buttons: TelegramButton[][] = choices.map((choice, index) => [
+      {
+        text: friendlyContentType(choice),
+        callbackData: callbackData(required(tokenValues[index])),
+      },
+    ]);
+
+    const navRow = await this.buildNavRow(actor.identityId, flow.id, 1, expiresAt);
+    buttons.push(navRow);
+
+    const text = formatWizardStep({
+      step: 2,
+      productName: flow.product.product.product_name,
+      sku: flow.product.product.sku,
+      options: this.formatOptions,
+    });
+
+    return {
+      messages: [{ text, buttons, action }],
+    };
+  }
+
+  private async selectContentType(
+    actor: TelegramActor,
+    flowId: string,
+    metadata?: Readonly<Record<string, unknown>>,
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.CREATE_CONTENT);
+    const value = contentTypeSchema.parse(metadata?.value);
+    const flow = await this.repository.updateFlowSelection(flowId, 'contentType', value);
+    await this.repository.setFlowMetadata?.(flowId, { step: 3 });
+    return this.renderStep3(actor, flow, 'EDIT_TEXT');
+  }
+
+  private async renderStep3(
+    actor: TelegramActor,
+    flow: TelegramCreateFlow,
+    action: TelegramMessageAction = 'EDIT_TEXT',
+  ): Promise<TelegramResponse> {
+    const expiresAt = this.expiry();
+    const tokens = await this.tokens.create(
+      actor.identityId,
+      LANGUAGE_CHOICES.map((c) => ({
+        action: TelegramAction.SELECT_LANGUAGE,
+        resourceId: flow.id,
+        metadata: { value: c.value },
+      })),
+      expiresAt,
+    );
+
+    const buttons: TelegramButton[][] = LANGUAGE_CHOICES.map((c, idx) => [
+      { text: c.label, callbackData: callbackData(required(tokens[idx])) },
+    ]);
+
+    const navRow = await this.buildNavRow(actor.identityId, flow.id, 2, expiresAt);
+    buttons.push(navRow);
+
+    const text = formatWizardStep({
+      step: 3,
+      productName: flow.product.product.product_name,
+      sku: flow.product.product.sku,
+      contentGoal: flow.contentType,
+      options: this.formatOptions,
+    });
+
+    return {
+      messages: [{ text, buttons, action }],
+    };
+  }
+
+  private async selectLanguage(
+    actor: TelegramActor,
+    flowId: string,
+    metadata?: Readonly<Record<string, unknown>>,
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.CREATE_CONTENT);
+    const value = contentLanguageSchema.parse(metadata?.value);
+    const flow = await this.repository.updateFlowSelection(flowId, 'language', value);
+    await this.repository.setFlowMetadata?.(flowId, { step: 4 });
+    return this.renderStep4(actor, flow, 'EDIT_TEXT');
+  }
+
+  private async renderStep4(
+    actor: TelegramActor,
+    flow: TelegramCreateFlow,
+    action: TelegramMessageAction = 'EDIT_TEXT',
+  ): Promise<TelegramResponse> {
+    const expiresAt = this.expiry();
+    const tokens = await this.tokens.create(
+      actor.identityId,
+      CHANNEL_CHOICES.map((c) => ({
+        action: TelegramAction.SELECT_PLATFORM,
+        resourceId: flow.id,
+        metadata: { value: c.platform, format: c.format },
+      })),
+      expiresAt,
+    );
+
+    const buttons: TelegramButton[][] = CHANNEL_CHOICES.map((c, idx) => [
+      { text: c.label, callbackData: callbackData(required(tokens[idx])) },
+    ]);
+
+    const navRow = await this.buildNavRow(actor.identityId, flow.id, 3, expiresAt);
+    buttons.push(navRow);
+
+    const text = formatWizardStep({
+      step: 4,
+      productName: flow.product.product.product_name,
+      sku: flow.product.product.sku,
+      contentGoal: flow.contentType,
+      language: flow.language,
+      options: this.formatOptions,
+    });
+
+    return {
+      messages: [{ text, buttons, action }],
+    };
+  }
+
+  private async selectPlatform(
+    actor: TelegramActor,
+    flowId: string,
+    metadata?: Readonly<Record<string, unknown>>,
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.CREATE_CONTENT);
+    const value = contentPlatformSchema.parse(metadata?.value);
+    const format = typeof metadata?.format === 'string' ? metadata.format : 'FEED_SQUARE';
+    const flow = await this.repository.updateFlowSelection(flowId, 'platform', value);
+    await this.repository.setFlowMetadata?.(flowId, { format, step: 5 });
+    return this.renderStep5(actor, flow, 'EDIT_TEXT');
+  }
+
+  private async renderStep5(
+    actor: TelegramActor,
+    flow: TelegramCreateFlow,
+    action: TelegramMessageAction = 'EDIT_TEXT',
+  ): Promise<TelegramResponse> {
+    const expiresAt = this.expiry();
+    const tokens = await this.tokens.create(
+      actor.identityId,
+      STYLE_CHOICES.map((c) => ({
+        action: TelegramAction.SELECT_STYLE_PRESET,
+        resourceId: flow.id,
+        metadata: { value: c.key },
+      })),
+      expiresAt,
+    );
+
+    const buttons: TelegramButton[][] = STYLE_CHOICES.map((c, idx) => [
+      { text: c.label, callbackData: callbackData(required(tokens[idx])) },
+    ]);
+
+    const navRow = await this.buildNavRow(actor.identityId, flow.id, 4, expiresAt);
+    buttons.push(navRow);
+
+    const text = formatWizardStep({
+      step: 5,
+      productName: flow.product.product.product_name,
+      sku: flow.product.product.sku,
+      contentGoal: flow.contentType,
+      language: flow.language,
+      format: flow.platform,
+      options: this.formatOptions,
+    });
+
+    return {
+      messages: [{ text, buttons, action }],
+    };
+  }
+
+  private async selectStylePreset(
+    actor: TelegramActor,
+    flowId: string,
+    metadata?: Readonly<Record<string, unknown>>,
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.CREATE_CONTENT);
+    const flow = await this.repository.findFlowById(flowId);
+    if (flow === null || flow.expiresAt <= new Date()) {
+      return one(ACTION_EXPIRED);
+    }
+    const stylePreset = typeof metadata?.value === 'string' ? metadata.value : 'NOCTURNE_ROYALE';
+    await this.repository.setFlowMetadata?.(flowId, { stylePreset, step: 6 });
+    return this.renderStep6(actor, flow, stylePreset, 'EDIT_TEXT');
+  }
+
+  private async renderStep6(
+    actor: TelegramActor,
+    flow: TelegramCreateFlow,
+    stylePresetKey?: string,
+    action: TelegramMessageAction = 'EDIT_TEXT',
+  ): Promise<TelegramResponse> {
+    const presetKey = stylePresetKey ?? flow.metadata?.stylePreset ?? 'NOCTURNE_OBSIDIAN';
+    const presetDef = resolveStylePreset(presetKey, flow.product.product.category);
+    const expiresAt = this.expiry();
+
+    const [confirmToken] = await this.tokens.create(
+      actor.identityId,
+      [
+        {
+          action: TelegramAction.CONFIRM_GENERATION,
+          resourceId: flow.id,
+          metadata: { stylePreset: presetKey },
+          singleUse: true,
+        },
+      ],
+      expiresAt,
+    );
+
+    const buttons: TelegramButton[][] = [
+      [{ text: '🚀 Generate Poster & Copy', callbackData: callbackData(required(confirmToken)) }],
+    ];
+
+    const navRow = await this.buildNavRow(actor.identityId, flow.id, 5, expiresAt);
+    buttons.push(navRow);
+
+    const price = flow.product.product.promo_price
+      ? `$${flow.product.product.promo_price} USD (Regular: $${flow.product.product.price} USD)`
+      : `$${flow.product.product.price} USD`;
+
+    const text = formatWizardStep({
+      step: 6,
+      productName: flow.product.product.product_name,
+      sku: flow.product.product.sku,
+      contentGoal: flow.contentType,
+      language: flow.language,
+      format: flow.platform,
+      stylePreset: presetDef.name,
+      price,
+      options: this.formatOptions,
+    });
+
+    return {
+      messages: [{ text, buttons, action }],
+    };
+  }
+
+  private async confirmGeneration(
+    actor: TelegramActor,
+    flowId: string,
+    metadata?: Readonly<Record<string, unknown>>,
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.CREATE_CONTENT);
+    const flow = await this.repository.findFlowById(flowId);
+    if (flow === null || flow.expiresAt <= new Date()) {
+      return one(ACTION_EXPIRED);
+    }
+    const existing = await this.repository.findJobByFlowId(flow.id);
+    if (existing !== null) {
+      return one(
+        `Content job #${short(existing.jobId)} is already ${existing.jobStatus.toLowerCase()}.`,
+      );
+    }
+    assertCompleteSelections(flow);
+    const stylePreset =
+      (typeof metadata?.stylePreset === 'string'
+        ? metadata.stylePreset
+        : (flow.metadata?.stylePreset as string)) ?? 'NOCTURNE_OBSIDIAN';
+
+    const snapshot = await this.snapshots.execute(flow.product);
+    const brand = await this.brandRules.findActive();
+    if (brand === null) throw new Error('No active brand rules are configured');
+
+    const job = await this.createContentJob.execute({
+      productSnapshotId: snapshot.id,
+      brandRuleVersionId: brand.id,
+      requesterUserId: actor.internalUserId,
+      telegramCreateFlowId: flow.id,
+      contentType: flow.contentType,
+      language: flow.language,
+      platform: flow.platform,
+      campaignContext: stylePreset,
+    });
+
+    await this.repository.completeFlow(flow.id);
+    await this.generation.enqueue(job.id);
+
     await this.repository.appendAudit({
       actor,
-      action: 'TELEGRAM_PRODUCT_SELECTED',
-      resourceType: 'Product',
-      resourceId: product.product.sku,
+      action: 'TELEGRAM_JOB_CREATED',
+      resourceType: 'ContentJob',
+      resourceId: job.id,
+      metadata: { stylePreset },
     });
+    await this.repository.appendAudit({
+      actor,
+      action: 'TELEGRAM_CONTENT_REQUESTED',
+      resourceType: 'ContentJob',
+      resourceId: job.id,
+      metadata: { stylePreset },
+    });
+
+    const progressCard = formatProgressCard(
+      job.id,
+      flow.product.product.product_name,
+      'PREPARING_FACTS',
+      this.formatOptions,
+    );
+
     return {
       messages: [
         {
-          text: `${formatProduct(product, this.formatOptions)}\n\nStep 1 of 3 — Choose a content type:`,
-          buttons: choices.map((choice, index) => [
-            { text: friendly(choice), callbackData: callbackData(required(tokenValues[index])) },
-          ]),
+          text: progressCard,
+          action: 'EDIT_TEXT',
         },
       ],
+      callbackNotice: 'Generation started!',
     };
+  }
+
+  private async handleWizardBack(
+    actor: TelegramActor,
+    flowId: string,
+    metadata?: Readonly<Record<string, unknown>>,
+  ): Promise<TelegramResponse> {
+    const toStep = typeof metadata?.toStep === 'number' ? metadata.toStep : 1;
+    if (toStep === 1) {
+      return this.renderProductSelection(actor, '', 0, 'EDIT_TEXT');
+    }
+    const flow = await this.repository.findFlowById(flowId);
+    if (flow === null || flow.expiresAt <= new Date()) {
+      return one(ACTION_EXPIRED);
+    }
+    await this.repository.setFlowMetadata?.(flow.id, { step: toStep });
+    switch (toStep) {
+      case 2:
+        return this.renderStep2(actor, flow, 'EDIT_TEXT');
+      case 3:
+        return this.renderStep3(actor, flow, 'EDIT_TEXT');
+      case 4:
+        return this.renderStep4(actor, flow, 'EDIT_TEXT');
+      case 5:
+        return this.renderStep5(actor, flow, 'EDIT_TEXT');
+      default:
+        return this.renderStep2(actor, flow, 'EDIT_TEXT');
+    }
+  }
+
+  private async handleWizardCancel(
+    _actor: TelegramActor,
+    flowId: string,
+  ): Promise<TelegramResponse> {
+    try {
+      await this.repository.completeFlow(flowId);
+    } catch {
+      // Ignore if already completed
+    }
+    return {
+      messages: [
+        {
+          text: '❌ *Creation Cancelled*\n\nYou can start a new flow anytime with /create.',
+          buttons: [],
+          action: 'EDIT_TEXT',
+        },
+      ],
+      callbackNotice: 'Cancelled.',
+    };
+  }
+
+  private async handleWizardRetry(
+    actor: TelegramActor,
+    jobId: string,
+    _metadata?: Readonly<Record<string, unknown>>,
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.CREATE_CONTENT);
+    await this.generation.enqueue(jobId);
+    return {
+      messages: [
+        {
+          text: `🔄 Generation re-enqueued for job #${short(jobId)}.`,
+          action: 'EDIT_TEXT',
+        },
+      ],
+      callbackNotice: 'Retrying...',
+    };
+  }
+
+  private async buildNavRow(
+    identityId: string,
+    flowId: string,
+    backStep?: number,
+    expiresAt?: Date,
+  ): Promise<TelegramButton[]> {
+    const expiry = expiresAt ?? this.expiry();
+    const navDefs: {
+      action: TelegramAction;
+      resourceId: string;
+      metadata?: Record<string, unknown>;
+      singleUse?: boolean;
+    }[] = [];
+    if (backStep !== undefined) {
+      navDefs.push({
+        action: TelegramAction.WIZARD_BACK,
+        resourceId: flowId,
+        metadata: { toStep: backStep },
+        singleUse: true,
+      });
+    }
+    navDefs.push({
+      action: TelegramAction.WIZARD_CANCEL,
+      resourceId: flowId,
+      singleUse: true,
+    });
+    const tokens = await this.tokens.create(identityId, navDefs, expiry);
+    const row: TelegramButton[] = [];
+    let idx = 0;
+    if (backStep !== undefined) {
+      row.push({ text: '⬅️ Back', callbackData: callbackData(required(tokens[idx++])) });
+    }
+    row.push({ text: '❌ Cancel', callbackData: callbackData(required(tokens[idx])) });
+    return row;
   }
 
   private async search(
@@ -432,9 +1098,10 @@ export class TelegramCommandCenter {
     if (!(await this.repository.consumeRateLimit(actor.identityId, 'search', 20, 60))) {
       return one('Search limit reached. Please wait and try again.');
     }
+    const PAGE_SIZE_SEARCH = 4;
     const result = await this.searchProducts.execute({ query, limit: 20 });
-    const offset = page * PAGE_SIZE;
-    const items = result.items.slice(offset, offset + PAGE_SIZE);
+    const offset = page * PAGE_SIZE_SEARCH;
+    const items = result.items.slice(offset, offset + PAGE_SIZE_SEARCH);
     if (items.length === 0) return one('No products found.');
     const expiresAt = this.expiry();
     const itemTokens = await this.tokens.create(
@@ -447,11 +1114,11 @@ export class TelegramCommandCenter {
     );
     const rows = items.map((item, index) => [
       {
-        text: `Select ${item.product.sku}`,
+        text: `Select ${item.product.sku} — ${item.product.product_name.slice(0, 20)}…`,
         callbackData: callbackData(required(itemTokens[index])),
       },
     ]);
-    if (offset + PAGE_SIZE < result.items.length) {
+    if (offset + PAGE_SIZE_SEARCH < result.items.length) {
       const [next] = await this.tokens.create(
         actor.identityId,
         [
@@ -463,7 +1130,7 @@ export class TelegramCommandCenter {
         ],
         expiresAt,
       );
-      rows.push([{ text: 'Next page', callbackData: callbackData(required(next)) }]);
+      rows.push([{ text: 'Next page ➡️', callbackData: callbackData(required(next)) }]);
     }
     await this.repository.appendAudit({
       actor,
@@ -474,7 +1141,9 @@ export class TelegramCommandCenter {
       messages: [
         {
           text: items
-            .map((item, index) => `${index + 1}. ${formatProduct(item, this.formatOptions)}`)
+            .map((item, index) =>
+              formatProductCardCompact(item, offset + index, this.formatOptions),
+            )
             .join('\n\n'),
           buttons: rows,
         },
@@ -489,82 +1158,7 @@ export class TelegramCommandCenter {
     const query = typeof metadata?.query === 'string' ? metadata.query : '';
     const page = typeof metadata?.page === 'number' ? metadata.page : -1;
     if (page < 0) return one(ACTION_EXPIRED);
-    return this.search(actor, query, page);
-  }
-
-  private async selectContentType(
-    actor: TelegramActor,
-    flowId: string,
-    metadata?: Readonly<Record<string, unknown>>,
-  ): Promise<TelegramResponse> {
-    this.require(actor, Permission.CREATE_CONTENT);
-    const value = contentTypeSchema.parse(metadata?.value);
-    const flow = await this.repository.updateFlowSelection(flowId, 'contentType', value);
-    const values = ['KM', 'EN', 'BILINGUAL'] as const;
-    const tokens = await this.selectionTokens(actor, flow, TelegramAction.SELECT_LANGUAGE, values);
-    return selectionResponse('Step 2 of 3 — Choose a language:', values, tokens);
-  }
-
-  private async selectLanguage(
-    actor: TelegramActor,
-    flowId: string,
-    metadata?: Readonly<Record<string, unknown>>,
-  ): Promise<TelegramResponse> {
-    this.require(actor, Permission.CREATE_CONTENT);
-    const value = contentLanguageSchema.parse(metadata?.value);
-    const flow = await this.repository.updateFlowSelection(flowId, 'language', value);
-    const values = ['FACEBOOK', 'INSTAGRAM', 'TELEGRAM', 'GENERIC'] as const;
-    const tokens = await this.selectionTokens(actor, flow, TelegramAction.SELECT_PLATFORM, values);
-    return selectionResponse(
-      'Step 3 of 3 — Choose the target platform. This generates content; it does not publish:',
-      values,
-      tokens,
-    );
-  }
-
-  private async selectPlatform(
-    actor: TelegramActor,
-    flowId: string,
-    metadata?: Readonly<Record<string, unknown>>,
-  ): Promise<TelegramResponse> {
-    this.require(actor, Permission.CREATE_CONTENT);
-    const value = contentPlatformSchema.parse(metadata?.value);
-    const flow = await this.repository.updateFlowSelection(flowId, 'platform', value);
-    const existing = await this.repository.findJobByFlowId(flow.id);
-    if (existing !== null)
-      return one(
-        `Content job #${short(existing.jobId)} is already ${existing.jobStatus.toLowerCase()}.`,
-      );
-    assertCompleteSelections(flow);
-    const snapshot = await this.snapshots.execute(flow.product);
-    const brand = await this.brandRules.findActive();
-    if (brand === null) throw new Error('No active brand rules are configured');
-    const job = await this.createContentJob.execute({
-      productSnapshotId: snapshot.id,
-      brandRuleVersionId: brand.id,
-      requesterUserId: actor.internalUserId,
-      telegramCreateFlowId: flow.id,
-      contentType: flow.contentType,
-      language: flow.language,
-      platform: flow.platform,
-    });
-    await this.repository.completeFlow(flow.id);
-    await this.generation.enqueue(job.id);
-    await this.repository.appendAudit({
-      actor,
-      action: 'TELEGRAM_JOB_CREATED',
-      resourceType: 'ContentJob',
-      resourceId: job.id,
-    });
-    await this.repository.appendAudit({
-      actor,
-      action: 'TELEGRAM_CONTENT_REQUESTED',
-      resourceType: 'ContentJob',
-      resourceId: job.id,
-    });
-    return one(
-      `Generating content for ${flow.product.product.product_name}…\nJob #${short(job.id)}`,
-    );
+    return this.renderProductSelection(actor, query, page, 'EDIT_TEXT');
   }
 
   private async status(actor: TelegramActor): Promise<TelegramResponse> {
@@ -659,19 +1253,405 @@ export class TelegramCommandCenter {
       expiresAt,
     });
 
+    const tokenDefs = [
+      {
+        action: TelegramAction.EDIT_CONTENT_FIELD,
+        resourceId: versionId,
+        metadata: { contentJobId: jobId, field: 'headline' },
+      },
+      {
+        action: TelegramAction.EDIT_CONTENT_FIELD,
+        resourceId: versionId,
+        metadata: { contentJobId: jobId, field: 'cta' },
+      },
+      {
+        action: TelegramAction.EDIT_CONTENT_FIELD,
+        resourceId: versionId,
+        metadata: { contentJobId: jobId, field: 'englishCaption' },
+      },
+      {
+        action: TelegramAction.EDIT_CONTENT_FIELD,
+        resourceId: versionId,
+        metadata: { contentJobId: jobId, field: 'khmerCaption' },
+      },
+      {
+        action: TelegramAction.CHANGE_CONTENT_LANGUAGE,
+        resourceId: versionId,
+        metadata: { contentJobId: jobId },
+      },
+      {
+        action: TelegramAction.RESTORE_CONTENT_VERSION,
+        resourceId: versionId,
+        metadata: { contentJobId: jobId },
+      },
+      {
+        action: TelegramAction.REQUEST_REGENERATE,
+        resourceId: versionId,
+        metadata: { contentJobId: jobId },
+      },
+      { action: TelegramAction.CANCEL_ACTION, resourceId: jobId, singleUse: true },
+    ];
+
+    const tokens = await this.tokens.create(actor.identityId, tokenDefs, expiresAt);
+
+    return {
+      messages: [
+        {
+          text: `✏️ *Request Revision / Revise Content Copy for #${short(jobId)}*\n\nPlease reply with your instructions for the revision, or select a field to edit, change language, or restore a prior version below:\n\nType /cancel to abort.`,
+          buttons: [
+            [
+              { text: '✍️ Headline', callbackData: callbackData(required(tokens[0])) },
+              { text: '✍️ CTA', callbackData: callbackData(required(tokens[1])) },
+            ],
+            [
+              { text: '✍️ English Copy', callbackData: callbackData(required(tokens[2])) },
+              { text: '✍️ Khmer Copy', callbackData: callbackData(required(tokens[3])) },
+            ],
+            [
+              { text: '🌐 Change Language', callbackData: callbackData(required(tokens[4])) },
+              { text: '📜 Restore Version', callbackData: callbackData(required(tokens[5])) },
+            ],
+            [
+              { text: '🔄 Regenerate All', callbackData: callbackData(required(tokens[6])) },
+              { text: '❌ Cancel', callbackData: callbackData(required(tokens[7])) },
+            ],
+          ],
+        },
+      ],
+    };
+  }
+
+  private async promptEditField(
+    actor: TelegramActor,
+    versionId: string,
+    metadata?: Readonly<Record<string, unknown>>,
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.EDIT_CONTENT);
+    const jobId =
+      (metadata?.contentJobId as string | undefined) ?? (await this.getJobIdByVersion(versionId));
+    if (jobId === undefined) return one('Content job not found.');
+    const field = (metadata?.field as CopyEditableField | undefined) ?? 'headline';
+
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1_000);
+    this.pendingEditFields.set(actor.identityId, { field, versionId, jobId });
+    await this.repository.createPendingInteraction({
+      telegramIdentityId: actor.identityId,
+      contentJobId: jobId,
+      contentVersionId: versionId,
+      action: 'EDIT',
+      expiresAt,
+    });
+
     const [cancelToken] = await this.tokens.create(
       actor.identityId,
       [{ action: TelegramAction.CANCEL_ACTION, resourceId: jobId, singleUse: true }],
       expiresAt,
     );
 
+    const friendlyField =
+      field === 'headline'
+        ? 'Headline'
+        : field === 'englishCaption'
+          ? 'English copy'
+          : field === 'khmerCaption'
+            ? 'Khmer copy'
+            : 'CTA';
+
     return {
       messages: [
         {
-          text: `✏️ *Request Revision for #${short(jobId)}*\n\nPlease reply with your instructions for the revision (e.g. "Shorten the caption and emphasize fragrance notes").\n\nType /cancel to abort.`,
+          text: `✍️ *Edit ${friendlyField} for #${short(jobId)}*\n\nPlease reply with the new text for this field.\n\nType /cancel to abort.`,
           buttons: [[{ text: '❌ Cancel', callbackData: callbackData(required(cancelToken)) }]],
         },
       ],
+    };
+  }
+
+  private async promptChangeLanguage(
+    actor: TelegramActor,
+    versionId: string,
+    metadata?: Readonly<Record<string, unknown>>,
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.EDIT_CONTENT);
+    const jobId =
+      (metadata?.contentJobId as string | undefined) ?? (await this.getJobIdByVersion(versionId));
+    if (jobId === undefined) return one('Content job not found.');
+
+    const targetLanguage = metadata?.targetLanguage as ContentLanguage | undefined;
+    if (targetLanguage !== undefined && this.reviseContent !== undefined) {
+      const result = await this.reviseContent.changeLanguage({
+        contentJobId: jobId,
+        contentVersionId: versionId,
+        targetLanguage,
+        actorUserId: actor.internalUserId,
+        actorRoles: actor.roles,
+      });
+      await this.repository.appendAudit({
+        actor,
+        action: 'TELEGRAM_CONTENT_LANGUAGE_CHANGED',
+        resourceType: 'ContentVersion',
+        resourceId: result.version.id,
+        metadata: {
+          contentJobId: jobId,
+          targetLanguage,
+          versionNumber: result.version.versionNumber,
+        },
+      });
+      return await this.renderDraftCardResponse(
+        actor,
+        result.version.id,
+        `🌐 *Language changed to ${targetLanguage}!* (Version V${String(result.version.versionNumber)})`,
+      );
+    }
+
+    const expiresAt = this.expiry();
+    const tokenDefs: {
+      action: TelegramAction;
+      resourceId: string;
+      metadata?: Record<string, unknown>;
+      singleUse?: boolean;
+    }[] = [
+      {
+        action: TelegramAction.CHANGE_CONTENT_LANGUAGE,
+        resourceId: versionId,
+        metadata: { contentJobId: jobId, targetLanguage: 'KM' },
+      },
+      {
+        action: TelegramAction.CHANGE_CONTENT_LANGUAGE,
+        resourceId: versionId,
+        metadata: { contentJobId: jobId, targetLanguage: 'EN' },
+      },
+      {
+        action: TelegramAction.CHANGE_CONTENT_LANGUAGE,
+        resourceId: versionId,
+        metadata: { contentJobId: jobId, targetLanguage: 'BILINGUAL' },
+      },
+      { action: TelegramAction.CANCEL_ACTION, resourceId: jobId, singleUse: true },
+    ];
+    const tokens = await this.tokens.create(actor.identityId, tokenDefs, expiresAt);
+
+    return {
+      messages: [
+        {
+          text: `🌐 *Change Language for #${short(jobId)}*\n\nSelect target language:`,
+          buttons: [
+            [
+              { text: '🇰🇭 ខ្មែរ (Khmer)', callbackData: callbackData(required(tokens[0])) },
+              { text: '🇬🇧 English', callbackData: callbackData(required(tokens[1])) },
+            ],
+            [
+              { text: '🌐 Bilingual (KM + EN)', callbackData: callbackData(required(tokens[2])) },
+              { text: '❌ Cancel', callbackData: callbackData(required(tokens[3])) },
+            ],
+          ],
+        },
+      ],
+    };
+  }
+
+  private async promptRestoreVersion(
+    actor: TelegramActor,
+    versionId: string,
+    metadata?: Readonly<Record<string, unknown>>,
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.EDIT_CONTENT);
+    const jobId =
+      (metadata?.contentJobId as string | undefined) ?? (await this.getJobIdByVersion(versionId));
+    if (jobId === undefined) return one('Content job not found.');
+
+    const targetVersionId = metadata?.targetVersionId as string | undefined;
+    if (targetVersionId !== undefined && this.reviseContent !== undefined) {
+      const result = await this.reviseContent.restoreVersion({
+        contentJobId: jobId,
+        targetVersionId,
+        actorUserId: actor.internalUserId,
+        actorRoles: actor.roles,
+      });
+      await this.repository.appendAudit({
+        actor,
+        action: 'TELEGRAM_CONTENT_VERSION_RESTORED',
+        resourceType: 'ContentVersion',
+        resourceId: result.version.id,
+        metadata: {
+          contentJobId: jobId,
+          targetVersionId,
+          versionNumber: result.version.versionNumber,
+        },
+      });
+      return await this.renderDraftCardResponse(
+        actor,
+        result.version.id,
+        `📜 *Restored to Version V${String(result.version.versionNumber)}!*`,
+      );
+    }
+
+    const previousVersions = await this.repository.getPreviousVersions(actor, jobId);
+    const candidates = previousVersions.filter((v) => v.id !== versionId);
+    if (candidates.length === 0) {
+      return one('No earlier versions available to restore for this job.');
+    }
+
+    const expiresAt = this.expiry();
+    const tokenDefs: {
+      action: TelegramAction;
+      resourceId: string;
+      metadata?: Record<string, unknown>;
+      singleUse?: boolean;
+    }[] = candidates.slice(0, 5).map((v) => ({
+      action: TelegramAction.RESTORE_CONTENT_VERSION,
+      resourceId: versionId,
+      metadata: { contentJobId: jobId, targetVersionId: v.id },
+    }));
+    tokenDefs.push({
+      action: TelegramAction.CANCEL_ACTION,
+      resourceId: jobId,
+      singleUse: true,
+    });
+
+    const tokens = await this.tokens.create(actor.identityId, tokenDefs, expiresAt);
+    const buttons: TelegramButton[][] = candidates.slice(0, 5).map((v, i) => [
+      {
+        text: `↩️ Restore V${String(v.versionNumber)}: ${v.headline.slice(0, 25)}…`,
+        callbackData: callbackData(required(tokens[i])),
+      },
+    ]);
+    buttons.push([
+      { text: '❌ Cancel', callbackData: callbackData(required(tokens[tokens.length - 1])) },
+    ]);
+
+    return {
+      messages: [
+        {
+          text: `📜 *Restore Prior Version for #${short(jobId)}*\n\nSelect a prior version to restore:`,
+          buttons,
+        },
+      ],
+    };
+  }
+
+  private async renderDraftCardResponse(
+    actor: TelegramActor,
+    versionId: string,
+    noticeText?: string,
+  ): Promise<TelegramResponse> {
+    const view = await this.repository.getDraftViewByVersionId(versionId);
+    if (!view) {
+      return one(noticeText ?? 'Draft version updated.');
+    }
+
+    const expiresAt = this.expiry();
+    const roles = view.requesterRoles ?? actor.roles ?? [];
+    const canEdit = this.permissions.hasAnyRolePermission(roles, Permission.EDIT_CONTENT);
+    const canRegenerate = this.permissions.hasAnyRolePermission(
+      roles,
+      Permission.REGENERATE_CONTENT,
+    );
+    const canApprove =
+      this.permissions.hasAnyRolePermission(roles, Permission.APPROVE_CONTENT) &&
+      view.validation.status !== 'BLOCKED' &&
+      view.validation.status !== 'FAILED';
+    const canReject = this.permissions.hasAnyRolePermission(roles, Permission.REJECT_CONTENT);
+    const hasHistory = (view.allVersions?.length ?? 1) > 1;
+
+    const tokenDefs: {
+      action: TelegramAction;
+      resourceId: string;
+      metadata?: Record<string, unknown>;
+      singleUse?: boolean;
+    }[] = [
+      { action: TelegramAction.VIEW_SOURCE, resourceId: view.jobId, singleUse: false },
+      { action: TelegramAction.VIEW_VALIDATION, resourceId: versionId, singleUse: false },
+    ];
+
+    if (canEdit) {
+      tokenDefs.push({
+        action: TelegramAction.REQUEST_EDIT,
+        resourceId: versionId,
+        metadata: { contentJobId: view.jobId, versionNumber: view.versionNumber },
+        singleUse: false,
+      });
+    }
+    if (canRegenerate) {
+      tokenDefs.push({
+        action: TelegramAction.REQUEST_REGENERATE,
+        resourceId: versionId,
+        metadata: { contentJobId: view.jobId, versionNumber: view.versionNumber },
+        singleUse: false,
+      });
+    }
+    if (canApprove) {
+      tokenDefs.push({
+        action: TelegramAction.APPROVE_PROMPT,
+        resourceId: versionId,
+        metadata: { contentJobId: view.jobId, versionNumber: view.versionNumber },
+        singleUse: false,
+      });
+    }
+    if (canReject) {
+      tokenDefs.push({
+        action: TelegramAction.REJECT_PROMPT,
+        resourceId: versionId,
+        metadata: { contentJobId: view.jobId, versionNumber: view.versionNumber },
+        singleUse: false,
+      });
+    }
+    if (hasHistory) {
+      tokenDefs.push({
+        action: TelegramAction.VIEW_PREVIOUS,
+        resourceId: view.jobId,
+        metadata: { versionId },
+        singleUse: false,
+      });
+    }
+
+    const createdTokens = await this.tokens.create(actor.identityId, tokenDefs, expiresAt);
+    let tokenIndex = 0;
+    const sourceToken = createdTokens[tokenIndex++];
+    const validationToken = createdTokens[tokenIndex++];
+    const editToken = canEdit ? createdTokens[tokenIndex++] : undefined;
+    const regenerateToken = canRegenerate ? createdTokens[tokenIndex++] : undefined;
+    const approveToken = canApprove ? createdTokens[tokenIndex++] : undefined;
+    const rejectToken = canReject ? createdTokens[tokenIndex++] : undefined;
+    const historyToken = hasHistory ? createdTokens[tokenIndex] : undefined;
+
+    const buttonRows: TelegramButton[][] = [
+      [
+        { text: '📋 Source Facts', callbackData: callbackData(required(sourceToken)) },
+        { text: '🛡️ Validation Details', callbackData: callbackData(required(validationToken)) },
+      ],
+    ];
+
+    const editRow: TelegramButton[] = [];
+    if (editToken !== undefined) {
+      editRow.push({ text: '✏️ Request Edit', callbackData: callbackData(editToken) });
+    }
+    if (regenerateToken !== undefined) {
+      editRow.push({ text: '🔄 Regenerate', callbackData: callbackData(regenerateToken) });
+    }
+    if (editRow.length > 0) buttonRows.push(editRow);
+
+    const reviewRow: TelegramButton[] = [];
+    if (approveToken !== undefined) {
+      reviewRow.push({ text: '✅ Approve', callbackData: callbackData(approveToken) });
+    }
+    if (rejectToken !== undefined) {
+      reviewRow.push({ text: '❌ Reject', callbackData: callbackData(rejectToken) });
+    }
+    if (reviewRow.length > 0) buttonRows.push(reviewRow);
+
+    if (historyToken !== undefined) {
+      buttonRows.push([{ text: '📜 Version History', callbackData: callbackData(historyToken) }]);
+    }
+
+    const draftText = formatDraft(view, this.formatOptions);
+    const fullText = noticeText ? `${noticeText}\n\n${draftText}` : draftText;
+    const texts = splitTelegramMessage(fullText);
+
+    return {
+      messages: texts.map((text, idx) => ({
+        text,
+        ...(idx === texts.length - 1 ? { buttons: buttonRows } : {}),
+      })),
     };
   }
 
@@ -844,6 +1824,7 @@ export class TelegramCommandCenter {
   }
 
   private async cancelAction(actor: TelegramActor): Promise<TelegramResponse> {
+    this.pendingEditFields.delete(actor.identityId);
     const active = await this.repository.findActivePendingInteraction(actor.identityId, new Date());
     if (active !== null) {
       await this.repository.cancelPendingInteraction(active.id, new Date());
@@ -867,27 +1848,11 @@ export class TelegramCommandCenter {
   }
 }
 
-function one(text: string): TelegramResponse {
-  return { messages: [{ text }] };
+function one(text: string, action?: TelegramMessageAction): TelegramResponse {
+  return { messages: [{ text, ...(action !== undefined ? { action } : {}) }] };
 }
 function many(text: string): TelegramResponse {
   return { messages: splitTelegramMessage(text).map((part) => ({ text: part })) };
-}
-function selectionResponse(
-  prompt: string,
-  values: readonly string[],
-  tokens: readonly string[],
-): TelegramResponse {
-  return {
-    messages: [
-      {
-        text: prompt,
-        buttons: values.map((value, index) => [
-          { text: friendly(value), callbackData: callbackData(required(tokens[index])) },
-        ]),
-      },
-    ],
-  };
 }
 function welcomeText(actor: TelegramActor): string {
   return [

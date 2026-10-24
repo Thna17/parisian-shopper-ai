@@ -188,11 +188,11 @@ describe('Phase 1E durable Telegram workflow', () => {
     expect(
       (await command({ ...editorProfile, username: 'editor_renamed' }, '/create FIC-PERF-001'))
         .messages[0]?.text,
-    ).toContain('Choose a content type');
+    ).toContain('Step 2 of 6');
     expect(
       (await command({ telegramUserId: '700000003', username: 'approver' }, '/create FIC-PERF-001'))
         .messages[0]?.text,
-    ).toContain('Choose a content type');
+    ).toContain('Step 2 of 6');
     expect(
       (await getPrisma().telegramIdentity.findUnique({ where: { telegramUserId: 700000001n } }))
         ?.telegramUsername,
@@ -214,14 +214,16 @@ describe('Phase 1E durable Telegram workflow', () => {
     const beforeSnapshots = await getPrisma().productSnapshot.count();
     const create = await command(editorProfile, '/create FIC-PERF-001');
     expect(create.messages[0]?.text).toContain('Moonlit River Eau de Parfum');
-    expect(create.messages[0]?.text).toContain('Choose a content type');
+    expect(create.messages[0]?.text).toContain('Step 2 of 6');
     expect(await getPrisma().contentJob.count()).toBe(0);
 
     const contentType = await callback(editorProfile, button(create, 'Product spotlight'));
     const language = await callback(editorProfile, button(contentType, 'Bilingual'));
+    const platform = await callback(editorProfile, button(language, 'Facebook'));
+    const style = await callback(editorProfile, button(platform, 'Parisian Morning'));
     const completed = completion();
-    const generating = await callback(editorProfile, button(language, 'Facebook'));
-    expect(generating.messages[0]?.text).toContain('Generating content');
+    const generating = await callback(editorProfile, button(style, 'Generate Poster'));
+    expect(generating.messages[0]?.text).toContain('Generating Poster & Copy');
     await completed;
 
     const job = await getPrisma().contentJob.findFirst({
@@ -237,11 +239,11 @@ describe('Phase 1E durable Telegram workflow', () => {
     const gateway = new FakeTelegramGateway();
     await dispatcher(gateway).dispatchOnce();
     const notification = gateway.sent.at(-1)?.message;
-    expect(notification?.text).toContain('DRAFT');
+    expect(notification?.text).toContain('Draft Copy Review');
     expect(notification?.text).toContain('Facts checked');
     expect(notification?.buttons?.flat().map((item) => item.text)).toEqual([
-      'View Source',
-      'View Validation',
+      '📋 Source Facts',
+      '🛡️ Validation Details',
       '✏️ Request Edit',
       '🔄 Regenerate',
     ]);
@@ -252,11 +254,11 @@ describe('Phase 1E durable Telegram workflow', () => {
     const history = await command(editorProfile, '/history FIC-PERF-001');
     expect(history.messages[0]?.text).toContain('Validated');
 
-    const source = await callback(editorProfile, buttonFromMessage(notification, 'View Source'));
+    const source = await callback(editorProfile, buttonFromMessage(notification, 'Source Facts'));
     expect(source.messages[0]?.text).toContain('SKU: FIC-PERF-001');
     const validation = await callback(
       editorProfile,
-      buttonFromMessage(notification, 'View Validation'),
+      buttonFromMessage(notification, 'Validation Details'),
     );
     expect(validation.messages[0]?.text).toContain('no blocking issues');
   });
@@ -298,7 +300,7 @@ describe('Phase 1E durable Telegram workflow', () => {
     expect(notification?.buttons?.flat().some((item) => item.text === 'Approve')).toBe(false);
     const detail = await callback(
       editorProfile,
-      buttonFromMessage(notification, 'View Validation'),
+      buttonFromMessage(notification, 'Validation Details'),
     );
     expect(detail.messages[0]?.text).toContain('PRICE_MISMATCH');
   });
@@ -330,7 +332,7 @@ describe('Phase 1E durable Telegram workflow', () => {
     ).toBeNull();
 
     const accepted = await callback(editorProfile, token);
-    expect(accepted.messages[0]?.text).toContain('Choose a language');
+    expect(accepted.messages[0]?.text).toContain('Step 3 of 6');
     const replay = await callback(editorProfile, token);
     expect(replay.messages[0]?.text).toContain('expired');
 
@@ -383,15 +385,17 @@ describe('Phase 1E durable Telegram workflow', () => {
 
   it('recovers selection state after command-center reconstruction and never creates duplicate jobs', async () => {
     const create = await command(approverProfile, '/create FIC-PERF-001');
-    const language = await callback(approverProfile, button(create, 'Product spotlight'));
+    const contentType = await callback(approverProfile, button(create, 'Product spotlight'));
     commandCenter = createCommandCenter({
       enqueue: (): Promise<void> => Promise.resolve(),
     });
-    const platform = await callback(approverProfile, button(language, 'Bilingual'));
-    const finalToken = button(platform, 'Facebook');
+    const language = await callback(approverProfile, button(contentType, 'Bilingual'));
+    const platform = await callback(approverProfile, button(language, 'Facebook'));
+    const style = await callback(approverProfile, button(platform, 'Parisian Morning'));
+    const finalToken = button(style, 'Generate Poster');
     const first = await callback(approverProfile, finalToken);
     const second = await callback(approverProfile, finalToken);
-    expect(first.messages[0]?.text).toContain('Generating content');
+    expect(first.messages[0]?.text).toContain('Generating Poster & Copy');
     expect(second.messages[0]?.text).toContain('expired');
     const flow = await getPrisma().telegramCreateFlow.findFirst({ orderBy: { createdAt: 'desc' } });
     expect(await getPrisma().contentJob.count({ where: { telegramCreateFlowId: flow?.id } })).toBe(
@@ -466,9 +470,11 @@ describe('Phase 1E durable Telegram workflow', () => {
     const flowId = (
       await getPrisma().telegramCreateFlow.findFirst({ orderBy: { createdAt: 'desc' } })
     )?.id;
-    const language = await callback(editorProfile, button(create, 'Product spotlight'));
-    const platform = await callback(editorProfile, button(language, 'Bilingual'));
-    await callback(editorProfile, button(platform, 'Facebook'));
+    const contentType = await callback(editorProfile, button(create, 'Product spotlight'));
+    const language = await callback(editorProfile, button(contentType, 'Bilingual'));
+    const platform = await callback(editorProfile, button(language, 'Facebook'));
+    const style = await callback(editorProfile, button(platform, 'Parisian Morning'));
+    await callback(editorProfile, button(style, 'Generate Poster'));
     return requiredId(flowId);
   }
 
@@ -525,7 +531,15 @@ describe('Phase 1E durable Telegram workflow', () => {
     message: TelegramResponse['messages'][number] | undefined,
     label: string,
   ): string {
-    const value = message?.buttons?.flat().find((item) => item.text === label)?.callbackData;
+    const norm = label.toLowerCase().trim();
+    const value = message?.buttons?.flat().find((item) => {
+      const text = item.text.toLowerCase().trim();
+      if (text === norm || text.includes(norm)) return true;
+      if (norm === 'bilingual' && (text.includes('english') || text.includes('ខ្មែរ'))) return true;
+      if (norm === 'facebook' && text.includes('square')) return true;
+      if (norm === 'telegram' && text.includes('telegram')) return true;
+      return false;
+    })?.callbackData;
     if (value === undefined) throw new Error(`Button missing: ${label}`);
     return value;
   }

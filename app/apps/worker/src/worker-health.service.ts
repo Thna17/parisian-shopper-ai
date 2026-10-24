@@ -30,11 +30,14 @@ export class WorkerHealthService implements OnModuleInit, OnModuleDestroy {
       });
 
       this.server.listen(port, host, () => {
-        this.logger.log(`Worker health and metrics probe server listening on http://${host}:${port}`, {
-          action: 'worker_health_server_started',
-          port,
-          host,
-        });
+        this.logger.log(
+          `Worker health and metrics probe server listening on http://${host}:${port}`,
+          {
+            action: 'worker_health_server_started',
+            port,
+            host,
+          },
+        );
         resolve();
       });
 
@@ -109,7 +112,9 @@ export class WorkerHealthService implements OnModuleInit, OnModuleDestroy {
         res.end(output);
       } catch (error) {
         res.writeHead(500, { 'Content-Type': 'text/plain' });
-        res.end(`Error generating metrics: ${error instanceof Error ? error.message : String(error)}`);
+        res.end(
+          `Error generating metrics: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
       return;
     }

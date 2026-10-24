@@ -9,10 +9,5 @@ export interface OutboxRelayRepository {
     now: Date,
   ): Promise<readonly ClaimedOutboxEvent[]>;
   markProcessed(eventId: string, now: Date): Promise<void>;
-  markFailed(
-    eventId: string,
-    errorCode: string,
-    retryAt: Date,
-    terminal: boolean,
-  ): Promise<void>;
+  markFailed(eventId: string, errorCode: string, retryAt: Date, terminal: boolean): Promise<void>;
 }

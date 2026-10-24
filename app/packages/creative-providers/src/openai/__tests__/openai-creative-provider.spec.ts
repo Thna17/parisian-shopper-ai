@@ -37,7 +37,8 @@ describe('OpenAiCreativeProvider', () => {
     creativeJobId: 'job-sq-1',
     contentVersionId: 'ver-sq-1',
     briefText: 'Luxury perfume visual',
-    stylePrompt: 'Haussmann interior with marble mantlepiece, soft morning sunlight, neutral French luxury tones',
+    stylePrompt:
+      'Haussmann interior with marble mantlepiece, soft morning sunlight, neutral French luxury tones',
     negativePrompt: 'clutter, neon colors',
     targetWidth: 1080,
     targetHeight: 1080,
@@ -168,7 +169,9 @@ describe('OpenAiCreativeProvider', () => {
       expect(body.response_format).toBe('url');
       expect(body.prompt).toContain('Ultra-luxury Parisian background scene');
       expect(body.prompt).toContain(squareBrief.stylePrompt);
-      expect(body.prompt).toContain('Strictly an empty background environment with open negative space');
+      expect(body.prompt).toContain(
+        'Strictly an empty background environment with open negative space',
+      );
       expect(body.prompt).toContain('Avoid: clutter, neon colors.');
 
       expect(result.width).toBe(1024);
@@ -268,9 +271,7 @@ describe('OpenAiCreativeProvider', () => {
         fetchFn: mockFetch,
       });
 
-      await expect(provider.generateBackground(squareBrief)).rejects.toThrow(
-        /TLS is required/u,
-      );
+      await expect(provider.generateBackground(squareBrief)).rejects.toThrow(/TLS is required/u);
     });
 
     it('throws OpenAiDownloadLimitExceededError when Content-Length exceeds max limit', async () => {
@@ -378,9 +379,7 @@ describe('OpenAiCreativeProvider', () => {
         fetchFn: mockFetch,
       });
 
-      await expect(provider.generateBackground(squareBrief)).rejects.toThrow(
-        OpenAiTimeoutError,
-      );
+      await expect(provider.generateBackground(squareBrief)).rejects.toThrow(OpenAiTimeoutError);
     });
 
     it('retries on transient HTTP 429 rate limit error up to maxRetries', async () => {
@@ -439,18 +438,14 @@ describe('OpenAiCreativeProvider', () => {
         fetchFn: mockFetch,
       });
 
-      await expect(provider.generateBackground(squareBrief)).rejects.toThrow(
-        OpenAiRateLimitError,
-      );
+      await expect(provider.generateBackground(squareBrief)).rejects.toThrow(OpenAiRateLimitError);
     });
 
     it('fails fast on 400 Bad Request without retrying', async () => {
       let callCount = 0;
       const mockFetch = jest.fn(() => {
         callCount++;
-        return Promise.resolve(
-          new Response('Safety policy violation', { status: 400 }),
-        );
+        return Promise.resolve(new Response('Safety policy violation', { status: 400 }));
       }) as unknown as typeof fetch;
 
       const provider = new OpenAiCreativeProvider({
@@ -459,15 +454,17 @@ describe('OpenAiCreativeProvider', () => {
         fetchFn: mockFetch,
       });
 
-      await expect(provider.generateBackground(squareBrief)).rejects.toThrow(
-        OpenAiProviderError,
-      );
+      await expect(provider.generateBackground(squareBrief)).rejects.toThrow(OpenAiProviderError);
       expect(callCount).toBe(1);
     });
 
     it('sanitizes API key from error message when upstream throws with bearer token', async () => {
       const mockFetch = jest.fn(() =>
-        Promise.reject(new Error(`Failed to authenticate with Bearer ${apiKey} secret sk-proj-1234567890abcdef12345`)),
+        Promise.reject(
+          new Error(
+            `Failed to authenticate with Bearer ${apiKey} secret sk-proj-1234567890abcdef12345`,
+          ),
+        ),
       ) as unknown as typeof fetch;
 
       const provider = new OpenAiCreativeProvider({

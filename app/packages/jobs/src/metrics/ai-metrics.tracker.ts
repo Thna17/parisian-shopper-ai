@@ -74,11 +74,7 @@ export class AIMetricsTracker {
     this.metrics.set(key, existing);
   }
 
-  public recordMetric(
-    name: string,
-    value = 1,
-    labels?: Readonly<Record<string, string>>,
-  ): void {
+  public recordMetric(name: string, value = 1, labels?: Readonly<Record<string, string>>): void {
     const provider = labels?.provider ?? 'unknown';
     const model = labels?.model ?? 'default';
 

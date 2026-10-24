@@ -46,7 +46,11 @@ export class OutboxRelayWorker implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   public onModuleInit(): void {
-    this.timer = setInterval(() => void this.dispatchOnce(), 1_000);
+    this.timer = setInterval(() => {
+      this.dispatchOnce().catch((err: unknown) => {
+        this.logger.warn(`Unhandled outbox relay error: ${(err as Error).message}`);
+      });
+    }, 1_000);
     this.timer.unref();
   }
 
@@ -58,11 +62,18 @@ export class OutboxRelayWorker implements OnModuleInit, OnModuleDestroy {
     if (this.active) return 0;
     this.active = true;
     try {
-      const events = await this.repository.claimEvents(OUTBOX_RELAY_TOPICS, 10, new Date());
+      const topics =
+        this.visualReviewDispatcher !== undefined
+          ? OUTBOX_RELAY_TOPICS
+          : OUTBOX_RELAY_TOPICS.filter((t) => t !== 'CREATIVE_VALIDATED');
+      const events = await this.repository.claimEvents(topics, 10, new Date());
       for (const event of events) {
         await this.processEvent(event);
       }
       return events.length;
+    } catch (error) {
+      this.logger.warn(`Outbox relay worker error: ${(error as Error).message}`);
+      return 0;
     } finally {
       this.active = false;
     }
@@ -80,7 +91,9 @@ export class OutboxRelayWorker implements OnModuleInit, OnModuleDestroy {
         await this.handleCreativeApproved(event);
       }
       await this.repository.markProcessed(event.id, new Date());
-      this.logger.log(`Outbox event ${event.id} (${event.topic}) successfully processed and marked done.`);
+      this.logger.log(
+        `Outbox event ${event.id} (${event.topic}) successfully processed and marked done.`,
+      );
     } catch (error) {
       const terminal = event.attemptCount >= 5;
       const retryDelayMs = Math.min(60_000, 1_000 * 2 ** Math.max(0, event.attemptCount - 1));
@@ -107,9 +120,11 @@ export class OutboxRelayWorker implements OnModuleInit, OnModuleDestroy {
       throw new Error('CREATIVE_GENERATION_REQUESTED payload missing contentVersionId');
     }
 
-    const format = event.payload.format as ('FEED_SQUARE' | 'STORY_VERTICAL' | undefined);
-    const stylePreset = typeof event.payload.stylePreset === 'string' ? event.payload.stylePreset : undefined;
-    const creativeJobId = typeof event.payload.creativeJobId === 'string' ? event.payload.creativeJobId : undefined;
+    const format = event.payload.format as 'FEED_SQUARE' | 'STORY_VERTICAL' | undefined;
+    const stylePreset =
+      typeof event.payload.stylePreset === 'string' ? event.payload.stylePreset : undefined;
+    const creativeJobId =
+      typeof event.payload.creativeJobId === 'string' ? event.payload.creativeJobId : undefined;
 
     await this.creativeQueue.enqueue({
       contentVersionId,

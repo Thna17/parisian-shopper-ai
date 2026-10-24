@@ -1,5 +1,10 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { type ApplicationLogger, type OutboxEventDraft } from '@parisian-shopper/common';
+import {
+  type ApplicationLogger,
+  type OutboxEventDraft,
+  ForbiddenError,
+} from '@parisian-shopper/common';
+import { RoleCode } from '../../auth/domain/permissions.js';
 import { ValidateCreativeUseCase } from './validate-creative.use-case.js';
 import { ApproveCreativeUseCase } from './approve-creative.use-case.js';
 import {
@@ -22,7 +27,11 @@ import {
   type CreativeApprovalEventRecord,
   type RecordCreativeApprovalInput,
 } from './creative-approval.repository.js';
-import { type AssetStoragePort, type SaveAssetInput, type StoredAssetMetadata } from './asset-storage.port.js';
+import {
+  type AssetStoragePort,
+  type SaveAssetInput,
+  type StoredAssetMetadata,
+} from './asset-storage.port.js';
 import {
   DeterministicVisualValidator,
   type ValidateVisualAssetInput,
@@ -70,16 +79,23 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
   describe('ValidateCreativeUseCase', () => {
     it('executes deterministic visual and safety checks and transitions job to READY_FOR_REVIEW upon passing', async () => {
       const transitionStatusMock = jest.fn(
-        (_id: string, _from: CreativeJobStatus, to: CreativeJobStatus): Promise<CreativeJobRecord> =>
-          Promise.resolve({ ...mockJob, status: to }),
+        (
+          _id: string,
+          _from: CreativeJobStatus,
+          to: CreativeJobStatus,
+        ): Promise<CreativeJobRecord> => Promise.resolve({ ...mockJob, status: to }),
       );
 
       const jobRepo: CreativeJobRepository = {
         createJob: jest.fn((_input: CreateCreativeJobInput): Promise<CreativeJobRecord> => {
           throw new Error('Not implemented');
         }),
-        findById: jest.fn((_id: string): Promise<CreativeJobRecord | null> => Promise.resolve(mockJob)),
-        findByContentVersionId: jest.fn((_id: string): Promise<readonly CreativeJobRecord[]> => Promise.resolve([])),
+        findById: jest.fn((_id: string): Promise<CreativeJobRecord | null> =>
+          Promise.resolve(mockJob),
+        ),
+        findByContentVersionId: jest.fn((_id: string): Promise<readonly CreativeJobRecord[]> =>
+          Promise.resolve([]),
+        ),
         transitionStatus: transitionStatusMock,
       };
 
@@ -87,10 +103,18 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
         createAsset: jest.fn((_input: CreateVisualAssetInput): Promise<VisualAssetRecord> => {
           throw new Error('Not implemented');
         }),
-        findById: jest.fn((_id: string): Promise<VisualAssetRecord | null> => Promise.resolve(mockAsset)),
-        findByJobAndVersion: jest.fn((_id: string, _v: number): Promise<VisualAssetRecord | null> => Promise.resolve(mockAsset)),
-        listByJobId: jest.fn((_id: string): Promise<readonly VisualAssetRecord[]> => Promise.resolve([])),
-        findLatestByJobId: jest.fn((_id: string): Promise<VisualAssetRecord | null> => Promise.resolve(mockAsset)),
+        findById: jest.fn((_id: string): Promise<VisualAssetRecord | null> =>
+          Promise.resolve(mockAsset),
+        ),
+        findByJobAndVersion: jest.fn((_id: string, _v: number): Promise<VisualAssetRecord | null> =>
+          Promise.resolve(mockAsset),
+        ),
+        listByJobId: jest.fn((_id: string): Promise<readonly VisualAssetRecord[]> =>
+          Promise.resolve([]),
+        ),
+        findLatestByJobId: jest.fn((_id: string): Promise<VisualAssetRecord | null> =>
+          Promise.resolve(mockAsset),
+        ),
       };
 
       const mockResultRecord: VisualValidationResultRecord = {
@@ -107,16 +131,26 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
       };
 
       const validationRepo: VisualValidationRepository = {
-        persistResult: jest.fn((_input: PersistVisualValidationInput): Promise<VisualValidationResultRecord> =>
-          Promise.resolve(mockResultRecord),
+        persistResult: jest.fn(
+          (_input: PersistVisualValidationInput): Promise<VisualValidationResultRecord> =>
+            Promise.resolve(mockResultRecord),
         ),
-        findByAssetId: jest.fn((_assetId: string): Promise<readonly VisualValidationResultRecord[]> => Promise.resolve([])),
-        findLatestByAssetId: jest.fn((_assetId: string): Promise<VisualValidationResultRecord | null> => Promise.resolve(null)),
+        findByAssetId: jest.fn(
+          (_assetId: string): Promise<readonly VisualValidationResultRecord[]> =>
+            Promise.resolve([]),
+        ),
+        findLatestByAssetId: jest.fn(
+          (_assetId: string): Promise<VisualValidationResultRecord | null> => Promise.resolve(null),
+        ),
       };
 
       const storage: AssetStoragePort = {
-        getAssetBuffer: jest.fn((_key: string): Promise<Buffer | null> => Promise.resolve(Buffer.from('fake-asset-bytes'))),
-        getMetadata: jest.fn((_key: string): Promise<StoredAssetMetadata | null> => Promise.resolve(null)),
+        getAssetBuffer: jest.fn((_key: string): Promise<Buffer | null> =>
+          Promise.resolve(Buffer.from('fake-asset-bytes')),
+        ),
+        getMetadata: jest.fn((_key: string): Promise<StoredAssetMetadata | null> =>
+          Promise.resolve(null),
+        ),
         saveAsset: jest.fn((_input: SaveAssetInput): Promise<StoredAssetMetadata> => {
           throw new Error('Not implemented');
         }),
@@ -150,7 +184,9 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
       } as unknown as VisualSafetyScanner;
 
       const logger: ApplicationLogger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
-      const appendMock = jest.fn((_event: OutboxEventDraft): Promise<string> => Promise.resolve('outbox-val'));
+      const appendMock = jest.fn((_event: OutboxEventDraft): Promise<string> =>
+        Promise.resolve('outbox-val'),
+      );
       const outboxWriter = { append: appendMock };
 
       const useCase = new ValidateCreativeUseCase(
@@ -171,7 +207,11 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
 
       expect(result.isPassed).toBe(true);
       expect(result.validationResult.status).toBe('PASSED');
-      expect(transitionStatusMock).toHaveBeenCalledWith('job-val-1', 'VALIDATING', 'READY_FOR_REVIEW');
+      expect(transitionStatusMock).toHaveBeenCalledWith(
+        'job-val-1',
+        'VALIDATING',
+        'READY_FOR_REVIEW',
+      );
       expect(appendMock).toHaveBeenCalledWith(
         expect.objectContaining({
           topic: 'CREATIVE_VALIDATED',
@@ -182,16 +222,23 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
 
     it('transitions job to FAILED and emits CREATIVE_VALIDATION_FAILED if blocking findings exist', async () => {
       const transitionStatusMock = jest.fn(
-        (_id: string, _from: CreativeJobStatus, to: CreativeJobStatus): Promise<CreativeJobRecord> =>
-          Promise.resolve({ ...mockJob, status: to }),
+        (
+          _id: string,
+          _from: CreativeJobStatus,
+          to: CreativeJobStatus,
+        ): Promise<CreativeJobRecord> => Promise.resolve({ ...mockJob, status: to }),
       );
 
       const jobRepo: CreativeJobRepository = {
         createJob: jest.fn((_input: CreateCreativeJobInput): Promise<CreativeJobRecord> => {
           throw new Error('Not implemented');
         }),
-        findById: jest.fn((_id: string): Promise<CreativeJobRecord | null> => Promise.resolve(mockJob)),
-        findByContentVersionId: jest.fn((_id: string): Promise<readonly CreativeJobRecord[]> => Promise.resolve([])),
+        findById: jest.fn((_id: string): Promise<CreativeJobRecord | null> =>
+          Promise.resolve(mockJob),
+        ),
+        findByContentVersionId: jest.fn((_id: string): Promise<readonly CreativeJobRecord[]> =>
+          Promise.resolve([]),
+        ),
         transitionStatus: transitionStatusMock,
       };
 
@@ -199,10 +246,18 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
         createAsset: jest.fn((_input: CreateVisualAssetInput): Promise<VisualAssetRecord> => {
           throw new Error('Not implemented');
         }),
-        findById: jest.fn((_id: string): Promise<VisualAssetRecord | null> => Promise.resolve(mockAsset)),
-        findByJobAndVersion: jest.fn((_id: string, _v: number): Promise<VisualAssetRecord | null> => Promise.resolve(mockAsset)),
-        listByJobId: jest.fn((_id: string): Promise<readonly VisualAssetRecord[]> => Promise.resolve([])),
-        findLatestByJobId: jest.fn((_id: string): Promise<VisualAssetRecord | null> => Promise.resolve(mockAsset)),
+        findById: jest.fn((_id: string): Promise<VisualAssetRecord | null> =>
+          Promise.resolve(mockAsset),
+        ),
+        findByJobAndVersion: jest.fn((_id: string, _v: number): Promise<VisualAssetRecord | null> =>
+          Promise.resolve(mockAsset),
+        ),
+        listByJobId: jest.fn((_id: string): Promise<readonly VisualAssetRecord[]> =>
+          Promise.resolve([]),
+        ),
+        findLatestByJobId: jest.fn((_id: string): Promise<VisualAssetRecord | null> =>
+          Promise.resolve(mockAsset),
+        ),
       };
 
       const mockFailedRecord: VisualValidationResultRecord = {
@@ -219,16 +274,26 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
       };
 
       const validationRepo: VisualValidationRepository = {
-        persistResult: jest.fn((_input: PersistVisualValidationInput): Promise<VisualValidationResultRecord> =>
-          Promise.resolve(mockFailedRecord),
+        persistResult: jest.fn(
+          (_input: PersistVisualValidationInput): Promise<VisualValidationResultRecord> =>
+            Promise.resolve(mockFailedRecord),
         ),
-        findByAssetId: jest.fn((_assetId: string): Promise<readonly VisualValidationResultRecord[]> => Promise.resolve([])),
-        findLatestByAssetId: jest.fn((_assetId: string): Promise<VisualValidationResultRecord | null> => Promise.resolve(null)),
+        findByAssetId: jest.fn(
+          (_assetId: string): Promise<readonly VisualValidationResultRecord[]> =>
+            Promise.resolve([]),
+        ),
+        findLatestByAssetId: jest.fn(
+          (_assetId: string): Promise<VisualValidationResultRecord | null> => Promise.resolve(null),
+        ),
       };
 
       const storage: AssetStoragePort = {
-        getAssetBuffer: jest.fn((_key: string): Promise<Buffer | null> => Promise.resolve(Buffer.from('corrupted-bytes'))),
-        getMetadata: jest.fn((_key: string): Promise<StoredAssetMetadata | null> => Promise.resolve(null)),
+        getAssetBuffer: jest.fn((_key: string): Promise<Buffer | null> =>
+          Promise.resolve(Buffer.from('corrupted-bytes')),
+        ),
+        getMetadata: jest.fn((_key: string): Promise<StoredAssetMetadata | null> =>
+          Promise.resolve(null),
+        ),
         saveAsset: jest.fn((_input: SaveAssetInput): Promise<StoredAssetMetadata> => {
           throw new Error('Not implemented');
         }),
@@ -269,7 +334,9 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
       } as unknown as VisualSafetyScanner;
 
       const logger: ApplicationLogger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
-      const appendMock = jest.fn((_event: OutboxEventDraft): Promise<string> => Promise.resolve('outbox-failed'));
+      const appendMock = jest.fn((_event: OutboxEventDraft): Promise<string> =>
+        Promise.resolve('outbox-failed'),
+      );
       const outboxWriter = { append: appendMock };
 
       const useCase = new ValidateCreativeUseCase(
@@ -306,16 +373,23 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
       };
 
       const transitionStatusMock = jest.fn(
-        (_id: string, _from: CreativeJobStatus, to: CreativeJobStatus): Promise<CreativeJobRecord> =>
-          Promise.resolve({ ...reviewableJob, status: to }),
+        (
+          _id: string,
+          _from: CreativeJobStatus,
+          to: CreativeJobStatus,
+        ): Promise<CreativeJobRecord> => Promise.resolve({ ...reviewableJob, status: to }),
       );
 
       const jobRepo: CreativeJobRepository = {
         createJob: jest.fn((_input: CreateCreativeJobInput): Promise<CreativeJobRecord> => {
           throw new Error('Not implemented');
         }),
-        findById: jest.fn((_id: string): Promise<CreativeJobRecord | null> => Promise.resolve(reviewableJob)),
-        findByContentVersionId: jest.fn((_id: string): Promise<readonly CreativeJobRecord[]> => Promise.resolve([])),
+        findById: jest.fn((_id: string): Promise<CreativeJobRecord | null> =>
+          Promise.resolve(reviewableJob),
+        ),
+        findByContentVersionId: jest.fn((_id: string): Promise<readonly CreativeJobRecord[]> =>
+          Promise.resolve([]),
+        ),
         transitionStatus: transitionStatusMock,
       };
 
@@ -323,33 +397,50 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
         createAsset: jest.fn((_input: CreateVisualAssetInput): Promise<VisualAssetRecord> => {
           throw new Error('Not implemented');
         }),
-        findById: jest.fn((_id: string): Promise<VisualAssetRecord | null> => Promise.resolve(mockAsset)),
-        findByJobAndVersion: jest.fn((_id: string, _v: number): Promise<VisualAssetRecord | null> => Promise.resolve(mockAsset)),
-        listByJobId: jest.fn((_id: string): Promise<readonly VisualAssetRecord[]> => Promise.resolve([])),
-        findLatestByJobId: jest.fn((_id: string): Promise<VisualAssetRecord | null> => Promise.resolve(mockAsset)),
+        findById: jest.fn((_id: string): Promise<VisualAssetRecord | null> =>
+          Promise.resolve(mockAsset),
+        ),
+        findByJobAndVersion: jest.fn((_id: string, _v: number): Promise<VisualAssetRecord | null> =>
+          Promise.resolve(mockAsset),
+        ),
+        listByJobId: jest.fn((_id: string): Promise<readonly VisualAssetRecord[]> =>
+          Promise.resolve([]),
+        ),
+        findLatestByJobId: jest.fn((_id: string): Promise<VisualAssetRecord | null> =>
+          Promise.resolve(mockAsset),
+        ),
       };
 
       const approvalRepo: CreativeApprovalRepository = {
-        recordApproval: jest.fn((_input: RecordCreativeApprovalInput): Promise<CreativeApprovalEventRecord> =>
-          Promise.resolve({
-            id: 'approval-event-1',
-            creativeJobId: 'job-val-1',
-            visualAssetId: 'asset-val-1',
-            approverUserId: 'user-reviewer',
-            decision: 'CREATIVE_APPROVED',
-            visualValidationResultId: 'val-res-passed',
-            createdAt: new Date(),
-          }),
+        recordApproval: jest.fn(
+          (_input: RecordCreativeApprovalInput): Promise<CreativeApprovalEventRecord> =>
+            Promise.resolve({
+              id: 'approval-event-1',
+              creativeJobId: 'job-val-1',
+              visualAssetId: 'asset-val-1',
+              approverUserId: 'user-reviewer',
+              decision: 'CREATIVE_APPROVED',
+              visualValidationResultId: 'val-res-passed',
+              createdAt: new Date(),
+            }),
         ),
-        findByJobId: jest.fn((_id: string): Promise<readonly CreativeApprovalEventRecord[]> => Promise.resolve([])),
-        findByAssetId: jest.fn((_id: string): Promise<readonly CreativeApprovalEventRecord[]> => Promise.resolve([])),
+        findByJobId: jest.fn((_id: string): Promise<readonly CreativeApprovalEventRecord[]> =>
+          Promise.resolve([]),
+        ),
+        findByAssetId: jest.fn((_id: string): Promise<readonly CreativeApprovalEventRecord[]> =>
+          Promise.resolve([]),
+        ),
       };
 
       const validationRepo: VisualValidationRepository = {
-        persistResult: jest.fn((_input: PersistVisualValidationInput): Promise<VisualValidationResultRecord> => {
-          throw new Error('Not implemented');
-        }),
-        findByAssetId: jest.fn((_id: string): Promise<readonly VisualValidationResultRecord[]> => Promise.resolve([])),
+        persistResult: jest.fn(
+          (_input: PersistVisualValidationInput): Promise<VisualValidationResultRecord> => {
+            throw new Error('Not implemented');
+          },
+        ),
+        findByAssetId: jest.fn((_id: string): Promise<readonly VisualValidationResultRecord[]> =>
+          Promise.resolve([]),
+        ),
         findLatestByAssetId: jest.fn((_id: string): Promise<VisualValidationResultRecord | null> =>
           Promise.resolve({
             id: 'val-res-passed',
@@ -367,7 +458,9 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
       };
 
       const logger: ApplicationLogger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
-      const appendMock = jest.fn((_event: OutboxEventDraft): Promise<string> => Promise.resolve('outbox-app'));
+      const appendMock = jest.fn((_event: OutboxEventDraft): Promise<string> =>
+        Promise.resolve('outbox-app'),
+      );
       const outboxWriter = { append: appendMock };
 
       const useCase = new ApproveCreativeUseCase(
@@ -382,12 +475,17 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
         creativeJobId: 'job-val-1',
         visualAssetId: 'asset-val-1',
         approvedBy: 'user-reviewer',
+        approverRoles: [RoleCode.MARKETING_APPROVER],
         comment: 'Looks exquisite',
         outboxWriter,
       });
 
       expect(result.approvalEvent.id).toBe('approval-event-1');
-      expect(transitionStatusMock).toHaveBeenCalledWith('job-val-1', 'READY_FOR_REVIEW', 'CREATIVE_APPROVED');
+      expect(transitionStatusMock).toHaveBeenCalledWith(
+        'job-val-1',
+        'READY_FOR_REVIEW',
+        'CREATIVE_APPROVED',
+      );
       expect(appendMock).toHaveBeenCalledWith(
         expect.objectContaining({
           topic: 'CREATIVE_APPROVED',
@@ -404,34 +502,59 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
         findById: jest.fn((_id: string): Promise<CreativeJobRecord | null> =>
           Promise.resolve({ ...mockJob, status: 'VALIDATING' }),
         ),
-        findByContentVersionId: jest.fn((_id: string): Promise<readonly CreativeJobRecord[]> => Promise.resolve([])),
+        findByContentVersionId: jest.fn((_id: string): Promise<readonly CreativeJobRecord[]> =>
+          Promise.resolve([]),
+        ),
         transitionStatus: jest.fn(
-          (_id: string, _from: CreativeJobStatus, target: CreativeJobStatus): Promise<CreativeJobRecord> =>
-            Promise.resolve({ ...mockJob, status: target }),
+          (
+            _id: string,
+            _from: CreativeJobStatus,
+            target: CreativeJobStatus,
+          ): Promise<CreativeJobRecord> => Promise.resolve({ ...mockJob, status: target }),
         ),
       };
       const assetRepo: VisualAssetRepository = {
         createAsset: jest.fn((_input: CreateVisualAssetInput): Promise<VisualAssetRecord> => {
           throw new Error('Not implemented');
         }),
-        findById: jest.fn((_id: string): Promise<VisualAssetRecord | null> => Promise.resolve(mockAsset)),
-        findByJobAndVersion: jest.fn((_id: string, _v: number): Promise<VisualAssetRecord | null> => Promise.resolve(mockAsset)),
-        listByJobId: jest.fn((_id: string): Promise<readonly VisualAssetRecord[]> => Promise.resolve([])),
-        findLatestByJobId: jest.fn((_id: string): Promise<VisualAssetRecord | null> => Promise.resolve(mockAsset)),
+        findById: jest.fn((_id: string): Promise<VisualAssetRecord | null> =>
+          Promise.resolve(mockAsset),
+        ),
+        findByJobAndVersion: jest.fn((_id: string, _v: number): Promise<VisualAssetRecord | null> =>
+          Promise.resolve(mockAsset),
+        ),
+        listByJobId: jest.fn((_id: string): Promise<readonly VisualAssetRecord[]> =>
+          Promise.resolve([]),
+        ),
+        findLatestByJobId: jest.fn((_id: string): Promise<VisualAssetRecord | null> =>
+          Promise.resolve(mockAsset),
+        ),
       };
       const approvalRepo: CreativeApprovalRepository = {
-        recordApproval: jest.fn((_input: RecordCreativeApprovalInput): Promise<CreativeApprovalEventRecord> => {
-          throw new Error('Not implemented');
-        }),
-        findByJobId: jest.fn((_id: string): Promise<readonly CreativeApprovalEventRecord[]> => Promise.resolve([])),
-        findByAssetId: jest.fn((_id: string): Promise<readonly CreativeApprovalEventRecord[]> => Promise.resolve([])),
+        recordApproval: jest.fn(
+          (_input: RecordCreativeApprovalInput): Promise<CreativeApprovalEventRecord> => {
+            throw new Error('Not implemented');
+          },
+        ),
+        findByJobId: jest.fn((_id: string): Promise<readonly CreativeApprovalEventRecord[]> =>
+          Promise.resolve([]),
+        ),
+        findByAssetId: jest.fn((_id: string): Promise<readonly CreativeApprovalEventRecord[]> =>
+          Promise.resolve([]),
+        ),
       };
       const validationRepo: VisualValidationRepository = {
-        persistResult: jest.fn((_input: PersistVisualValidationInput): Promise<VisualValidationResultRecord> => {
-          throw new Error('Not implemented');
-        }),
-        findByAssetId: jest.fn((_id: string): Promise<readonly VisualValidationResultRecord[]> => Promise.resolve([])),
-        findLatestByAssetId: jest.fn((_id: string): Promise<VisualValidationResultRecord | null> => Promise.resolve(null)),
+        persistResult: jest.fn(
+          (_input: PersistVisualValidationInput): Promise<VisualValidationResultRecord> => {
+            throw new Error('Not implemented');
+          },
+        ),
+        findByAssetId: jest.fn((_id: string): Promise<readonly VisualValidationResultRecord[]> =>
+          Promise.resolve([]),
+        ),
+        findLatestByAssetId: jest.fn((_id: string): Promise<VisualValidationResultRecord | null> =>
+          Promise.resolve(null),
+        ),
       };
       const logger: ApplicationLogger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
 
@@ -448,6 +571,7 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
           creativeJobId: 'job-val-1',
           visualAssetId: 'asset-val-1',
           approvedBy: 'user-reviewer',
+          approverRoles: [RoleCode.MARKETING_APPROVER],
         }),
       ).rejects.toThrow(CreativeJobNotReadyForApprovalError);
     });
@@ -460,33 +584,56 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
         findById: jest.fn((_id: string): Promise<CreativeJobRecord | null> =>
           Promise.resolve({ ...mockJob, status: 'READY_FOR_REVIEW' }),
         ),
-        findByContentVersionId: jest.fn((_id: string): Promise<readonly CreativeJobRecord[]> => Promise.resolve([])),
+        findByContentVersionId: jest.fn((_id: string): Promise<readonly CreativeJobRecord[]> =>
+          Promise.resolve([]),
+        ),
         transitionStatus: jest.fn(
-          (_id: string, _from: CreativeJobStatus, target: CreativeJobStatus): Promise<CreativeJobRecord> =>
-            Promise.resolve({ ...mockJob, status: target }),
+          (
+            _id: string,
+            _from: CreativeJobStatus,
+            target: CreativeJobStatus,
+          ): Promise<CreativeJobRecord> => Promise.resolve({ ...mockJob, status: target }),
         ),
       };
       const assetRepo: VisualAssetRepository = {
         createAsset: jest.fn((_input: CreateVisualAssetInput): Promise<VisualAssetRecord> => {
           throw new Error('Not implemented');
         }),
-        findById: jest.fn((_id: string): Promise<VisualAssetRecord | null> => Promise.resolve(mockAsset)),
-        findByJobAndVersion: jest.fn((_id: string, _v: number): Promise<VisualAssetRecord | null> => Promise.resolve(mockAsset)),
-        listByJobId: jest.fn((_id: string): Promise<readonly VisualAssetRecord[]> => Promise.resolve([])),
-        findLatestByJobId: jest.fn((_id: string): Promise<VisualAssetRecord | null> => Promise.resolve(mockAsset)),
+        findById: jest.fn((_id: string): Promise<VisualAssetRecord | null> =>
+          Promise.resolve(mockAsset),
+        ),
+        findByJobAndVersion: jest.fn((_id: string, _v: number): Promise<VisualAssetRecord | null> =>
+          Promise.resolve(mockAsset),
+        ),
+        listByJobId: jest.fn((_id: string): Promise<readonly VisualAssetRecord[]> =>
+          Promise.resolve([]),
+        ),
+        findLatestByJobId: jest.fn((_id: string): Promise<VisualAssetRecord | null> =>
+          Promise.resolve(mockAsset),
+        ),
       };
       const approvalRepo: CreativeApprovalRepository = {
-        recordApproval: jest.fn((_input: RecordCreativeApprovalInput): Promise<CreativeApprovalEventRecord> => {
-          throw new Error('Not implemented');
-        }),
-        findByJobId: jest.fn((_id: string): Promise<readonly CreativeApprovalEventRecord[]> => Promise.resolve([])),
-        findByAssetId: jest.fn((_id: string): Promise<readonly CreativeApprovalEventRecord[]> => Promise.resolve([])),
+        recordApproval: jest.fn(
+          (_input: RecordCreativeApprovalInput): Promise<CreativeApprovalEventRecord> => {
+            throw new Error('Not implemented');
+          },
+        ),
+        findByJobId: jest.fn((_id: string): Promise<readonly CreativeApprovalEventRecord[]> =>
+          Promise.resolve([]),
+        ),
+        findByAssetId: jest.fn((_id: string): Promise<readonly CreativeApprovalEventRecord[]> =>
+          Promise.resolve([]),
+        ),
       };
       const validationRepo: VisualValidationRepository = {
-        persistResult: jest.fn((_input: PersistVisualValidationInput): Promise<VisualValidationResultRecord> => {
-          throw new Error('Not implemented');
-        }),
-        findByAssetId: jest.fn((_id: string): Promise<readonly VisualValidationResultRecord[]> => Promise.resolve([])),
+        persistResult: jest.fn(
+          (_input: PersistVisualValidationInput): Promise<VisualValidationResultRecord> => {
+            throw new Error('Not implemented');
+          },
+        ),
+        findByAssetId: jest.fn((_id: string): Promise<readonly VisualValidationResultRecord[]> =>
+          Promise.resolve([]),
+        ),
         findLatestByAssetId: jest.fn((_id: string): Promise<VisualValidationResultRecord | null> =>
           Promise.resolve({
             id: 'val-res-failed',
@@ -517,8 +664,65 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
           creativeJobId: 'job-val-1',
           visualAssetId: 'asset-val-1',
           approvedBy: 'user-reviewer',
+          approverRoles: [RoleCode.MARKETING_APPROVER],
         }),
       ).rejects.toThrow(CreativeValidationFailedError);
+    });
+
+    it('throws ForbiddenError when approver has no APPROVE_CREATIVE permission', async () => {
+      const jobRepo = {} as CreativeJobRepository;
+      const assetRepo = {} as VisualAssetRepository;
+      const approvalRepo = {} as CreativeApprovalRepository;
+      const validationRepo = {} as VisualValidationRepository;
+      const logger: ApplicationLogger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+
+      const useCase = new ApproveCreativeUseCase(
+        jobRepo,
+        assetRepo,
+        approvalRepo,
+        validationRepo,
+        logger,
+      );
+
+      // Empty roles array
+      await expect(
+        useCase.execute({
+          creativeJobId: 'job-val-1',
+          visualAssetId: 'asset-val-1',
+          approvedBy: 'user-reviewer',
+          approverRoles: [],
+        }),
+      ).rejects.toThrow(ForbiddenError);
+
+      // VIEWER role
+      await expect(
+        useCase.execute({
+          creativeJobId: 'job-val-1',
+          visualAssetId: 'asset-val-1',
+          approvedBy: 'user-reviewer',
+          approverRoles: [RoleCode.VIEWER],
+        }),
+      ).rejects.toThrow(ForbiddenError);
+
+      // MARKETING_EDITOR role
+      await expect(
+        useCase.execute({
+          creativeJobId: 'job-val-1',
+          visualAssetId: 'asset-val-1',
+          approvedBy: 'user-reviewer',
+          approverRoles: [RoleCode.MARKETING_EDITOR],
+        }),
+      ).rejects.toThrow(ForbiddenError);
+
+      // Legacy STAFF string
+      await expect(
+        useCase.execute({
+          creativeJobId: 'job-val-1',
+          visualAssetId: 'asset-val-1',
+          approvedBy: 'user-reviewer',
+          approverRoles: ['STAFF'],
+        }),
+      ).rejects.toThrow(ForbiddenError);
     });
   });
 });

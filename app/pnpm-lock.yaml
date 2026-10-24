@@ -251,6 +251,9 @@ importers:
       '@parisian-shopper/config':
         specifier: workspace:0.1.0
         version: link:../../packages/config
+      '@parisian-shopper/creative-providers':
+        specifier: workspace:0.1.0
+        version: link:../../packages/creative-providers
       '@parisian-shopper/database':
         specifier: workspace:0.1.0
         version: link:../../packages/database
@@ -332,6 +335,9 @@ importers:
       '@parisian-shopper/application':
         specifier: workspace:0.1.0
         version: link:../application
+      '@parisian-shopper/codex-cli':
+        specifier: workspace:0.1.0
+        version: link:../codex-cli
       '@parisian-shopper/config':
         specifier: workspace:0.1.0
         version: link:../config
@@ -366,6 +372,8 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
 
+  packages/codex-cli: {}
+
   packages/common: {}
 
   packages/config:
@@ -394,6 +402,9 @@ importers:
       '@parisian-shopper/application':
         specifier: workspace:0.1.0
         version: link:../application
+      '@parisian-shopper/codex-cli':
+        specifier: workspace:0.1.0
+        version: link:../codex-cli
       '@parisian-shopper/common':
         specifier: workspace:0.1.0
         version: link:../common
@@ -403,6 +414,9 @@ importers:
       rxjs:
         specifier: 7.8.2
         version: 7.8.2
+      sharp:
+        specifier: 0.33.5
+        version: 0.33.5
 
   packages/database:
     dependencies:
@@ -455,6 +469,9 @@ importers:
       rxjs:
         specifier: 7.8.2
         version: 7.8.2
+      sharp:
+        specifier: 0.33.5
+        version: 0.33.5
 
   packages/logger:
     dependencies:

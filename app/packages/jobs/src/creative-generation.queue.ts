@@ -48,14 +48,10 @@ export class CreativeGenerationQueue implements OnModuleInit, CreativeGeneration
   public async enqueue(data: CreativeGenerationJobData): Promise<void> {
     const queue = this.registry.get(QueueName.CREATIVE_GENERATION);
     const deduplicationId = data.creativeJobId ?? data.contentVersionId;
-    await queue.add(
-      CreativeGenerationJobName.GENERATE_CREATIVE,
-      data,
-      {
-        jobId: `creative-${deduplicationId}-${Date.now()}`,
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 1_000 },
-      },
-    );
+    await queue.add(CreativeGenerationJobName.GENERATE_CREATIVE, data, {
+      jobId: `creative-${deduplicationId}-${Date.now()}`,
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 1_000 },
+    });
   }
 }

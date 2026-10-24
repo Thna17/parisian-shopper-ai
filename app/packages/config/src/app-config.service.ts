@@ -43,6 +43,7 @@ export interface CreativeConfig {
   storageRoot: string;
   maxBytes: number;
   allowFakeInProduction: boolean;
+  allowLegacyProductAssetFallback: boolean;
 }
 
 export interface HiggsfieldConfig {
@@ -51,6 +52,23 @@ export interface HiggsfieldConfig {
   videoModel: Environment['HIGGSFIELD_VIDEO_MODEL'];
   videoMaxWaitMs: number;
   generateAudio: boolean;
+  runLiveTests: boolean;
+}
+
+export interface CodexCliConfig {
+  textTimeoutMs: number;
+  imageTimeoutMs: number;
+  maxConcurrency: number;
+}
+
+export interface ProductApiConfig {
+  baseUrl?: string | undefined;
+  businessId?: string | undefined;
+  currency: string;
+  allowedHosts: readonly string[];
+  timeoutMs: number;
+  maxRetries: number;
+  token?: string | undefined;
   runLiveTests: boolean;
 }
 
@@ -134,6 +152,8 @@ export class AppConfigService {
       storageRoot: this.config.get('CREATIVE_ASSET_STORAGE_ROOT', { infer: true }),
       maxBytes: this.config.get('CREATIVE_ASSET_MAX_BYTES', { infer: true }),
       allowFakeInProduction: this.config.get('CREATIVE_ALLOW_FAKE_IN_PRODUCTION', { infer: true }),
+      allowLegacyProductAssetFallback:
+        this.config.get('ALLOW_LEGACY_PRODUCT_ASSET_FALLBACK', { infer: true }) ?? false,
     };
   }
 
@@ -149,6 +169,34 @@ export class AppConfigService {
     };
   }
 
+  public get codexCli(): CodexCliConfig {
+    return {
+      textTimeoutMs: this.config.get('CODEX_CLI_TEXT_TIMEOUT_MS', { infer: true }),
+      imageTimeoutMs: this.config.get('CODEX_CLI_IMAGE_TIMEOUT_MS', { infer: true }),
+      maxConcurrency: this.config.get('CODEX_CLI_MAX_CONCURRENCY', { infer: true }),
+    };
+  }
+
+  public get productApi(): ProductApiConfig {
+    const rawHosts = this.config.get('PRODUCT_API_ALLOWED_HOSTS', { infer: true });
+    const allowedHosts = rawHosts
+      ? rawHosts
+          .split(',')
+          .map((host: string) => host.trim().toLowerCase())
+          .filter((host: string) => host.length > 0)
+      : [];
+    return Object.freeze({
+      baseUrl: this.config.get('PRODUCT_API_BASE_URL', { infer: true }),
+      businessId: this.config.get('PRODUCT_API_BUSINESS_ID', { infer: true }),
+      currency: this.config.get('PRODUCT_API_CURRENCY', { infer: true }) ?? 'USD',
+      allowedHosts: Object.freeze(allowedHosts),
+      timeoutMs: this.config.get('PRODUCT_API_TIMEOUT_MS', { infer: true }),
+      maxRetries: this.config.get('PRODUCT_API_MAX_RETRIES', { infer: true }),
+      token: this.config.get('PRODUCT_API_TOKEN', { infer: true }),
+      runLiveTests: this.config.get('RUN_PRODUCT_API_LIVE_TESTS', { infer: true }),
+    });
+  }
+
   public get featureFlags(): Readonly<Record<FeatureFlag, boolean>> {
     return Object.freeze({
       AI_TEXT_GENERATION: this.config.get('FEATURE_AI_TEXT_GENERATION', { infer: true }),
@@ -160,7 +208,9 @@ export class AppConfigService {
       PRODUCT_API: this.config.get('FEATURE_PRODUCT_API', { infer: true }),
       AUTO_PUBLISHING: this.config.get('FEATURE_AUTO_PUBLISHING', { infer: true }),
       META_PUBLISHING: this.config.get('FEATURE_META_PUBLISHING', { infer: true }),
-      TELEGRAM_CHANNEL_PUBLISHING: this.config.get('FEATURE_TELEGRAM_CHANNEL_PUBLISHING', { infer: true }),
+      TELEGRAM_CHANNEL_PUBLISHING: this.config.get('FEATURE_TELEGRAM_CHANNEL_PUBLISHING', {
+        infer: true,
+      }),
       ANALYTICS: this.config.get('FEATURE_ANALYTICS', { infer: true }),
     });
   }

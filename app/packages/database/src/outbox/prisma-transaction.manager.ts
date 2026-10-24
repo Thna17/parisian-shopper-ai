@@ -1,3 +1,4 @@
+import { Inject, Injectable } from '@nestjs/common';
 import {
   type ApplicationTransactionContext,
   type OutboxEventDraft,
@@ -32,8 +33,32 @@ class PrismaOutboxWriter implements OutboxWriter {
   }
 }
 
+@Injectable()
+export class PrismaStandaloneOutboxWriter implements OutboxWriter {
+  public constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+
+  public async append(event: OutboxEventDraft): Promise<string> {
+    const result = await this.prisma.outboxEvent.create({
+      data: {
+        topic: event.topic,
+        schemaVersion: event.schemaVersion,
+        idempotencyKey: event.idempotencyKey,
+        payload: toJsonObject(event.payload),
+        occurredAt: event.occurredAt,
+        availableAt: event.availableAt,
+        ...(event.aggregateType === undefined ? {} : { aggregateType: event.aggregateType }),
+        ...(event.aggregateId === undefined ? {} : { aggregateId: event.aggregateId }),
+      },
+      select: { id: true },
+    });
+
+    return result.id;
+  }
+}
+
+@Injectable()
 export class PrismaTransactionManager implements TransactionManager {
-  public constructor(private readonly prisma: PrismaService) {}
+  public constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   public async run<T>(work: (context: ApplicationTransactionContext) => Promise<T>): Promise<T> {
     return this.prisma.$transaction(async (transaction) =>

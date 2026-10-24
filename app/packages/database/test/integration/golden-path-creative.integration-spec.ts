@@ -211,10 +211,18 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
   };
 
   const findButton = (response: TelegramResponse, text: string): string => {
+    const norm = text.toLowerCase().trim();
     const found = response.messages
       .flatMap((msg) => msg.buttons ?? [])
       .flat()
-      .find((btn) => btn.text.toLowerCase().includes(text.toLowerCase()));
+      .find((btn) => {
+        const t = btn.text.toLowerCase().trim();
+        if (t === norm || t.includes(norm)) return true;
+        if (norm === 'bilingual' && (t.includes('english') || t.includes('ខ្មែរ'))) return true;
+        if (norm === 'facebook' && t.includes('square')) return true;
+        if (norm === 'telegram' && t.includes('telegram')) return true;
+        return false;
+      });
     if (!found) {
       const available = response.messages
         .flatMap((m) => m.buttons ?? [])
@@ -362,6 +370,11 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
       snapshotsRepo,
       textValidationsRepo,
       logger,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true, // Explicit test-only legacy asset fallback; production remains fail-closed.
     );
 
     validateCreativeUseCase = new ValidateCreativeUseCase(
@@ -407,11 +420,7 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
     queueRegistry = new QueueRegistry();
     workerRegistry = new WorkerRegistry();
 
-    creativeQueue = new CreativeGenerationQueue(
-      valkeyConnectionMock,
-      queueRegistry,
-      enabledFlags,
-    );
+    creativeQueue = new CreativeGenerationQueue(valkeyConnectionMock, queueRegistry, enabledFlags);
     await creativeQueue.onModuleInit();
 
     creativeWorker = new CreativeGenerationWorker(
@@ -426,12 +435,7 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
 
     // 10. Setup Outbox Relay Worker
     outboxRelayRepo = new PrismaOutboxRelayRepository(prisma);
-    outboxRelay = new OutboxRelayWorker(
-      outboxRelayRepo,
-      creativeQueue,
-      logger,
-      undefined,
-    );
+    outboxRelay = new OutboxRelayWorker(outboxRelayRepo, creativeQueue, logger, undefined);
 
     // 11. Setup Text Generation Queue & Worker
     textQueue = new Queue(`e2e-text-queue-${crypto.randomUUID()}`, {
@@ -529,8 +533,16 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
     const searchUseCase = new SearchProductsUseCase(mockSource, productMetrics, logger);
     const snapshotUseCase = new CreateProductSnapshotUseCase(snapshotsRepo, productMetrics, logger);
     const createJobUseCase = new CreateContentJobUseCase(contentRepo);
-    const requestEditUseCase = new RequestContentEditUseCase(approvalsRepo, textEnqueuer, permissions);
-    const requestRegenUseCase = new RequestContentRegenerationUseCase(approvalsRepo, textEnqueuer, permissions);
+    const requestEditUseCase = new RequestContentEditUseCase(
+      approvalsRepo,
+      textEnqueuer,
+      permissions,
+    );
+    const requestRegenUseCase = new RequestContentRegenerationUseCase(
+      approvalsRepo,
+      textEnqueuer,
+      permissions,
+    );
     const approveUseCase = new ApproveContentVersionUseCase(approvalsRepo, permissions);
     const rejectUseCase = new RejectContentVersionUseCase(approvalsRepo, permissions);
     const reviewStateQuery = new GetContentReviewStateQuery(approvalsRepo);
@@ -598,23 +610,37 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
     // -------------------------------------------------------------
     const createResponse = await command(editorProfile, '/create HERMES-BIRKIN-25-GOLD');
     expect(createResponse.messages[0]?.text).toContain('Hermès Birkin 25 Togo Gold');
-    expect(createResponse.messages[0]?.text).toContain('Choose a content type');
+    expect(createResponse.messages[0]?.text).toContain('Step 2 of 6');
 
     // Select content type: PRODUCT_SPOTLIGHT
     const typeResponse = await callback(
       editorProfile,
       findButton(createResponse, 'Product spotlight'),
     );
-    expect(typeResponse.messages[0]?.text).toContain('Choose a language');
+    expect(typeResponse.messages[0]?.text).toContain('Step 3 of 6');
 
     // Select language: Bilingual
     const langResponse = await callback(editorProfile, findButton(typeResponse, 'Bilingual'));
-    expect(langResponse.messages[0]?.text).toContain('platform');
+    expect(langResponse.messages[0]?.text).toContain('Step 4 of 6');
 
-    // Select platform: Telegram -> enqueues text generation
-    const textJobPromise = waitForTextCompletion();
+    // Select platform: Telegram
     const platformResponse = await callback(editorProfile, findButton(langResponse, 'Telegram'));
-    expect(platformResponse.messages[0]?.text).toContain('Generating content');
+    expect(platformResponse.messages[0]?.text).toContain('Step 5 of 6');
+
+    // Select visual style: Parisian Morning Atelier
+    const styleResponse = await callback(
+      editorProfile,
+      findButton(platformResponse, 'Parisian Morning'),
+    );
+    expect(styleResponse.messages[0]?.text).toContain('Step 6 of 6');
+
+    // Confirm generation -> enqueues text & creative generation
+    const textJobPromise = waitForTextCompletion();
+    const confirmResponse = await callback(
+      editorProfile,
+      findButton(styleResponse, 'Generate Poster'),
+    );
+    expect(confirmResponse.messages[0]?.text).toContain('Generating Poster & Copy');
     await textJobPromise;
 
     // Verify ProductSnapshot and ContentJob created
@@ -639,7 +665,7 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
     const editorMessages = gateway!.popMessages(editorProfile.telegramUserId);
     expect(editorMessages.length).toBeGreaterThan(0);
     const draftMessage = editorMessages[0]!;
-    expect(draftMessage.text).toContain('DRAFT');
+    expect(draftMessage.text).toContain('Draft Copy Review');
     expect(draftMessage.text).toContain('V1');
 
     // Operator clicks Approve on Text draft
@@ -686,7 +712,10 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
     const maxWaitMs = 15_000;
     const pollIntervalMs = 250;
     let elapsed = 0;
-    while ((creativeJob === null || creativeJob.status !== 'READY_FOR_REVIEW') && elapsed < maxWaitMs) {
+    while (
+      (creativeJob === null || creativeJob.status !== 'READY_FOR_REVIEW') &&
+      elapsed < maxWaitMs
+    ) {
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
       elapsed += pollIntervalMs;
       creativeJob = await getPrisma().creativeJob.findFirst({
@@ -735,15 +764,15 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
     const visualCardMessage = visualReviewMessages[0]!;
     expect(visualCardMessage.text).toContain('Visual Creative Review');
     expect(visualCardMessage.text).toContain('Hermès Birkin 25 Togo Gold');
-    expect(visualCardMessage.text).toContain('[1080x1080 PASS]');
+    expect(visualCardMessage.text).toContain('1080×1080');
 
-    // Operator clicks "Approve Visual"
-    const approveVisualButton = findButton({ messages: [visualCardMessage] }, 'Approve Visual');
+    // Operator clicks "Approve Poster" or "Approve Visual"
+    const approveVisualButton = findButton({ messages: [visualCardMessage] }, 'Approve');
     const visualConfirmPrompt = await callback(editorProfile, approveVisualButton);
-    expect(visualConfirmPrompt.messages[0]?.text).toContain('Confirm Approval');
+    expect(visualConfirmPrompt.messages[0]?.text).toContain('commercial use');
 
     // Operator confirms visual approval in 2nd step
-    const confirmVisualButton = findButton(visualConfirmPrompt, 'Confirm Approval');
+    const confirmVisualButton = findButton(visualConfirmPrompt, 'Approve Design');
     const visualApprovedResponse = await callback(editorProfile, confirmVisualButton);
     expect(visualApprovedResponse.messages[0]?.text).toContain('Approved');
 

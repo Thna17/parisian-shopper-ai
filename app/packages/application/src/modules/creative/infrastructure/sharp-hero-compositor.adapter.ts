@@ -5,8 +5,11 @@ import {
   type CompositeVisualInput,
   type CompositeVisualResult,
   type HeroBoundingBox,
+  type HeroPlacement,
+  type SourceProductBoundingBox,
   PS_COMPOSITOR_VERSION,
 } from '../application/hero-compositor.port.js';
+
 import {
   CreativeImageDecodeFailedError,
   CreativeUnsupportedImageFormatError,
@@ -75,7 +78,12 @@ export function configureSharpResourceLimits(): void {
   try {
     sharp.concurrency(2);
     sharp.cache({ memory: 128, files: 20, items: 100 });
-    sharp.block({ operation: ['VipsForeignLoadHeif', 'VipsForeignLoadSvg'] });
+    sharp.block({ operation: ['VipsForeignLoadHeif'] });
+    try {
+      sharp.unblock({ operation: ['VipsForeignLoadSvg'] });
+    } catch {
+      // Ignore if unblock is not supported
+    }
   } catch {
     // Ignore if not supported in test environment
   }
@@ -186,10 +194,41 @@ export class SharpHeroCompositor implements HeroCompositor {
       throw new CreativeInvalidLayoutError('Safe margins exceed canvas dimensions');
     }
 
-    // Determine target hero height & width preserving aspect ratio
+    // 7. Measure transparent padding & trimmed bounds of canonical product
+    let trimmedBuffer = input.canonicalProductBuffer;
+    let trimmedX = 0;
+    let trimmedY = 0;
+    let trimmedWidth = prodMetadata.width;
+    let trimmedHeight = prodMetadata.height;
+
+    try {
+      const trimResult = await sharp(input.canonicalProductBuffer)
+        .trim()
+        .png({ compressionLevel: 9 })
+        .toBuffer({ resolveWithObject: true });
+
+      trimmedX = Math.abs(trimResult.info.trimOffsetLeft ?? 0);
+      trimmedY = Math.abs(trimResult.info.trimOffsetTop ?? 0);
+      trimmedWidth = trimResult.info.width;
+      trimmedHeight = trimResult.info.height;
+      trimmedBuffer = trimResult.data;
+    } catch {
+      // Fall back to original untrimmed bounds if trim fails
+    }
+
+    const sourceBoundingBox: SourceProductBoundingBox = {
+      originalWidth: prodMetadata.width,
+      originalHeight: prodMetadata.height,
+      trimmedX,
+      trimmedY,
+      trimmedWidth,
+      trimmedHeight,
+    };
+
+    // Determine target hero height & width preserving aspect ratio of visible product
     const heroHeightRatio = this.options.defaultHeroHeightRatio;
+    const productAspect = trimmedWidth / trimmedHeight;
     let targetHeroHeight = Math.round(canvasHeight * heroHeightRatio);
-    const productAspect = prodMetadata.width / prodMetadata.height;
     let targetHeroWidth = Math.round(targetHeroHeight * productAspect);
 
     // If hero width exceeds max usable width, scale down proportionally
@@ -203,9 +242,43 @@ export class SharpHeroCompositor implements HeroCompositor {
       targetHeroWidth = Math.round(targetHeroHeight * productAspect);
     }
 
-    // Compute placement coordinates (CENTER placement)
-    const heroX = Math.round((canvasWidth - targetHeroWidth) / 2);
-    const heroY = Math.round((canvasHeight - targetHeroHeight) / 2);
+    // Determine vertical placement: anchor bottom to detected pedestal baseline if provided, else center vertically
+    let heroY: number;
+    if (input.pedestalYPercent !== undefined) {
+      const pedestalBaselineY = Math.round(canvasHeight * input.pedestalYPercent);
+      heroY = pedestalBaselineY - targetHeroHeight;
+      if (heroY < safeTop) {
+        const diff = safeTop - heroY;
+        targetHeroHeight -= diff;
+        targetHeroWidth = Math.round(targetHeroHeight * productAspect);
+        heroY = safeTop;
+      }
+      if (heroY + targetHeroHeight > canvasHeight - safeBottom) {
+        heroY = canvasHeight - safeBottom - targetHeroHeight;
+      }
+    } else {
+      heroY = Math.round((canvasHeight - targetHeroHeight) / 2);
+    }
+
+    // Determine horizontal placement (LEFT, CENTER, RIGHT)
+    const placement: HeroPlacement = input.heroPlacement ?? 'CENTER';
+    let heroX: number;
+    switch (placement) {
+      case 'LEFT':
+        heroX = Math.round(canvasWidth * 0.28 - targetHeroWidth / 2);
+        if (heroX < safeLeft) heroX = safeLeft;
+        break;
+      case 'RIGHT':
+        heroX = Math.round(canvasWidth * 0.72 - targetHeroWidth / 2);
+        if (heroX + targetHeroWidth > canvasWidth - safeRight) {
+          heroX = canvasWidth - safeRight - targetHeroWidth;
+        }
+        break;
+      case 'CENTER':
+      default:
+        heroX = Math.round((canvasWidth - targetHeroWidth) / 2);
+        break;
+    }
 
     // Validate safe margin boundary invariant
     if (
@@ -243,32 +316,100 @@ export class SharpHeroCompositor implements HeroCompositor {
         .removeAlpha()
         .toBuffer();
 
-      // Step B: Process Product Hero (resize preserving aspect ratio, Lanczos3 kernel, sRGB)
-      const resizedProductBuffer = await sharp(input.canonicalProductBuffer, {
+      // Step B: Process Product Hero from trimmed bounds (resize preserving aspect ratio, Lanczos3, sRGB)
+      const resizedProductBuffer = await sharp(trimmedBuffer, {
         limitInputPixels: this.options.maxDecodedPixels,
       })
         .resize({
           width: targetHeroWidth,
           height: targetHeroHeight,
-          fit: sharp.fit.fill, // Already exact derived aspect ratio
+          fit: sharp.fit.fill, // Exact aspect ratio already computed
           kernel: sharp.kernel.lanczos3,
         })
         .toColorspace('srgb')
         .png({ compressionLevel: 9 })
         .toBuffer();
 
-      // Step C: Composite Hero over Background deterministically
+      // Step C: Optional Subtle Contact Shadow generated from product alpha mask
+      let contactShadowBoundingBox: HeroBoundingBox | undefined;
+      const compositeLayers: sharp.OverlayOptions[] = [];
+
+      const enableShadow = input.enableContactShadow ?? true;
+      if (enableShadow && targetHeroWidth > 0 && targetHeroHeight > 0) {
+        try {
+          const alphaOnly = await sharp(resizedProductBuffer).extractChannel('alpha').toBuffer();
+
+          const bottomSliceH = Math.max(4, Math.round(targetHeroHeight * 0.2));
+          const shadowW = Math.round(targetHeroWidth * 1.05);
+          const shadowH = Math.max(8, Math.round(targetHeroHeight * 0.035));
+
+          const bottomSlice = await sharp(alphaOnly)
+            .extract({
+              left: 0,
+              top: targetHeroHeight - bottomSliceH,
+              width: targetHeroWidth,
+              height: bottomSliceH,
+            })
+            .resize(shadowW, shadowH, { fit: sharp.fit.fill })
+            .blur(4)
+            .toBuffer();
+
+          const { data: shadowRaw, info: shadowInfo } = await sharp(bottomSlice)
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+
+          const shadowRgba = Buffer.alloc(shadowInfo.width * shadowInfo.height * 4);
+          for (let i = 0; i < shadowRaw.length; i++) {
+            const offset = i * 4;
+            shadowRgba[offset] = 0; // R
+            shadowRgba[offset + 1] = 0; // G
+            shadowRgba[offset + 2] = 0; // B
+            shadowRgba[offset + 3] = Math.round(shadowRaw[i]! * 0.32); // Max 32% opacity
+          }
+
+          const shadowBuffer = await sharp(shadowRgba, {
+            raw: {
+              width: shadowInfo.width,
+              height: shadowInfo.height,
+              channels: 4,
+            },
+          })
+            .png({ compressionLevel: 9 })
+            .toBuffer();
+
+          const shadowLeft = heroX - Math.round((shadowInfo.width - targetHeroWidth) / 2);
+          const shadowTop = heroY + targetHeroHeight - Math.round(shadowInfo.height / 2);
+
+          contactShadowBoundingBox = {
+            x: shadowLeft,
+            y: shadowTop,
+            width: shadowInfo.width,
+            height: shadowInfo.height,
+          };
+
+          compositeLayers.push({
+            input: shadowBuffer,
+            left: shadowLeft,
+            top: shadowTop,
+            blend: 'over',
+          });
+        } catch {
+          // If shadow generation fails, composite hero cleanly without shadow
+        }
+      }
+
+      // Step D: Composite Product Hero over contact shadow (original pixels never modified)
+      compositeLayers.push({
+        input: resizedProductBuffer,
+        top: heroY,
+        left: heroX,
+        blend: 'over',
+      });
+
       const compositedBuffer = await sharp(resizedBgBuffer, {
         limitInputPixels: this.options.maxDecodedPixels,
       })
-        .composite([
-          {
-            input: resizedProductBuffer,
-            top: heroY,
-            left: heroX,
-            blend: 'over',
-          },
-        ])
+        .composite(compositeLayers)
         .png({
           compressionLevel: 9,
           adaptiveFiltering: true,
@@ -293,8 +434,10 @@ export class SharpHeroCompositor implements HeroCompositor {
         latencyMs,
         compositorVersion: PS_COMPOSITOR_VERSION,
         heroScale: targetHeroHeight / canvasHeight,
-        heroPlacement: 'CENTER',
+        heroPlacement: placement,
         heroBoundingBox,
+        sourceBoundingBox,
+        contactShadowBoundingBox,
         productDigest: actualProductSha,
         backgroundDigest: actualBackgroundSha,
         outputDigest,

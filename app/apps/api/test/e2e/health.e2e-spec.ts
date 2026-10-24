@@ -1,7 +1,11 @@
 import { type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { DatabaseHealthIndicator, PrismaService } from '@parisian-shopper/database';
-import { ContentGenerationQueue, CreativeGenerationQueue, ValkeyConnectionService } from '@parisian-shopper/jobs';
+import {
+  ContentGenerationQueue,
+  CreativeGenerationQueue,
+  ValkeyConnectionService,
+} from '@parisian-shopper/jobs';
 import { jest } from '@jest/globals';
 import { type Server } from 'node:http';
 import request from 'supertest';
@@ -97,9 +101,7 @@ describe('API foundation (e2e)', () => {
   });
 
   it('exposes prometheus metrics on /metrics', async () => {
-    const response = await request(server)
-      .get('/metrics')
-      .expect(200);
+    const response = await request(server).get('/metrics').expect(200);
 
     expect(response.headers['content-type']).toContain('text/plain');
     expect(response.text).toContain('process_resident_memory_bytes');

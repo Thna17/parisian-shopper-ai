@@ -27,6 +27,35 @@ enum ProductLifecycleStatus {
   deleted
 }
 
+enum FreshnessState {
+  FRESH
+  AGING
+  STALE
+  INVALID
+  SOURCE_UNAVAILABLE
+}
+
+enum RevalidationOutcome {
+  FRESH
+  NON_MATERIAL_CHANGE
+  MATERIAL_CHANGE
+  SOURCE_UNAVAILABLE
+  PROMOTION_EXPIRED
+  OUT_OF_STOCK
+}
+
+enum SourceAvailability {
+  AVAILABLE
+  DEGRADED
+  UNREACHABLE
+}
+
+enum PolicyLifecycleState {
+  DRAFT
+  APPROVED
+  RETIRED
+}
+
 enum BrandRuleStatus {
   DRAFT
   ACTIVE
@@ -167,16 +196,24 @@ model User {
   createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  roles                    UserRole[]                @relation("UserRoles")
-  roleAssignments          UserRole[]                @relation("RoleAssignedBy")
-  telegramIdentities       TelegramIdentity[]
-  requestedContentJobs     ContentJob[]              @relation("ContentJobRequester")
-  revisionRequests         RevisionRequest[]         @relation("UserRevisionRequests")
-  approvalEvents           ApprovalEvent[]
-  auditEvents              AuditEvent[]
-  requestedCreativeJobs    CreativeJob[]             @relation("UserCreativeJobs")
-  creativeRevisionRequests CreativeRevisionRequest[] @relation("UserCreativeRevisionRequests")
-  creativeApprovalEvents   CreativeApprovalEvent[]   @relation("UserCreativeApprovalEvents")
+  roles                       UserRole[]                   @relation("UserRoles")
+  roleAssignments             UserRole[]                   @relation("RoleAssignedBy")
+  telegramIdentities          TelegramIdentity[]
+  requestedContentJobs        ContentJob[]                 @relation("ContentJobRequester")
+  revisionRequests            RevisionRequest[]            @relation("UserRevisionRequests")
+  approvalEvents              ApprovalEvent[]
+  auditEvents                 AuditEvent[]
+  requestedCreativeJobs       CreativeJob[]                @relation("UserCreativeJobs")
+  creativeRevisionRequests    CreativeRevisionRequest[]    @relation("UserCreativeRevisionRequests")
+  creativeApprovalEvents      CreativeApprovalEvent[]      @relation("UserCreativeApprovalEvents")
+  productFreshnessAssessments ProductFreshnessAssessment[]
+  policyActivations           FreshnessPolicyActivation[]  @relation("PolicyActivatorUser")
+  registeredProductAssets     ProductAssetRegistration[]   @relation("UserRegisteredProductAssets")
+  productAssetApprovalEvents  ProductAssetApprovalEvent[]  @relation("UserProductAssetApprovalEvents")
+  productAssetTransforms      ProductAssetTransform[]      @relation("UserProductAssetTransforms")
+  productAssetRightsEvents    ProductAssetRightsEvent[]    @relation("UserProductAssetRightsEvents")
+  requestedSceneVersions      CreativeSceneVersion[]       @relation("UserRequestedSceneVersions")
+  recordedSceneInvalidations  SceneInvalidationEvent[]     @relation("UserRecordedSceneInvalidations")
 
   @@index([status], map: "users_status_idx")
   @@map("users")
@@ -263,17 +300,89 @@ model ProductSnapshot {
   sourceEtag          String?                @map("source_etag") @db.VarChar(500)
   lifecycleStatus     ProductLifecycleStatus @map("lifecycle_status")
   snapshotHash        String                 @map("snapshot_hash") @db.Char(64)
+  catalogPriceHash    String?                @map("catalog_price_hash") @db.Char(64)
+  campaignPriceHash   String?                @map("campaign_price_hash") @db.Char(64)
+  stockHash           String?                @map("stock_hash") @db.Char(64)
+  promotionHash       String?                @map("promotion_hash") @db.Char(64)
+  permanentFactsHash  String?                @map("permanent_facts_hash") @db.Char(64)
+  visualAssetHash     String?                @map("visual_asset_hash") @db.Char(64)
   normalizerVersion   String                 @map("normalizer_version") @db.VarChar(100)
   createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  contentJobs     ContentJob[]
-  contentVersions ContentVersion[]
-  creativeJobs    CreativeJob[]
+  contentJobs               ContentJob[]
+  contentVersions           ContentVersion[]
+  creativeJobs              CreativeJob[]
+  assessments               ProductFreshnessAssessment[] @relation("SnapshotAssessments")
+  comparedAssessments       ProductFreshnessAssessment[] @relation("ComparedSnapshotAssessments")
+  productAssetRegistrations ProductAssetRegistration[]
+  sceneVersions             CreativeSceneVersion[]
 
   @@index([sku, createdAt], map: "product_snapshots_sku_created_at_idx")
   @@index([snapshotHash], map: "product_snapshots_snapshot_hash_idx")
   @@index([sourceSystem, sourceRecordId, sourceUpdatedAt], map: "product_snapshots_source_idx")
   @@map("product_snapshots")
+}
+
+model FreshnessPolicyVersion {
+  id                            String   @id @default(uuid()) @db.Uuid
+  policyId                      String   @map("policy_id") @db.VarChar(100)
+  version                       String   @db.VarChar(50)
+  stockTtlSeconds               Int      @map("stock_ttl_seconds")
+  catalogPriceTtlSeconds        Int      @map("catalog_price_ttl_seconds")
+  campaignPriceTtlSeconds       Int      @map("campaign_price_ttl_seconds")
+  promotionTtlSeconds           Int      @map("promotion_ttl_seconds")
+  promotionRecheckWindowSeconds Int      @map("promotion_recheck_window_seconds")
+  permanentFactsTtlSeconds      Int      @map("permanent_facts_ttl_seconds")
+  hardExpiryBoundarySeconds     Int      @map("hard_expiry_boundary_seconds")
+  policyHash                    String   @map("policy_hash") @db.Char(64)
+  createdAt                     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  activations FreshnessPolicyActivation[]
+
+  @@unique([policyId, version], map: "freshness_policy_versions_policy_id_version_key")
+  @@map("freshness_policy_versions")
+}
+
+model FreshnessPolicyActivation {
+  id              String               @id @default(uuid()) @db.Uuid
+  sequence        BigInt               @default(autoincrement())
+  policyVersionId String               @map("policy_version_id") @db.Uuid
+  environment     String               @db.VarChar(50)
+  lifecycleState  PolicyLifecycleState @map("lifecycle_state")
+  activatedAt     DateTime             @default(now()) @map("activated_at") @db.Timestamptz(3)
+  activatedBy     String?              @map("activated_by") @db.Uuid
+
+  policyVersion FreshnessPolicyVersion @relation(fields: [policyVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "freshness_policy_activations_policy_version_id_fkey")
+  activator     User?                  @relation("PolicyActivatorUser", fields: [activatedBy], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "freshness_policy_activations_activated_by_fkey")
+
+  @@index([environment, activatedAt, sequence], map: "freshness_policy_activations_env_activated_seq_idx")
+  @@index([environment, lifecycleState], map: "freshness_policy_activations_env_state_idx")
+  @@map("freshness_policy_activations")
+}
+
+model ProductFreshnessAssessment {
+  id                  String              @id @default(uuid()) @db.Uuid
+  snapshotId          String              @map("snapshot_id") @db.Uuid
+  evaluatedAt         DateTime            @map("evaluated_at") @db.Timestamptz(3)
+  policyId            String              @map("policy_id") @db.VarChar(100)
+  policyVersion       String              @map("policy_version") @db.VarChar(50)
+  freshnessState      FreshnessState      @map("freshness_state")
+  revalidationOutcome RevalidationOutcome @map("revalidation_outcome")
+  sourceAvailability  SourceAvailability  @map("source_availability")
+  reasonCodes         String[]            @map("reason_codes")
+  evidence            Json                @db.JsonB
+  comparedSnapshotId  String?             @map("compared_snapshot_id") @db.Uuid
+  actorUserId         String?             @map("actor_user_id") @db.Uuid
+  idempotencyKey      String?             @unique(map: "product_freshness_assessments_idempotency_key_key") @map("idempotency_key") @db.VarChar(200)
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  snapshot         ProductSnapshot  @relation("SnapshotAssessments", fields: [snapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "product_freshness_assessments_snapshot_id_fkey")
+  comparedSnapshot ProductSnapshot? @relation("ComparedSnapshotAssessments", fields: [comparedSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "product_freshness_assessments_compared_snapshot_id_fkey")
+  actorUser        User?            @relation(fields: [actorUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "product_freshness_assessments_actor_user_id_fkey")
+
+  @@index([snapshotId, evaluatedAt], map: "product_freshness_assessments_snapshot_evaluated_idx")
+  @@index([policyId, policyVersion], map: "product_freshness_assessments_policy_idx")
+  @@map("product_freshness_assessments")
 }
 
 model BrandRuleVersion {
@@ -501,6 +610,7 @@ model ContentVersion {
   approvalEvents            ApprovalEvent[]
   pendingReviewInteractions TelegramPendingReviewInteraction[]
   creativeJobs              CreativeJob[]
+  sceneVersions             CreativeSceneVersion[]
 
   @@unique([contentJobId, versionNumber], map: "content_versions_job_version_key")
   @@index([productSnapshotId, createdAt], map: "content_versions_product_snapshot_id_created_at_idx")
@@ -630,6 +740,7 @@ model CreativeJob {
   visualAssets     VisualAsset[]
   revisionRequests CreativeRevisionRequest[]
   approvalEvents   CreativeApprovalEvent[]
+  scenes           CreativeScene[]
 
   @@index([contentVersionId, createdAt], map: "creative_jobs_content_version_created_at_idx")
   @@index([status, createdAt], map: "creative_jobs_status_created_at_idx")
@@ -745,4 +856,344 @@ model CreativeApprovalEvent {
   @@index([creativeJobId, createdAt], map: "creative_approval_events_job_created_at_idx")
   @@index([visualAssetId, createdAt], map: "creative_approval_events_asset_created_at_idx")
   @@map("creative_approval_events")
+}
+
+model CreativeScene {
+  id                   String   @id @default(uuid()) @db.Uuid
+  creativeJobId        String   @map("creative_job_id") @db.Uuid
+  campaignId           String?  @map("campaign_id") @db.Uuid
+  title                String   @db.VarChar(255)
+  currentVersionNumber Int      @default(1) @map("current_version_number")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  creativeJob CreativeJob            @relation(fields: [creativeJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_scenes_creative_job_id_fkey")
+  versions    CreativeSceneVersion[]
+
+  @@index([creativeJobId, createdAt], map: "creative_scenes_job_created_at_idx")
+  @@map("creative_scenes")
+}
+
+model CreativeSceneVersion {
+  id                     String   @id @default(uuid()) @db.Uuid
+  sceneId                String   @map("scene_id") @db.Uuid
+  versionNumber          Int      @map("version_number")
+  parentVersionId        String?  @map("parent_version_id") @db.Uuid
+  aspectRatio            String   @map("aspect_ratio") @db.VarChar(20)
+  width                  Int
+  height                 Int
+  templateId             String   @map("template_id") @db.VarChar(100)
+  templateVersion        String   @map("template_version") @db.VarChar(50)
+  stylePresetId          String?  @map("style_preset_id") @db.VarChar(100)
+  language               String   @default("EN") @db.VarChar(20)
+  safeMargins            Json     @map("safe_margins") @db.JsonB
+  brandProfileVersionId  String   @map("brand_profile_version_id") @db.Uuid
+  sourceContentVersionId String   @map("source_content_version_id") @db.Uuid
+  productSnapshotId      String   @map("product_snapshot_id") @db.Uuid
+  sceneHash              String   @map("scene_hash") @db.Char(64)
+  dependencyHash         String   @map("dependency_hash") @db.Char(64)
+  changeReason           String?  @map("change_reason") @db.VarChar(500)
+  operationCode          String?  @map("operation_code") @db.VarChar(50)
+  requestedByUserId      String?  @map("requested_by_user_id") @db.Uuid
+  metadata               Json?    @db.JsonB
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  scene                CreativeScene            @relation(fields: [sceneId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_scene_versions_scene_id_fkey")
+  parentVersion        CreativeSceneVersion?    @relation("SceneVersionAncestry", fields: [parentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_scene_versions_parent_version_id_fkey")
+  childVersions        CreativeSceneVersion[]   @relation("SceneVersionAncestry")
+  sourceContentVersion ContentVersion           @relation(fields: [sourceContentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_scene_versions_content_version_id_fkey")
+  productSnapshot      ProductSnapshot          @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_scene_versions_product_snapshot_id_fkey")
+  requestedByUser      User?                    @relation("UserRequestedSceneVersions", fields: [requestedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_scene_versions_requested_by_user_id_fkey")
+  layers               SceneLayer[]
+  dependencies         LayerDependency[]
+  state                SceneVersionState?
+  invalidationEvents   SceneInvalidationEvent[]
+
+  @@unique([sceneId, versionNumber], map: "creative_scene_versions_scene_version_key")
+  @@index([sceneId, createdAt], map: "creative_scene_versions_scene_created_at_idx")
+  @@index([sceneHash], map: "creative_scene_versions_scene_hash_idx")
+  @@index([dependencyHash], map: "creative_scene_versions_dependency_hash_idx")
+  @@index([productSnapshotId], map: "creative_scene_versions_product_snapshot_id_idx")
+  @@map("creative_scene_versions")
+}
+
+model SceneLayer {
+  id                   String   @id @default(uuid()) @db.Uuid
+  sceneVersionId       String   @map("scene_version_id") @db.Uuid
+  layerKey             String   @map("layer_key") @db.VarChar(100)
+  layerGroup           String   @map("layer_group") @db.VarChar(50)
+  layerType            String   @map("layer_type") @db.VarChar(50)
+  name                 String   @db.VarChar(255)
+  zIndex               Int      @map("z_index")
+  visible              Boolean  @default(true)
+  opacity              Float    @default(1.0)
+  blendMode            String   @default("NORMAL") @map("blend_mode") @db.VarChar(50)
+  bounds               Json     @db.JsonB
+  payload              Json     @db.JsonB
+  payloadSchemaVersion Int      @default(1) @map("payload_schema_version")
+  layerHash            String   @map("layer_hash") @db.Char(64)
+  sortOrder            Int      @map("sort_order")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  sceneVersion CreativeSceneVersion @relation(fields: [sceneVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "scene_layers_scene_version_id_fkey")
+  dependencies LayerDependency[]
+
+  @@unique([id, sceneVersionId], map: "scene_layers_id_version_id_uniq")
+  @@unique([sceneVersionId, layerKey], map: "scene_layers_version_key_uniq")
+  @@unique([sceneVersionId, zIndex], map: "scene_layers_version_z_index_uniq")
+  @@unique([sceneVersionId, sortOrder], map: "scene_layers_version_sort_order_uniq")
+  @@index([sceneVersionId, sortOrder], map: "scene_layers_version_sort_idx")
+  @@index([layerHash], map: "scene_layers_hash_idx")
+  @@map("scene_layers")
+}
+
+model LayerDependency {
+  id                   String   @id @default(uuid()) @db.Uuid
+  sceneVersionId       String   @map("scene_version_id") @db.Uuid
+  sceneLayerId         String?  @map("scene_layer_id") @db.Uuid
+  dependencyType       String   @map("dependency_type") @db.VarChar(100)
+  dependencyIdentifier String   @map("dependency_identifier") @db.VarChar(255)
+  evidenceIdentifier   String?  @map("evidence_identifier") @db.VarChar(255)
+  immutableDigest      String   @map("immutable_digest") @db.Char(64)
+  sortOrder            Int      @map("sort_order")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  sceneVersion CreativeSceneVersion @relation(fields: [sceneVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "layer_dependencies_scene_version_id_fkey")
+  sceneLayer   SceneLayer?          @relation(fields: [sceneLayerId, sceneVersionId], references: [id, sceneVersionId], onDelete: Restrict, onUpdate: Cascade, map: "layer_dependencies_layer_version_fkey")
+
+  @@unique([sceneVersionId, dependencyType, dependencyIdentifier], map: "layer_deps_version_type_identifier_uniq")
+  @@index([sceneVersionId, sortOrder], map: "layer_deps_version_sort_idx")
+  @@index([immutableDigest], map: "layer_deps_digest_idx")
+  @@map("layer_dependencies")
+}
+
+model SceneVersionState {
+  id                 String    @id @default(uuid()) @db.Uuid
+  sceneVersionId     String    @unique(map: "scene_version_states_scene_version_id_key") @map("scene_version_id") @db.Uuid
+  status             String    @default("DRAFT") @db.VarChar(50)
+  isExportEligible   Boolean   @default(false) @map("is_export_eligible")
+  invalidationReason String?   @map("invalidation_reason") @db.VarChar(500)
+  invalidatedAt      DateTime? @map("invalidated_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sceneVersion CreativeSceneVersion @relation(fields: [sceneVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "scene_version_states_scene_version_id_fkey")
+
+  @@index([status], map: "scene_version_states_status_idx")
+  @@map("scene_version_states")
+}
+
+model SceneInvalidationEvent {
+  id                     String   @id @default(uuid()) @db.Uuid
+  sceneVersionId         String   @map("scene_version_id") @db.Uuid
+  reason                 String   @db.VarChar(500)
+  divergedDependencyType String   @map("diverged_dependency_type") @db.VarChar(100)
+  expectedDigest         String   @map("expected_digest") @db.Char(64)
+  actualDigest           String   @map("actual_digest") @db.Char(64)
+  recordedByUserId       String?  @map("recorded_by_user_id") @db.Uuid
+  metadata               Json?    @db.JsonB
+  recordedAt             DateTime @default(now()) @map("recorded_at") @db.Timestamptz(3)
+
+  sceneVersion   CreativeSceneVersion @relation(fields: [sceneVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "scene_invalidation_events_scene_version_id_fkey")
+  recordedByUser User?                @relation("UserRecordedSceneInvalidations", fields: [recordedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "scene_invalidation_events_recorded_by_user_id_fkey")
+
+  @@index([sceneVersionId, recordedAt], map: "scene_invalidation_events_version_recorded_at_idx")
+  @@map("scene_invalidation_events")
+}
+
+enum ProductAssetRole {
+  ORIGINAL_SOURCE
+  HERO_CUTOUT
+  PACKAGING_FRONT
+  PACKAGING_BACK
+  DETAIL
+  SWATCH
+  MASK
+}
+
+enum ProductAssetRightsState {
+  UNKNOWN
+  VERIFIED
+  RESTRICTED
+  EXPIRED
+}
+
+enum ProductAssetApprovalDecision {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  RETIRED
+}
+
+enum ProductAssetTransformType {
+  BACKGROUND_REMOVAL
+  TRIM
+  RESIZE
+  COLOR_CORRECTION
+  OPTIMIZATION
+}
+
+enum ProductAssetValidationStatus {
+  PASS
+  PASS_WITH_WARNINGS
+  FAIL
+}
+
+model ProductAsset {
+  id                String   @id @default(uuid()) @db.Uuid
+  sha256            String   @unique(map: "product_assets_sha256_key") @db.Char(64)
+  storageKey        String   @map("storage_key") @db.VarChar(300)
+  mimeType          String   @map("mime_type") @db.VarChar(100)
+  format            String   @db.VarChar(20)
+  byteSize          Int      @map("byte_size")
+  width             Int
+  height            Int
+  pixelCount        Int      @map("pixel_count")
+  channels          Int
+  hasAlpha          Boolean  @map("has_alpha")
+  transparencyRatio Decimal  @map("transparency_ratio") @db.Decimal(5, 4)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  registrations         ProductAssetRegistration[]
+  validationAssessments ProductAssetValidationAssessment[]
+  sourceTransforms      ProductAssetTransform[]            @relation("SourceProductAssetTransforms")
+  derivedTransforms     ProductAssetTransform[]            @relation("DerivedProductAssetTransforms")
+
+  @@index([createdAt], map: "product_assets_created_at_idx")
+  @@index([mimeType], map: "product_assets_mime_type_idx")
+  @@map("product_assets")
+}
+
+model ProductAssetRegistration {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  sequence               BigInt                  @default(autoincrement())
+  productAssetId         String                  @map("product_asset_id") @db.Uuid
+  sku                    String                  @db.VarChar(64)
+  productSnapshotId      String?                 @map("product_snapshot_id") @db.Uuid
+  role                   ProductAssetRole
+  sourceUrl              String?                 @map("source_url") @db.VarChar(2048)
+  sourceSystem           String                  @map("source_system") @db.VarChar(100)
+  sourceRecordId         String?                 @map("source_record_id") @db.VarChar(255)
+  sourceImageId          String?                 @map("source_image_id") @db.VarChar(255)
+  sourceRetrievedAt      DateTime?               @map("source_retrieved_at") @db.Timestamptz(3)
+  sourceUrlHash          String?                 @map("source_url_hash") @db.Char(64)
+  sourceEtag             String?                 @map("source_etag") @db.VarChar(255)
+  sourceChecksum         String?                 @map("source_checksum") @db.VarChar(128)
+  originSystem           String?                 @map("origin_system") @db.VarChar(100)
+  correlationId          String?                 @map("correlation_id") @db.VarChar(128)
+  replacesRegistrationId String?                 @map("replaces_registration_id") @db.Uuid
+  rightsState            ProductAssetRightsState @default(UNKNOWN) @map("rights_state")
+  rightsNotes            String?                 @map("rights_notes") @db.VarChar(1000)
+  rightsExpiresAt        DateTime?               @map("rights_expires_at") @db.Timestamptz(3)
+  metadata               Json?                   @db.JsonB
+  registeredByUserId     String?                 @map("registered_by_user_id") @db.Uuid
+  registeredAt           DateTime                @default(now()) @map("registered_at") @db.Timestamptz(3)
+
+  productAsset         ProductAsset                @relation(fields: [productAssetId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "product_asset_registrations_product_asset_id_fkey")
+  productSnapshot      ProductSnapshot?            @relation(fields: [productSnapshotId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "product_asset_registrations_product_snapshot_id_fkey")
+  registeredByUser     User?                       @relation("UserRegisteredProductAssets", fields: [registeredByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "product_asset_registrations_registered_by_user_id_fkey")
+  replacesRegistration ProductAssetRegistration?   @relation("RegistrationReplacements", fields: [replacesRegistrationId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "product_asset_registrations_replaces_fkey")
+  replacedBy           ProductAssetRegistration[]  @relation("RegistrationReplacements")
+  approvalEvents       ProductAssetApprovalEvent[]
+  rightsEvents         ProductAssetRightsEvent[]
+
+  @@index([sku, role, sequence], map: "product_asset_registrations_sku_role_seq_idx")
+  @@index([sku, sequence], map: "product_asset_registrations_sku_seq_idx")
+  @@index([productAssetId], map: "product_asset_registrations_asset_idx")
+  @@index([rightsState], map: "product_asset_registrations_rights_state_idx")
+  @@map("product_asset_registrations")
+}
+
+model ProductAssetValidationAssessment {
+  id                String                       @id @default(uuid()) @db.Uuid
+  sequence          BigInt                       @default(autoincrement())
+  productAssetId    String                       @map("product_asset_id") @db.Uuid
+  validatorVersion  String                       @map("validator_version") @db.VarChar(100)
+  status            ProductAssetValidationStatus @default(PASS)
+  isValid           Boolean                      @map("is_valid")
+  format            String                       @db.VarChar(20)
+  hasAlpha          Boolean                      @map("has_alpha")
+  transparencyRatio Decimal                      @map("transparency_ratio") @db.Decimal(5, 4)
+  width             Int
+  height            Int
+  byteSize          Int                          @map("byte_size")
+  pixelCount        Int                          @map("pixel_count")
+  findings          String[]                     @db.Text
+  reasonCodes       String[]                     @map("reason_codes")
+  assessedAt        DateTime                     @default(now()) @map("assessed_at") @db.Timestamptz(3)
+
+  productAsset   ProductAsset                @relation(fields: [productAssetId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "product_asset_validation_assessments_asset_id_fkey")
+  approvalEvents ProductAssetApprovalEvent[]
+  transforms     ProductAssetTransform[]
+
+  @@index([productAssetId, assessedAt, sequence], map: "product_asset_validation_assessments_asset_seq_idx")
+  @@index([isValid], map: "product_asset_validation_assessments_valid_idx")
+  @@index([status], map: "product_asset_validation_assessments_status_idx")
+  @@map("product_asset_validation_assessments")
+}
+
+model ProductAssetApprovalEvent {
+  id                         String                       @id @default(uuid()) @db.Uuid
+  sequence                   BigInt                       @default(autoincrement())
+  productAssetRegistrationId String                       @map("product_asset_registration_id") @db.Uuid
+  decision                   ProductAssetApprovalDecision
+  decidedByUserId            String?                      @map("decided_by_user_id") @db.Uuid
+  reason                     String?                      @db.VarChar(200)
+  notes                      String?                      @db.VarChar(1000)
+  validationAssessmentId     String?                      @map("validation_assessment_id") @db.Uuid
+  decidedAt                  DateTime                     @default(now()) @map("decided_at") @db.Timestamptz(3)
+
+  registration         ProductAssetRegistration          @relation(fields: [productAssetRegistrationId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "product_asset_approval_events_registration_id_fkey")
+  decidedByUser        User?                             @relation("UserProductAssetApprovalEvents", fields: [decidedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "product_asset_approval_events_decided_by_user_id_fkey")
+  validationAssessment ProductAssetValidationAssessment? @relation(fields: [validationAssessmentId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "product_asset_approval_events_validation_assessment_id_fkey")
+
+  @@index([productAssetRegistrationId, sequence], map: "product_asset_approval_events_registration_seq_idx")
+  @@index([decision, decidedAt, sequence], map: "product_asset_approval_events_decision_seq_idx")
+  @@map("product_asset_approval_events")
+}
+
+model ProductAssetRightsEvent {
+  id                         String                  @id @default(uuid()) @db.Uuid
+  sequence                   BigInt                  @default(autoincrement())
+  productAssetRegistrationId String                  @map("product_asset_registration_id") @db.Uuid
+  rightsState                ProductAssetRightsState @map("rights_state")
+  sourceReference            String?                 @map("source_reference") @db.VarChar(500)
+  permittedScope             String?                 @map("permitted_scope") @db.VarChar(255)
+  territory                  String?                 @map("territory") @db.VarChar(100)
+  effectiveAt                DateTime                @default(now()) @map("effective_at") @db.Timestamptz(3)
+  expiresAt                  DateTime?               @map("expires_at") @db.Timestamptz(3)
+  verifiedByUserId           String?                 @map("verified_by_user_id") @db.Uuid
+  reason                     String?                 @db.VarChar(500)
+  notes                      String?                 @db.Text
+  createdAt                  DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  registration   ProductAssetRegistration @relation(fields: [productAssetRegistrationId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "product_asset_rights_events_registration_id_fkey")
+  verifiedByUser User?                    @relation("UserProductAssetRightsEvents", fields: [verifiedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "product_asset_rights_events_verified_by_user_id_fkey")
+
+  @@index([productAssetRegistrationId, effectiveAt, sequence], map: "product_asset_rights_events_reg_effective_seq_idx")
+  @@index([rightsState, effectiveAt], map: "product_asset_rights_events_state_effective_idx")
+  @@map("product_asset_rights_events")
+}
+
+model ProductAssetTransform {
+  id                     String                    @id @default(uuid()) @db.Uuid
+  sequence               BigInt                    @default(autoincrement())
+  sourceAssetId          String                    @map("source_asset_id") @db.Uuid
+  derivedAssetId         String                    @map("derived_asset_id") @db.Uuid
+  transformType          ProductAssetTransformType @map("transform_type")
+  toolName               String                    @default("sharp") @map("tool_name") @db.VarChar(100)
+  toolVersion            String                    @default("1.0.0") @map("tool_version") @db.VarChar(100)
+  parameters             Json                      @db.JsonB
+  parametersSha256       String                    @map("parameters_sha256") @db.Char(64)
+  validationAssessmentId String?                   @map("validation_assessment_id") @db.Uuid
+  appliedByUserId        String?                   @map("applied_by_user_id") @db.Uuid
+  appliedAt              DateTime                  @default(now()) @map("applied_at") @db.Timestamptz(3)
+
+  sourceAsset          ProductAsset                      @relation("SourceProductAssetTransforms", fields: [sourceAssetId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "product_asset_transforms_source_asset_id_fkey")
+  derivedAsset         ProductAsset                      @relation("DerivedProductAssetTransforms", fields: [derivedAssetId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "product_asset_transforms_derived_asset_id_fkey")
+  appliedByUser        User?                             @relation("UserProductAssetTransforms", fields: [appliedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "product_asset_transforms_applied_by_user_id_fkey")
+  validationAssessment ProductAssetValidationAssessment? @relation(fields: [validationAssessmentId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "product_asset_transforms_validation_assessment_id_fkey")
+
+  @@index([sourceAssetId], map: "product_asset_transforms_source_idx")
+  @@index([derivedAssetId], map: "product_asset_transforms_derived_idx")
+  @@map("product_asset_transforms")
 }

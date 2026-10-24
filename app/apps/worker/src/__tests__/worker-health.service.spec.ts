@@ -1,7 +1,10 @@
 import http from 'node:http';
 import { jest } from '@jest/globals';
 import { type DatabaseHealthIndicator } from '@parisian-shopper/database';
-import { type PrometheusMetricsService, type ValkeyConnectionService } from '@parisian-shopper/jobs';
+import {
+  type PrometheusMetricsService,
+  type ValkeyConnectionService,
+} from '@parisian-shopper/jobs';
 import { type PinoLoggerService } from '@parisian-shopper/logger';
 import { WorkerHealthService } from '../worker-health.service.js';
 
@@ -43,7 +46,9 @@ describe('WorkerHealthService', () => {
     await service.onModuleDestroy();
   });
 
-  function makeRequest(path: string): Promise<{ statusCode: number; headers: http.IncomingHttpHeaders; body: string }> {
+  function makeRequest(
+    path: string,
+  ): Promise<{ statusCode: number; headers: http.IncomingHttpHeaders; body: string }> {
     const port = service.getPort();
     return new Promise((resolve, reject) => {
       const req = http.get(`http://127.0.0.1:${port ?? 0}${path}`, (res) => {
@@ -97,7 +102,9 @@ describe('WorkerHealthService', () => {
   });
 
   it('serves prometheus metrics on /metrics', async () => {
-    mockMetrics.getPrometheusMetrics.mockResolvedValueOnce('# HELP custom_metric counter\ncustom_metric 42\n');
+    mockMetrics.getPrometheusMetrics.mockResolvedValueOnce(
+      '# HELP custom_metric counter\ncustom_metric 42\n',
+    );
     await service.onModuleInit();
     const res = await makeRequest('/metrics');
 

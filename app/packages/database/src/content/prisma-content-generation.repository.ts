@@ -10,6 +10,7 @@ import {
   type ContentJob,
   type ContentVersion,
   type CreateContentJobInput,
+  type CreateDirectVersionInput,
   type FailGenerationInput,
   type GenerationAttempt,
 } from '@parisian-shopper/application';
@@ -198,6 +199,85 @@ export class PrismaContentGenerationRepository implements ContentGenerationRepos
           },
         });
         assertContentJobTransition(job.status, 'DRAFT');
+        await tx.contentJob.update({ where: { id: job.id }, data: { status: 'DRAFT' } });
+        await tx.outboxEvent.create({
+          data: {
+            topic: 'CONTENT_VERSION_CREATED',
+            schemaVersion: 1,
+            idempotencyKey: `content-version:${version.id}:created`,
+            aggregateType: 'ContentJob',
+            aggregateId: job.id,
+            payload: { contentJobId: job.id, contentVersionId: version.id },
+            occurredAt: version.createdAt,
+            availableAt: version.createdAt,
+          },
+        });
+        return toVersion(version);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  public async createDirectVersion(input: CreateDirectVersionInput): Promise<ContentVersion> {
+    return this.prisma.$transaction(
+      async (tx) => {
+        await lockJob(tx, input.contentJobId);
+        const job = await tx.contentJob.findUnique({ where: { id: input.contentJobId } });
+        if (job === null) throw notFound();
+
+        const latestAttempt = await tx.generationAttempt.findFirst({
+          where: { contentJobId: job.id },
+          orderBy: { attemptNumber: 'desc' },
+        });
+
+        const attemptId =
+          latestAttempt?.id ??
+          (
+            await tx.generationAttempt.create({
+              data: {
+                contentJobId: job.id,
+                attemptNumber: 1,
+                provider: input.provider,
+                model: input.model,
+                promptVersion: input.promptVersion,
+                status: 'SUCCEEDED',
+                startedAt: new Date(),
+                completedAt: new Date(),
+              },
+            })
+          ).id;
+
+        const aggregate = await tx.contentVersion.aggregate({
+          where: { contentJobId: job.id },
+          _max: { versionNumber: true },
+        });
+        const nextVersion = (aggregate._max.versionNumber ?? 0) + 1;
+
+        const version = await tx.contentVersion.create({
+          data: {
+            contentJobId: job.id,
+            versionNumber: nextVersion,
+            brandRuleVersionId: job.brandRuleVersionId,
+            productSnapshotId: job.productSnapshotId,
+            generationAttemptId: attemptId,
+            revisionRequestId: input.revisionRequestId ?? null,
+            provider: input.provider,
+            model: input.model,
+            promptVersion: input.promptVersion,
+            structuredOutput: toJson(input.output),
+          },
+        });
+
+        if (input.revisionRequestId) {
+          await tx.revisionRequest.update({
+            where: { id: input.revisionRequestId },
+            data: {
+              status: 'COMPLETED',
+              resultingContentVersionId: version.id,
+            },
+          });
+        }
+
         await tx.contentJob.update({ where: { id: job.id }, data: { status: 'DRAFT' } });
         await tx.outboxEvent.create({
           data: {

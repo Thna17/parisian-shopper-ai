@@ -126,8 +126,12 @@ export class VisualSafetyScanner {
       }
     }
 
-    const blockingCount = findings.filter((f) => f.severity === VisualValidationSeverity.BLOCKING).length;
-    const warningCount = findings.filter((f) => f.severity === VisualValidationSeverity.WARNING).length;
+    const blockingCount = findings.filter(
+      (f) => f.severity === VisualValidationSeverity.BLOCKING,
+    ).length;
+    const warningCount = findings.filter(
+      (f) => f.severity === VisualValidationSeverity.WARNING,
+    ).length;
     const infoCount = findings.filter((f) => f.severity === VisualValidationSeverity.INFO).length;
 
     let status: 'PASSED' | 'PASSED_WITH_WARNINGS' | 'BLOCKED' | 'FAILED' = 'PASSED';

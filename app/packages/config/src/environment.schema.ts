@@ -58,7 +58,7 @@ export const environmentSchema = z
     TELEGRAM_WEBHOOK_SECRET: optionalSecret,
     TELEGRAM_ACTION_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3_600).default(900),
     TELEGRAM_CHANNEL_ID: z.string().trim().min(1).optional(),
-    AI_PROVIDER: z.enum(['fake', 'openai']).default('fake'),
+    AI_PROVIDER: z.enum(['fake', 'openai', 'codex_cli']).default('fake'),
     OPENAI_API_KEY: optionalSecret,
     OPENAI_MODEL: z.preprocess(
       (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
@@ -71,15 +71,29 @@ export const environmentSchema = z
     AI_BASE_URL: optionalUrl,
     PRODUCT_API_BASE_URL: optionalUrl,
     PRODUCT_API_TOKEN: optionalSecret,
+    PRODUCT_API_BUSINESS_ID: z.string().trim().min(1).optional(),
+    PRODUCT_API_CURRENCY: z
+      .string()
+      .regex(/^[A-Z]{3}$/, 'Expected an ISO 4217 currency code')
+      .default('USD'),
+    PRODUCT_API_ALLOWED_HOSTS: z.string().default('api.mekhla.digital'),
+    PRODUCT_API_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(3_000),
+    PRODUCT_API_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
+    RUN_PRODUCT_API_LIVE_TESTS: booleanFromEnvironment.default(false),
+
+    CODEX_CLI_TEXT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(120_000),
+    CODEX_CLI_IMAGE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(1_800_000).default(300_000),
+    CODEX_CLI_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(1),
 
     FEATURE_AI_TEXT_GENERATION: booleanFromEnvironment.default(false),
     FEATURE_AI_IMAGE_GENERATION: booleanFromEnvironment.default(false),
     FEATURE_CREATIVE_GENERATION: booleanFromEnvironment.default(false),
-    CREATIVE_PROVIDER: z.enum(['fake']).default('fake'),
+    CREATIVE_PROVIDER: z.enum(['fake', 'openai', 'codex_cli']).default('fake'),
     CREATIVE_VIDEO_PROVIDER: z.enum(['higgsfield']).default('higgsfield'),
     CREATIVE_ASSET_STORAGE_ROOT: z.string().trim().min(1).default('.data/assets'),
     CREATIVE_ASSET_MAX_BYTES: z.coerce.number().int().min(1024).max(50_000_000).default(10_485_760),
     CREATIVE_ALLOW_FAKE_IN_PRODUCTION: booleanFromEnvironment.default(false),
+    ALLOW_LEGACY_PRODUCT_ASSET_FALLBACK: booleanFromEnvironment.default(false),
     FEATURE_HIGGSFIELD_PROVIDER: booleanFromEnvironment.default(false),
     FEATURE_PRODUCT_IMAGE_TO_VIDEO: booleanFromEnvironment.default(false),
     HIGGSFIELD_VIDEO_MODEL: z
@@ -186,6 +200,51 @@ export const environmentSchema = z
       });
     }
 
+    if (environment.NODE_ENV === 'production' && environment.AI_PROVIDER === 'codex_cli') {
+      context.addIssue({
+        code: 'custom',
+        path: ['AI_PROVIDER'],
+        message: 'Codex CLI AI provider is prohibited in production',
+      });
+    }
+
+    if (environment.NODE_ENV === 'production' && environment.CREATIVE_PROVIDER === 'codex_cli') {
+      context.addIssue({
+        code: 'custom',
+        path: ['CREATIVE_PROVIDER'],
+        message: 'Codex CLI creative provider is prohibited in production',
+      });
+    }
+
+    if (
+      environment.FEATURE_CREATIVE_GENERATION &&
+      environment.CREATIVE_PROVIDER === 'openai' &&
+      environment.OPENAI_API_KEY === undefined
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['OPENAI_API_KEY'],
+        message: 'OPENAI_API_KEY is required when creative provider uses OpenAI',
+      });
+    }
+
+    if (environment.CREATIVE_PROVIDER === 'codex_cli') {
+      if (!environment.FEATURE_CREATIVE_GENERATION) {
+        context.addIssue({
+          code: 'custom',
+          path: ['FEATURE_CREATIVE_GENERATION'],
+          message: 'FEATURE_CREATIVE_GENERATION must be true when CREATIVE_PROVIDER=codex_cli',
+        });
+      }
+      if (!environment.FEATURE_AI_IMAGE_GENERATION) {
+        context.addIssue({
+          code: 'custom',
+          path: ['FEATURE_AI_IMAGE_GENERATION'],
+          message: 'FEATURE_AI_IMAGE_GENERATION must be true when CREATIVE_PROVIDER=codex_cli',
+        });
+      }
+    }
+
     if (
       environment.FEATURE_CREATIVE_GENERATION &&
       environment.FEATURE_HIGGSFIELD_PROVIDER &&
@@ -207,12 +266,84 @@ export const environmentSchema = z
       });
     }
 
-    if (environment.FEATURE_PRODUCT_API && environment.PRODUCT_API_BASE_URL === undefined) {
-      context.addIssue({
-        code: 'custom',
-        path: ['PRODUCT_API_BASE_URL'],
-        message: 'PRODUCT_API_BASE_URL is required when FEATURE_PRODUCT_API=true',
-      });
+    if (environment.FEATURE_PRODUCT_API) {
+      if (environment.PRODUCT_API_BASE_URL === undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['PRODUCT_API_BASE_URL'],
+          message: 'PRODUCT_API_BASE_URL is required when FEATURE_PRODUCT_API=true',
+        });
+      } else {
+        try {
+          const parsedUrl = new URL(environment.PRODUCT_API_BASE_URL);
+          if (parsedUrl.protocol !== 'https:') {
+            context.addIssue({
+              code: 'custom',
+              path: ['PRODUCT_API_BASE_URL'],
+              message: 'PRODUCT_API_BASE_URL must use HTTPS',
+            });
+          }
+          if (parsedUrl.username || parsedUrl.password) {
+            context.addIssue({
+              code: 'custom',
+              path: ['PRODUCT_API_BASE_URL'],
+              message: 'PRODUCT_API_BASE_URL must not contain embedded credentials',
+            });
+          }
+          if (parsedUrl.port && parsedUrl.port !== '443') {
+            context.addIssue({
+              code: 'custom',
+              path: ['PRODUCT_API_BASE_URL'],
+              message: 'PRODUCT_API_BASE_URL must not specify an unexpected port',
+            });
+          }
+          const allowedHosts = (environment.PRODUCT_API_ALLOWED_HOSTS ?? '')
+            .split(',')
+            .map((host) => host.trim().toLowerCase())
+            .filter((host) => host.length > 0);
+          if (allowedHosts.length === 0) {
+            context.addIssue({
+              code: 'custom',
+              path: ['PRODUCT_API_ALLOWED_HOSTS'],
+              message: 'PRODUCT_API_ALLOWED_HOSTS is required when FEATURE_PRODUCT_API=true',
+            });
+          } else if (!allowedHosts.includes(parsedUrl.hostname.toLowerCase())) {
+            context.addIssue({
+              code: 'custom',
+              path: ['PRODUCT_API_BASE_URL'],
+              message: `PRODUCT_API_BASE_URL host '${parsedUrl.hostname}' is not in PRODUCT_API_ALLOWED_HOSTS`,
+            });
+          }
+        } catch {
+          context.addIssue({
+            code: 'custom',
+            path: ['PRODUCT_API_BASE_URL'],
+            message: 'PRODUCT_API_BASE_URL must be a valid URL',
+          });
+        }
+      }
+
+      if (
+        environment.PRODUCT_API_BUSINESS_ID === undefined ||
+        environment.PRODUCT_API_BUSINESS_ID.trim().length === 0
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['PRODUCT_API_BUSINESS_ID'],
+          message: 'PRODUCT_API_BUSINESS_ID is required when FEATURE_PRODUCT_API=true',
+        });
+      }
+
+      if (
+        environment.PRODUCT_API_CURRENCY === undefined ||
+        environment.PRODUCT_API_CURRENCY.trim().length === 0
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['PRODUCT_API_CURRENCY'],
+          message: 'PRODUCT_API_CURRENCY is required when FEATURE_PRODUCT_API=true',
+        });
+      }
     }
 
     if (environment.FEATURE_AUTO_PUBLISHING) {
@@ -237,6 +368,14 @@ export const environmentSchema = z
         code: 'custom',
         path: ['APP_CORS_ORIGINS'],
         message: 'Wildcard CORS is prohibited in production',
+      });
+    }
+
+    if (environment.NODE_ENV === 'production' && environment.ALLOW_LEGACY_PRODUCT_ASSET_FALLBACK) {
+      context.addIssue({
+        code: 'custom',
+        path: ['ALLOW_LEGACY_PRODUCT_ASSET_FALLBACK'],
+        message: 'ALLOW_LEGACY_PRODUCT_ASSET_FALLBACK is strictly prohibited in production',
       });
     }
   });

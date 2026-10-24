@@ -91,9 +91,7 @@ describe('PrometheusMetricsService', () => {
     );
 
     expect(output).toContain('# HELP ai_request_latency_seconds');
-    expect(output).toContain(
-      'ai_request_latency_seconds{provider="openai",model="gpt-4o"} 1.250',
-    );
+    expect(output).toContain('ai_request_latency_seconds{provider="openai",model="gpt-4o"} 1.250');
     expect(output).toContain(
       'ai_request_latency_seconds_sum{provider="openai",model="gpt-4o"} 1.250',
     );

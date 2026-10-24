@@ -2,6 +2,17 @@ export const HERO_COMPOSITOR = Symbol('HERO_COMPOSITOR');
 export const PS_COMPOSITOR_VERSION = 'ps-compositor-v1';
 export const COMPOSITOR_VERSION = PS_COMPOSITOR_VERSION;
 
+export type HeroPlacement = 'LEFT' | 'CENTER' | 'RIGHT';
+
+export interface SourceProductBoundingBox {
+  readonly originalWidth: number;
+  readonly originalHeight: number;
+  readonly trimmedX: number;
+  readonly trimmedY: number;
+  readonly trimmedWidth: number;
+  readonly trimmedHeight: number;
+}
+
 export interface CompositeVisualInput {
   readonly creativeJobId: string;
   readonly canonicalProductBuffer: Buffer;
@@ -14,6 +25,9 @@ export interface CompositeVisualInput {
   readonly targetHeight: number;
   readonly aspectRatio: string;
   readonly compositionMarginPercent?: number;
+  readonly heroPlacement?: HeroPlacement;
+  readonly pedestalYPercent?: number;
+  readonly enableContactShadow?: boolean;
 }
 
 export interface HeroBoundingBox {
@@ -35,6 +49,8 @@ export interface CompositeVisualResult {
   readonly heroScale: number;
   readonly heroPlacement: string;
   readonly heroBoundingBox: HeroBoundingBox;
+  readonly sourceBoundingBox?: SourceProductBoundingBox | undefined;
+  readonly contactShadowBoundingBox?: HeroBoundingBox | undefined;
   readonly productDigest: string;
   readonly backgroundDigest: string;
   readonly outputDigest: string;

@@ -1,8 +1,6 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from '@jest/globals';
-import {
-  DeterministicVisualValidator,
-} from './services/deterministic-visual-validator.js';
+import { DeterministicVisualValidator } from './services/deterministic-visual-validator.js';
 import {
   VisualFindingCode,
   VISUAL_VALIDATOR_VERSION,
