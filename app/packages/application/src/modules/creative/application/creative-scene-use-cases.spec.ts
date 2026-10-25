@@ -29,7 +29,17 @@ import { CreateInitialSceneUseCase } from './create-initial-scene.use-case.js';
 import { ReviseSceneUseCase } from './revise-scene.use-case.js';
 import { GetSceneVersionUseCase } from './get-scene-version.use-case.js';
 import { SceneInvalidationService } from './scene-invalidation.service.js';
-import { computeLayerHash } from '../domain/scene/scene-hash.js';
+import { AuthoritativeSceneEvidenceVerifier } from './services/authoritative-scene-evidence-verifier.js';
+import {
+  computeLayerHash,
+  computeDependencyHash,
+  computeSceneHash,
+  computeFontAssetDigest,
+  computeTypographyPolicyDigest,
+  TYPOGRAPHY_SHAPING_ENGINE_VERSION,
+  TYPOGRAPHY_POLICY_VERSION,
+} from '../domain/scene/scene-hash.js';
+import { APPROVED_FONT_MANIFEST } from '../infrastructure/fonts/font-manifest.js';
 import {
   type ProductSnapshot,
   type ProductSnapshotRepository,
@@ -691,6 +701,132 @@ describe('CreativeScene Use Cases', () => {
       // Verify outbox event emitted
       expect(repo.outboxEvents).toHaveLength(1);
       expect(repo.outboxEvents[0]?.topic).toBe('creative.scene.version_created');
+    });
+
+    it('attaches FONT_ASSET (10..13) and TYPOGRAPHY_POLICY (20) dependencies when TYPOGRAPHY layer is present', async () => {
+      const result = await createUseCase.execute(validCreateInput);
+      const deps = result.version.dependencies;
+
+      // 8 base (0..7) + 4 font assets (10..13) + 1 typography policy (20) = 13 dependencies
+      expect(deps).toHaveLength(13);
+
+      // Verify all 4 approved fonts are bound
+      const fontDeps = deps.filter((d) => d.dependencyType === 'FONT_ASSET');
+      expect(fontDeps).toHaveLength(4);
+      expect(fontDeps.map((d) => d.dependencyIdentifier)).toEqual([
+        'playfair-display-variable',
+        'montserrat-variable',
+        'noto-sans-khmer-regular',
+        'noto-sans-khmer-bold',
+      ]);
+
+      fontDeps.forEach((fontDep, idx) => {
+        const manifestEntry = APPROVED_FONT_MANIFEST[idx]!;
+        expect(fontDep.sortOrder).toBe(10 + idx);
+        expect(fontDep.evidenceIdentifier).toBe(manifestEntry.assetPath);
+        const expectedDigest = computeFontAssetDigest({
+          fontId: manifestEntry.id,
+          fontFamily: manifestEntry.family,
+          fontSha256: manifestEntry.sha256,
+          byteSize: manifestEntry.byteSize,
+          supportedWeights: manifestEntry.supportedWeights,
+        });
+        expect(fontDep.immutableDigest).toBe(expectedDigest);
+      });
+
+      // Verify typography policy
+      const policyDep = deps.find((d) => d.dependencyType === 'TYPOGRAPHY_POLICY');
+      expect(policyDep).toBeDefined();
+      expect(policyDep?.sortOrder).toBe(20);
+      expect(policyDep?.dependencyIdentifier).toBe('typography-policy-w21');
+      expect(policyDep?.evidenceIdentifier).toBe(TYPOGRAPHY_POLICY_VERSION);
+      const expectedPolicyDigest = computeTypographyPolicyDigest({
+        policyVersion: TYPOGRAPHY_POLICY_VERSION,
+        shapingEngineVersion: TYPOGRAPHY_SHAPING_ENGINE_VERSION,
+        approvedFonts: APPROVED_FONT_MANIFEST.map((f) => f.id),
+        normalization: 'NFC',
+        bidiEnforcement: 'FAIL_CLOSED',
+      });
+      expect(policyDep?.immutableDigest).toBe(expectedPolicyDigest);
+    });
+
+    it('attaches sceneLayerKey to typoLayer.layerKey in verifier drafts', async () => {
+      const verifier = new AuthoritativeSceneEvidenceVerifier(
+        snapshotRepo,
+        assetEvaluator,
+        contentRepo,
+        brandRepo,
+      );
+      const verified = await verifier.verifyAuthoritativeSceneEvidence({
+        layers: createSampleLayers(),
+        productSnapshotId: TEST_PRODUCT_SNAPSHOT_ID,
+        sourceContentVersionId: TEST_CONTENT_VERSION_ID,
+        brandProfileVersionId: TEST_BRAND_PROFILE_VERSION_ID,
+      });
+
+      const fontDeps = verified.dependencies.filter((d) => d.dependencyType === 'FONT_ASSET');
+      expect(fontDeps).toHaveLength(4);
+      fontDeps.forEach((d) => {
+        expect(d.sceneLayerKey).toBe('typo_01');
+      });
+
+      const policyDep = verified.dependencies.find((d) => d.dependencyType === 'TYPOGRAPHY_POLICY');
+      expect(policyDep?.sceneLayerKey).toBe('typo_01');
+    });
+
+    it('omits typography dependencies in verifier when layers draft has no TYPOGRAPHY layer', async () => {
+      const verifier = new AuthoritativeSceneEvidenceVerifier(
+        snapshotRepo,
+        assetEvaluator,
+        contentRepo,
+        brandRepo,
+      );
+      const layersWithoutTypo = createSampleLayers().filter((l) => l.layerGroup !== 'TYPOGRAPHY');
+      const verified = await verifier.verifyAuthoritativeSceneEvidence({
+        layers: layersWithoutTypo,
+        productSnapshotId: TEST_PRODUCT_SNAPSHOT_ID,
+        sourceContentVersionId: TEST_CONTENT_VERSION_ID,
+        brandProfileVersionId: TEST_BRAND_PROFILE_VERSION_ID,
+      });
+
+      const deps = verified.dependencies;
+      expect(deps).toHaveLength(8);
+      expect(deps.some((d) => d.dependencyType === 'FONT_ASSET')).toBe(false);
+      expect(deps.some((d) => d.dependencyType === 'TYPOGRAPHY_POLICY')).toBe(false);
+    });
+
+    it('mutating font asset digest alters dependencyHash and sceneHash while background layerHash is unchanged', async () => {
+      const v1Result = await createUseCase.execute(validCreateInput);
+      const v1 = v1Result.version;
+      const bgLayerV1 = v1.layers.find((l) => l.layerGroup === 'BACKGROUND')!;
+      const bgLayerHashOriginal = computeLayerHash(bgLayerV1);
+
+      // Simulate a dependency set with an altered font asset digest
+      const modifiedDeps = v1.dependencies.map((d) =>
+        d.dependencyIdentifier === 'noto-sans-khmer-regular'
+          ? { ...d, immutableDigest: 'f'.repeat(64) }
+          : d,
+      );
+
+      const modifiedDepHash = computeDependencyHash(modifiedDeps);
+      expect(modifiedDepHash).not.toBe(v1.dependencyHash);
+
+      const modifiedSceneHash = computeSceneHash({
+        templateId: v1.templateId,
+        templateVersion: v1.templateVersion,
+        aspectRatio: v1.aspectRatio,
+        width: v1.width,
+        height: v1.height,
+        safeMargins: v1.safeMargins,
+        language: v1.language,
+        stylePresetId: v1.stylePresetId,
+        layers: v1.layers,
+        dependencyHash: modifiedDepHash,
+      });
+      expect(modifiedSceneHash).not.toBe(v1.sceneHash);
+
+      // Layer hash isolation: background layer hash remains bit-exact identical
+      expect(computeLayerHash(bgLayerV1)).toBe(bgLayerHashOriginal);
     });
 
     it('rejects creation fail-closed on negative coordinate bounds and writes nothing', async () => {

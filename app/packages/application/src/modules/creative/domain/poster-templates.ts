@@ -16,6 +16,7 @@ import {
   renderLotusOrnamentSvg,
   renderDividerSvg,
   renderCornerAccentsSvg,
+  renderShapedTextLineSvg,
 } from './services/safe-svg-renderer.js';
 
 export interface LayoutManifestElement {
@@ -158,28 +159,30 @@ export class PosterTemplateRenderer {
       minFontSize: 28,
       maxLines: 3,
       elementName: 'headline',
+      role: 'HEADLINE',
+      latinWeight: 700,
+      khmerWeight: 700,
     });
 
     const headlineBox: BoundingBox = {
       x: panelX + textPadding,
       y: currentY,
-      width: headlineWrapped.totalWidth,
-      height: headlineWrapped.totalHeight,
+      width: headlineWrapped.actualBoundingBox.width,
+      height: headlineWrapped.actualBoundingBox.height,
     };
     elements.push({ id: 'headline', type: 'TEXT', text: spec.headline, boundingBox: headlineBox });
 
-    const headlineFont = TextLayoutEngine.isKhmerText(spec.headline)
-      ? POSTER_DESIGN_TOKENS.fontFamilies.khmer
-      : POSTER_DESIGN_TOKENS.fontFamilies.latinDisplay;
-
-    headlineWrapped.lines.forEach((line, idx) => {
-      svgParts.push(`
-        <text x="${headlineBox.x}" y="${currentY + (idx + 1) * headlineWrapped.lineHeight - 6}" font-family="${headlineFont}" font-size="${headlineWrapped.fontSize}" font-weight="700" fill="${spec.palette.textColor}">
-          ${escapeXml(line)}
-        </text>
-      `);
+    headlineWrapped.shapedLines.forEach((shapedLine, idx) => {
+      svgParts.push(
+        renderShapedTextLineSvg({
+          x: headlineBox.x,
+          baselineY: headlineBox.y + shapedLine.baseline + idx * headlineWrapped.lineHeight,
+          runs: shapedLine.runs,
+          color: spec.palette.textColor,
+        }),
+      );
     });
-    currentY += headlineWrapped.totalHeight + SPACING.sm;
+    currentY += headlineBox.height + SPACING.sm;
 
     // Secondary Headline (Khmer or brand)
     if (spec.secondaryHeadline) {
@@ -190,12 +193,15 @@ export class PosterTemplateRenderer {
         minFontSize: 16,
         maxLines: 2,
         elementName: 'secondary_headline',
+        role: 'SECONDARY_HEADLINE',
+        latinWeight: 500,
+        khmerWeight: 400,
       });
       const secBox: BoundingBox = {
         x: panelX + textPadding,
         y: currentY,
-        width: secWrapped.totalWidth,
-        height: secWrapped.totalHeight,
+        width: secWrapped.actualBoundingBox.width,
+        height: secWrapped.actualBoundingBox.height,
       };
       elements.push({
         id: 'secondary_headline',
@@ -204,18 +210,17 @@ export class PosterTemplateRenderer {
         boundingBox: secBox,
       });
 
-      const secFont = TextLayoutEngine.isKhmerText(spec.secondaryHeadline)
-        ? POSTER_DESIGN_TOKENS.fontFamilies.khmer
-        : POSTER_DESIGN_TOKENS.fontFamilies.latinDisplay;
-
-      secWrapped.lines.forEach((line, idx) => {
-        svgParts.push(`
-          <text x="${secBox.x}" y="${currentY + (idx + 1) * secWrapped.lineHeight - 4}" font-family="${secFont}" font-size="${secWrapped.fontSize}" font-weight="500" fill="${spec.palette.accentColor}">
-            ${escapeXml(line)}
-          </text>
-        `);
+      secWrapped.shapedLines.forEach((shapedLine, idx) => {
+        svgParts.push(
+          renderShapedTextLineSvg({
+            x: secBox.x,
+            baselineY: secBox.y + shapedLine.baseline + idx * secWrapped.lineHeight,
+            runs: shapedLine.runs,
+            color: spec.palette.accentColor,
+          }),
+        );
       });
-      currentY += secWrapped.totalHeight + SPACING.md;
+      currentY += secBox.height + SPACING.md;
     }
 
     // Divider
@@ -246,12 +251,15 @@ export class PosterTemplateRenderer {
         minFontSize: 15,
         maxLines: 3,
         elementName: 'supporting_text',
+        role: 'SUPPORTING',
+        latinWeight: 400,
+        khmerWeight: 400,
       });
       const suppBox: BoundingBox = {
         x: panelX + textPadding,
         y: currentY,
-        width: suppWrapped.totalWidth,
-        height: suppWrapped.totalHeight,
+        width: suppWrapped.actualBoundingBox.width,
+        height: suppWrapped.actualBoundingBox.height,
       };
       elements.push({
         id: 'supporting_text',
@@ -260,18 +268,17 @@ export class PosterTemplateRenderer {
         boundingBox: suppBox,
       });
 
-      const suppFont = TextLayoutEngine.isKhmerText(spec.supportingText)
-        ? POSTER_DESIGN_TOKENS.fontFamilies.khmer
-        : POSTER_DESIGN_TOKENS.fontFamilies.latinBody;
-
-      suppWrapped.lines.forEach((line, idx) => {
-        svgParts.push(`
-          <text x="${suppBox.x}" y="${currentY + (idx + 1) * suppWrapped.lineHeight - 3}" font-family="${suppFont}" font-size="${suppWrapped.fontSize}" font-weight="400" fill="${spec.palette.secondaryTextColor}">
-            ${escapeXml(line)}
-          </text>
-        `);
+      suppWrapped.shapedLines.forEach((shapedLine, idx) => {
+        svgParts.push(
+          renderShapedTextLineSvg({
+            x: suppBox.x,
+            baselineY: suppBox.y + shapedLine.baseline + idx * suppWrapped.lineHeight,
+            runs: shapedLine.runs,
+            color: spec.palette.secondaryTextColor,
+          }),
+        );
       });
-      currentY += suppWrapped.totalHeight + SPACING.lg;
+      currentY += suppBox.height + SPACING.lg;
     }
 
     // Price Block & Size
@@ -334,16 +341,39 @@ export class PosterTemplateRenderer {
     };
     elements.push({ id: 'cta_button', type: 'BUTTON', text: spec.cta, boundingBox: ctaBox });
 
-    const ctaFont = TextLayoutEngine.isKhmerText(spec.cta)
-      ? POSTER_DESIGN_TOKENS.fontFamilies.khmer
-      : POSTER_DESIGN_TOKENS.fontFamilies.latinBody;
+    const ctaWrapped = TextLayoutEngine.wrapText({
+      text: spec.cta,
+      maxWidth: ctaW - 16,
+      initialFontSize: 15,
+      minFontSize: 12,
+      maxLines: 1,
+      elementName: 'cta_button',
+      role: 'CTA',
+      preferredLatinFont: 'Montserrat',
+      latinWeight: 600,
+      khmerWeight: 700,
+    });
+
+    const firstCtaLine = ctaWrapped.shapedLines[0];
+    const ctaBaselineY =
+      firstCtaLine !== undefined
+        ? ctaBox.y + Math.round((ctaBox.height + firstCtaLine.ascent - firstCtaLine.descent) / 2)
+        : ctaBox.y + Math.round(ctaBox.height / 2);
+    const ctaContentSvg =
+      firstCtaLine !== undefined
+        ? renderShapedTextLineSvg({
+            x: ctaBox.x + ctaBox.width / 2,
+            baselineY: ctaBaselineY,
+            runs: firstCtaLine.runs,
+            color: '#0E0F12',
+            textAnchor: 'middle',
+          })
+        : '';
 
     svgParts.push(`
       <g>
         <rect x="${ctaBox.x}" y="${ctaBox.y}" width="${ctaBox.width}" height="${ctaBox.height}" rx="${POSTER_DESIGN_TOKENS.ctaBorderRadius}" fill="${spec.palette.accentColor}" />
-        <text x="${ctaBox.x + ctaBox.width / 2}" y="${ctaBox.y + 30}" font-family="${ctaFont}" font-size="15" font-weight="600" fill="#0E0F12" text-anchor="middle">
-          ${escapeXml(spec.cta)}
-        </text>
+        ${ctaContentSvg}
       </g>
     `);
 
@@ -432,28 +462,31 @@ export class PosterTemplateRenderer {
       minFontSize: 32,
       maxLines: 2,
       elementName: 'headline',
+      role: 'HEADLINE',
+      latinWeight: 700,
+      khmerWeight: 700,
     });
 
     const headlineBox: BoundingBox = {
-      x: Math.round((width - headlineWrapped.totalWidth) / 2),
+      x: Math.round((width - headlineWrapped.actualBoundingBox.width) / 2),
       y: topY,
-      width: headlineWrapped.totalWidth,
-      height: headlineWrapped.totalHeight,
+      width: headlineWrapped.actualBoundingBox.width,
+      height: headlineWrapped.actualBoundingBox.height,
     };
     elements.push({ id: 'headline', type: 'TEXT', text: spec.headline, boundingBox: headlineBox });
 
-    const headlineFont = TextLayoutEngine.isKhmerText(spec.headline)
-      ? POSTER_DESIGN_TOKENS.fontFamilies.khmer
-      : POSTER_DESIGN_TOKENS.fontFamilies.latinDisplay;
-
-    headlineWrapped.lines.forEach((line, idx) => {
-      svgParts.push(`
-        <text x="${width / 2}" y="${topY + (idx + 1) * headlineWrapped.lineHeight - 6}" font-family="${headlineFont}" font-size="${headlineWrapped.fontSize}" font-weight="700" fill="${spec.palette.textColor}" text-anchor="middle">
-          ${escapeXml(line)}
-        </text>
-      `);
+    headlineWrapped.shapedLines.forEach((shapedLine, idx) => {
+      svgParts.push(
+        renderShapedTextLineSvg({
+          x: width / 2,
+          baselineY: headlineBox.y + shapedLine.baseline + idx * headlineWrapped.lineHeight,
+          runs: shapedLine.runs,
+          color: spec.palette.textColor,
+          textAnchor: 'middle',
+        }),
+      );
     });
-    topY += headlineWrapped.totalHeight + SPACING.sm;
+    topY += headlineBox.height + SPACING.sm;
 
     // Optional Secondary Headline
     if (spec.secondaryHeadline) {
@@ -464,12 +497,15 @@ export class PosterTemplateRenderer {
         minFontSize: 16,
         maxLines: 1,
         elementName: 'secondary_headline',
+        role: 'SECONDARY_HEADLINE',
+        latinWeight: 500,
+        khmerWeight: 400,
       });
       const secBox: BoundingBox = {
-        x: Math.round((width - secWrapped.totalWidth) / 2),
+        x: Math.round((width - secWrapped.actualBoundingBox.width) / 2),
         y: topY,
-        width: secWrapped.totalWidth,
-        height: secWrapped.totalHeight,
+        width: secWrapped.actualBoundingBox.width,
+        height: secWrapped.actualBoundingBox.height,
       };
       elements.push({
         id: 'secondary_headline',
@@ -478,16 +514,18 @@ export class PosterTemplateRenderer {
         boundingBox: secBox,
       });
 
-      const secFont = TextLayoutEngine.isKhmerText(spec.secondaryHeadline)
-        ? POSTER_DESIGN_TOKENS.fontFamilies.khmer
-        : POSTER_DESIGN_TOKENS.fontFamilies.latinDisplay;
-
-      svgParts.push(`
-        <text x="${width / 2}" y="${topY + 18}" font-family="${secFont}" font-size="${secWrapped.fontSize}" font-weight="500" fill="${spec.palette.accentColor}" text-anchor="middle">
-          ${escapeXml(spec.secondaryHeadline)}
-        </text>
-      `);
-      topY += 32;
+      secWrapped.shapedLines.forEach((shapedLine, idx) => {
+        svgParts.push(
+          renderShapedTextLineSvg({
+            x: width / 2,
+            baselineY: secBox.y + shapedLine.baseline + idx * secWrapped.lineHeight,
+            runs: shapedLine.runs,
+            color: spec.palette.accentColor,
+            textAnchor: 'middle',
+          }),
+        );
+      });
+      topY += secBox.height + SPACING.xs;
     }
 
     // Center Product Zone
@@ -521,12 +559,15 @@ export class PosterTemplateRenderer {
         minFontSize: 14,
         maxLines: 2,
         elementName: 'supporting_text',
+        role: 'SUPPORTING',
+        latinWeight: 400,
+        khmerWeight: 400,
       });
       const suppBox: BoundingBox = {
-        x: Math.round((width - suppWrapped.totalWidth) / 2),
+        x: Math.round((width - suppWrapped.actualBoundingBox.width) / 2),
         y: bottomY,
-        width: suppWrapped.totalWidth,
-        height: suppWrapped.totalHeight,
+        width: suppWrapped.actualBoundingBox.width,
+        height: suppWrapped.actualBoundingBox.height,
       };
       elements.push({
         id: 'supporting_text',
@@ -535,18 +576,18 @@ export class PosterTemplateRenderer {
         boundingBox: suppBox,
       });
 
-      const suppFont = TextLayoutEngine.isKhmerText(spec.supportingText)
-        ? POSTER_DESIGN_TOKENS.fontFamilies.khmer
-        : POSTER_DESIGN_TOKENS.fontFamilies.latinBody;
-
-      suppWrapped.lines.forEach((line, idx) => {
-        svgParts.push(`
-          <text x="${width / 2}" y="${bottomY + (idx + 1) * suppWrapped.lineHeight - 2}" font-family="${suppFont}" font-size="${suppWrapped.fontSize}" font-weight="400" fill="${spec.palette.secondaryTextColor}" text-anchor="middle">
-            ${escapeXml(line)}
-          </text>
-        `);
+      suppWrapped.shapedLines.forEach((shapedLine, idx) => {
+        svgParts.push(
+          renderShapedTextLineSvg({
+            x: width / 2,
+            baselineY: suppBox.y + shapedLine.baseline + idx * suppWrapped.lineHeight,
+            runs: shapedLine.runs,
+            color: spec.palette.secondaryTextColor,
+            textAnchor: 'middle',
+          }),
+        );
       });
-      bottomY += suppWrapped.totalHeight + SPACING.md;
+      bottomY += suppBox.height + SPACING.md;
     }
 
     // Price Pill and CTA
@@ -581,16 +622,39 @@ export class PosterTemplateRenderer {
     };
     elements.push({ id: 'cta_button', type: 'BUTTON', text: spec.cta, boundingBox: ctaBox });
 
-    const ctaFont = TextLayoutEngine.isKhmerText(spec.cta)
-      ? POSTER_DESIGN_TOKENS.fontFamilies.khmer
-      : POSTER_DESIGN_TOKENS.fontFamilies.latinBody;
+    const ctaWrapped = TextLayoutEngine.wrapText({
+      text: spec.cta,
+      maxWidth: ctaW - 16,
+      initialFontSize: 15,
+      minFontSize: 12,
+      maxLines: 1,
+      elementName: 'cta_button',
+      role: 'CTA',
+      preferredLatinFont: 'Montserrat',
+      latinWeight: 600,
+      khmerWeight: 700,
+    });
+
+    const firstCtaLine = ctaWrapped.shapedLines[0];
+    const ctaBaselineY =
+      firstCtaLine !== undefined
+        ? ctaBox.y + Math.round((ctaBox.height + firstCtaLine.ascent - firstCtaLine.descent) / 2)
+        : ctaBox.y + Math.round(ctaBox.height / 2);
+    const ctaContentSvg =
+      firstCtaLine !== undefined
+        ? renderShapedTextLineSvg({
+            x: width / 2,
+            baselineY: ctaBaselineY,
+            runs: firstCtaLine.runs,
+            color: '#0E0F12',
+            textAnchor: 'middle',
+          })
+        : '';
 
     svgParts.push(`
       <g>
-        <rect x="${ctaBox.x}" y="${ctaBox.y}" width="${ctaBox.width}" height="${ctaBox.height}" rx="22" fill="${spec.palette.textColor}" />
-        <text x="${width / 2}" y="${ctaBox.y + 28}" font-family="${ctaFont}" font-size="15" font-weight="600" fill="#0E0F12" text-anchor="middle">
-          ${escapeXml(spec.cta)}
-        </text>
+        <rect x="${ctaBox.x}" y="${ctaBox.y}" width="${ctaBox.width}" height="${ctaBox.height}" rx="${POSTER_DESIGN_TOKENS.ctaBorderRadius}" fill="${spec.palette.textColor}" />
+        ${ctaContentSvg}
       </g>
     `);
 
@@ -651,21 +715,27 @@ export class PosterTemplateRenderer {
       minFontSize: 26,
       maxLines: 2,
       elementName: 'headline',
+      role: 'HEADLINE',
+      latinWeight: 700,
+      khmerWeight: 700,
     });
     const headlineBox: BoundingBox = {
       x: margins.left,
       y: topY,
-      width: headlineWrapped.totalWidth,
-      height: headlineWrapped.totalHeight,
+      width: headlineWrapped.actualBoundingBox.width,
+      height: headlineWrapped.actualBoundingBox.height,
     };
     elements.push({ id: 'headline', type: 'TEXT', text: spec.headline, boundingBox: headlineBox });
 
-    headlineWrapped.lines.forEach((line, idx) => {
-      svgParts.push(`
-        <text x="${margins.left}" y="${topY + (idx + 1) * headlineWrapped.lineHeight - 6}" font-family="${POSTER_DESIGN_TOKENS.fontFamilies.latinDisplay}" font-size="${headlineWrapped.fontSize}" font-weight="700" fill="${spec.palette.textColor}">
-          ${escapeXml(line)}
-        </text>
-      `);
+    headlineWrapped.shapedLines.forEach((shapedLine, idx) => {
+      svgParts.push(
+        renderShapedTextLineSvg({
+          x: margins.left,
+          baselineY: headlineBox.y + shapedLine.baseline + idx * headlineWrapped.lineHeight,
+          runs: shapedLine.runs,
+          color: spec.palette.textColor,
+        }),
+      );
     });
 
     // Product zone placed on right-center
@@ -689,7 +759,7 @@ export class PosterTemplateRenderer {
     });
 
     // Left Notes Perimeter: Top, Heart, Base Notes
-    const notesYStart = topY + headlineWrapped.totalHeight + SPACING.lg;
+    const notesYStart = topY + headlineBox.height + SPACING.lg;
     const scentNotes = spec.decorativeSelection?.scentNotes || [
       { name: 'Italian Bergamot, Apple', category: 'TOP' as const },
       { name: 'French Lavender, Elemi', category: 'HEART' as const },
@@ -756,12 +826,38 @@ export class PosterTemplateRenderer {
     };
     elements.push({ id: 'cta_button', type: 'BUTTON', text: spec.cta, boundingBox: ctaBox });
 
+    const ctaWrapped = TextLayoutEngine.wrapText({
+      text: spec.cta,
+      maxWidth: ctaW - 16,
+      initialFontSize: 14,
+      minFontSize: 11,
+      maxLines: 1,
+      elementName: 'cta_button',
+      role: 'CTA',
+      latinWeight: 600,
+      khmerWeight: 700,
+    });
+    const firstCtaLine = ctaWrapped.shapedLines[0];
+    const ctaBaselineY =
+      firstCtaLine !== undefined
+        ? ctaBox.y + Math.round((ctaBox.height + firstCtaLine.ascent - firstCtaLine.descent) / 2)
+        : ctaBox.y + Math.round(ctaBox.height / 2);
+
+    const ctaContentSvg =
+      firstCtaLine !== undefined
+        ? renderShapedTextLineSvg({
+            x: ctaBox.x + ctaW / 2,
+            baselineY: ctaBaselineY,
+            runs: firstCtaLine.runs,
+            color: '#0E0F12',
+            textAnchor: 'middle',
+          })
+        : '';
+
     svgParts.push(`
       <g>
         <rect x="${ctaBox.x}" y="${ctaBox.y}" width="${ctaBox.width}" height="${ctaBox.height}" rx="22" fill="${spec.palette.textColor}" />
-        <text x="${ctaBox.x + ctaW / 2}" y="${ctaBox.y + 28}" font-family="${POSTER_DESIGN_TOKENS.fontFamilies.latinBody}" font-size="14" font-weight="600" fill="#0E0F12" text-anchor="middle">
-          ${escapeXml(spec.cta)}
-        </text>
+        ${ctaContentSvg}
       </g>
     `);
 
@@ -844,32 +940,57 @@ export class PosterTemplateRenderer {
       minFontSize: 28,
       maxLines: 2,
       elementName: 'headline_km',
+      role: 'HEADLINE',
+      latinWeight: 700,
+      khmerWeight: 700,
     });
     const headlineBox: BoundingBox = {
-      x: Math.round((width - headlineWrapped.totalWidth) / 2),
+      x: Math.round((width - headlineWrapped.actualBoundingBox.width) / 2),
       y: topY,
-      width: headlineWrapped.totalWidth,
-      height: headlineWrapped.totalHeight,
+      width: headlineWrapped.actualBoundingBox.width,
+      height: headlineWrapped.actualBoundingBox.height,
     };
     elements.push({ id: 'headline', type: 'TEXT', text: spec.headline, boundingBox: headlineBox });
 
-    headlineWrapped.lines.forEach((line, idx) => {
-      svgParts.push(`
-        <text x="${width / 2}" y="${topY + (idx + 1) * headlineWrapped.lineHeight - 6}" font-family="${POSTER_DESIGN_TOKENS.fontFamilies.khmer}" font-size="${headlineWrapped.fontSize}" font-weight="700" fill="${spec.palette.textColor}" text-anchor="middle">
-          ${escapeXml(line)}
-        </text>
-      `);
+    headlineWrapped.shapedLines.forEach((shapedLine, idx) => {
+      svgParts.push(
+        renderShapedTextLineSvg({
+          x: width / 2,
+          baselineY: headlineBox.y + shapedLine.baseline + idx * headlineWrapped.lineHeight,
+          runs: shapedLine.runs,
+          color: spec.palette.textColor,
+          textAnchor: 'middle',
+        }),
+      );
     });
-    topY += headlineWrapped.totalHeight + SPACING.xs;
+    topY += headlineBox.height + SPACING.xs;
 
     // Secondary English Headline
     if (spec.secondaryHeadline) {
-      svgParts.push(`
-        <text x="${width / 2}" y="${topY + 18}" font-family="${POSTER_DESIGN_TOKENS.fontFamilies.latinDisplay}" font-size="20" font-weight="500" fill="${spec.palette.accentColor}" text-anchor="middle">
-          ${escapeXml(spec.secondaryHeadline)}
-        </text>
-      `);
-      topY += 28;
+      const secWrapped = TextLayoutEngine.wrapText({
+        text: spec.secondaryHeadline,
+        maxWidth: width - margins.left - margins.right - 60,
+        initialFontSize: 20,
+        minFontSize: 16,
+        maxLines: 1,
+        elementName: 'secondary_headline',
+        role: 'SECONDARY_HEADLINE',
+        latinWeight: 500,
+        khmerWeight: 400,
+      });
+
+      secWrapped.shapedLines.forEach((shapedLine, idx) => {
+        svgParts.push(
+          renderShapedTextLineSvg({
+            x: width / 2,
+            baselineY: topY + shapedLine.baseline + idx * secWrapped.lineHeight,
+            runs: shapedLine.runs,
+            color: spec.palette.accentColor,
+            textAnchor: 'middle',
+          }),
+        );
+      });
+      topY += secWrapped.actualBoundingBox.height + SPACING.xs;
     }
 
     // Center Product Zone on pedestal
@@ -929,12 +1050,38 @@ export class PosterTemplateRenderer {
     };
     elements.push({ id: 'cta_button', type: 'BUTTON', text: spec.cta, boundingBox: ctaBox });
 
+    const ctaWrapped = TextLayoutEngine.wrapText({
+      text: spec.cta,
+      maxWidth: ctaW - 16,
+      initialFontSize: 16,
+      minFontSize: 12,
+      maxLines: 1,
+      elementName: 'cta_button',
+      role: 'CTA',
+      latinWeight: 600,
+      khmerWeight: 700,
+    });
+    const firstCtaLine = ctaWrapped.shapedLines[0];
+    const ctaBaselineY =
+      firstCtaLine !== undefined
+        ? ctaBox.y + Math.round((ctaBox.height + firstCtaLine.ascent - firstCtaLine.descent) / 2)
+        : ctaBox.y + Math.round(ctaBox.height / 2);
+
+    const ctaContentSvg =
+      firstCtaLine !== undefined
+        ? renderShapedTextLineSvg({
+            x: width / 2,
+            baselineY: ctaBaselineY,
+            runs: firstCtaLine.runs,
+            color: '#0E0F12',
+            textAnchor: 'middle',
+          })
+        : '';
+
     svgParts.push(`
       <g>
         <rect x="${ctaBox.x}" y="${ctaBox.y}" width="${ctaBox.width}" height="${ctaBox.height}" rx="23" fill="${spec.palette.textColor}" />
-        <text x="${width / 2}" y="${ctaBox.y + 29}" font-family="${POSTER_DESIGN_TOKENS.fontFamilies.khmer}" font-size="16" font-weight="700" fill="#0E0F12" text-anchor="middle">
-          ${escapeXml(spec.cta)}
-        </text>
+        ${ctaContentSvg}
       </g>
     `);
 

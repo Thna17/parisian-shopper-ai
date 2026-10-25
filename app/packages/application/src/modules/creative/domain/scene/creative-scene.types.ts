@@ -303,7 +303,9 @@ export interface LayerDependencyDraft {
     | 'RIGHTS_EVENT'
     | 'APPROVAL_EVENT'
     | 'CONTENT_VERSION'
-    | 'BRAND_PROFILE';
+    | 'BRAND_PROFILE'
+    | 'FONT_ASSET'
+    | 'TYPOGRAPHY_POLICY';
   readonly dependencyIdentifier: string;
   readonly evidenceIdentifier?: string | null | undefined;
   readonly immutableDigest: string;

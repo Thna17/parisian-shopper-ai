@@ -11,6 +11,7 @@ import {
   computeCanonicalSha256,
   computeContentVersionDigest,
   computeDependencyHash,
+  computeFontAssetDigest,
   computeIdentifierDigest,
   computeLayerHash,
   computeProductAssetDigest,
@@ -18,6 +19,10 @@ import {
   computeRightsEventDigest,
   computeSceneHash,
   computeSnapshotDigest,
+  computeTypographyPolicyDigest,
+  type TypographyDependencyMetadata,
+  TYPOGRAPHY_POLICY_VERSION,
+  TYPOGRAPHY_SHAPING_ENGINE_VERSION,
 } from './scene-hash.js';
 
 describe('Scene Hashing and Canonical Serialization', () => {
@@ -294,6 +299,61 @@ describe('Scene Hashing and Canonical Serialization', () => {
         computeBrandRuleDigest({
           ...brandRuleVersion,
           rules: { tone: 'casual', typography: { primary: 'Montserrat' } },
+        }),
+      ).not.toBe(origDigest);
+    });
+
+    it('computeFontAssetDigest produces stable 64-char hex digest and alters on any font metadata property change', () => {
+      expect(() => computeFontAssetDigest('not-an-object' as unknown as TypographyDependencyMetadata)).toThrow(TypeError);
+
+      const fontMeta = {
+        fontId: 'noto-sans-khmer-regular',
+        fontFamily: 'Noto Sans Khmer',
+        fontSha256: 'cc8af91f5558ac8e53fce83213328dada31b22edb562e44938f04238a2a65b6a',
+        byteSize: 147792,
+        supportedWeights: [400],
+      };
+      const origDigest = computeFontAssetDigest(fontMeta);
+      expect(origDigest).toMatch(/^[0-9a-f]{64}$/);
+
+      // Stable determinism regardless of key order
+      const reordered = {
+        supportedWeights: [400],
+        byteSize: 147792,
+        fontSha256: 'CC8AF91F5558AC8E53FCE83213328DADA31B22EDB562E44938F04238A2A65B6A',
+        fontFamily: 'Noto Sans Khmer',
+        fontId: 'noto-sans-khmer-regular',
+      };
+      expect(computeFontAssetDigest(reordered)).toBe(origDigest);
+
+      expect(computeFontAssetDigest({ ...fontMeta, byteSize: 147793 })).not.toBe(origDigest);
+      expect(computeFontAssetDigest({ ...fontMeta, fontFamily: 'Noto Serif Khmer' })).not.toBe(origDigest);
+      expect(computeFontAssetDigest({ ...fontMeta, fontSha256: 'a'.repeat(64) })).not.toBe(origDigest);
+    });
+
+    it('computeTypographyPolicyDigest produces stable 64-char hex digest and alters on any policy property change', () => {
+      expect(() =>
+        computeTypographyPolicyDigest(
+          'not-an-object' as unknown as Parameters<typeof computeTypographyPolicyDigest>[0],
+        ),
+      ).toThrow(TypeError);
+
+      const policy = {
+        policyVersion: TYPOGRAPHY_POLICY_VERSION,
+        shapingEngineVersion: TYPOGRAPHY_SHAPING_ENGINE_VERSION,
+        approvedFonts: ['playfair-display-variable', 'montserrat-variable', 'noto-sans-khmer-regular', 'noto-sans-khmer-bold'],
+        normalization: 'NFC' as const,
+        bidiEnforcement: 'FAIL_CLOSED' as const,
+      };
+      const origDigest = computeTypographyPolicyDigest(policy);
+      expect(origDigest).toMatch(/^[0-9a-f]{64}$/);
+
+      expect(computeTypographyPolicyDigest({ ...policy, policyVersion: 'W22-v1.0' })).not.toBe(origDigest);
+      expect(computeTypographyPolicyDigest({ ...policy, shapingEngineVersion: 'harfbuzzjs@2.0.0' })).not.toBe(origDigest);
+      expect(
+        computeTypographyPolicyDigest({
+          ...policy,
+          approvedFonts: ['playfair-display-variable'],
         }),
       ).not.toBe(origDigest);
     });
