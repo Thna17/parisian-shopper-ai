@@ -1,3 +1,5 @@
+import type { ShapedGlyph } from './text-shaper.port.js';
+
 export function escapeXml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
@@ -5,6 +7,122 @@ export function escapeXml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+export interface RenderShapedRunOptions {
+  readonly x: number;
+  readonly baselineY: number;
+  readonly runs: readonly {
+    readonly text: string;
+    readonly fontFamily: string;
+    readonly fontWeight: number;
+    readonly fontSize: number;
+    readonly advanceWidth?: number | undefined;
+    readonly upem?: number | undefined;
+    readonly glyphs?: readonly ShapedGlyph[] | undefined;
+  }[];
+  readonly color: string;
+  readonly opacity?: number;
+  readonly letterSpacing?: number;
+  readonly textAnchor?: 'start' | 'middle' | 'end';
+  readonly mode?: 'GLYPH_PATHS' | 'TEXT_TSPANS' | 'AUTO' | undefined;
+}
+
+export function renderShapedTextLineSvg(options: RenderShapedRunOptions): string {
+  const {
+    x,
+    baselineY,
+    runs,
+    color,
+    opacity,
+    letterSpacing,
+    textAnchor = 'start',
+    mode = 'AUTO',
+  } = options;
+  const opacityAttr = opacity !== undefined ? ` fill-opacity="${opacity}"` : '';
+
+  // 1. Direct HarfBuzz Glyph Outline Rendering
+  // Eliminates divergence between HarfBuzz layout measurement and librsvg/Pango font rasterization
+  const hasGlyphPaths =
+    mode !== 'TEXT_TSPANS' && runs.some((run) => run.glyphs && run.glyphs.some((g) => g.path));
+
+  if (hasGlyphPaths) {
+    let totalAdvance = 0;
+    for (const run of runs) {
+      if (run.advanceWidth !== undefined) {
+        totalAdvance += run.advanceWidth;
+      } else if (run.glyphs && run.glyphs.length > 0) {
+        for (const g of run.glyphs) {
+          totalAdvance += g.xAdvance;
+        }
+      }
+    }
+
+    let penX = x;
+    if (textAnchor === 'middle') {
+      penX = x - totalAdvance / 2;
+    } else if (textAnchor === 'end') {
+      penX = x - totalAdvance;
+    }
+
+    const pathElements: string[] = [];
+    const fullLineText = runs.map((r) => r.text).join('');
+
+    for (const run of runs) {
+      const upem = run.upem ?? 1000;
+      const scale = run.fontSize / upem;
+      const scaleStr = (Math.round(scale * 1000000) / 1000000).toString();
+      const negScaleStr = (Math.round(-scale * 1000000) / 1000000).toString();
+
+      if (run.glyphs && run.glyphs.length > 0) {
+        for (const glyph of run.glyphs) {
+          if (glyph.path && glyph.path.length > 0) {
+            const gx = Math.round((penX + glyph.xOffset) * 100) / 100;
+            const gy = Math.round((baselineY - glyph.yOffset) * 100) / 100;
+            pathElements.push(
+              `<path d="${glyph.path}" transform="translate(${gx}, ${gy}) scale(${scaleStr}, ${negScaleStr})" fill="${color}"${opacityAttr} />`,
+            );
+          }
+          penX += glyph.xAdvance;
+        }
+      }
+    }
+
+    const accessibleText =
+      mode !== 'GLYPH_PATHS'
+        ? `<text x="${x}" y="${baselineY}" fill="none" stroke="none" opacity="0" pointer-events="none">${
+            runs.length === 1 && runs[0] !== undefined
+              ? `<tspan font-family="${runs[0].fontFamily}" font-weight="${runs[0].fontWeight}" font-size="${runs[0].fontSize}">${escapeXml(runs[0].text)}</tspan>`
+              : runs
+                  .map(
+                    (run) =>
+                      `<tspan font-family="${run.fontFamily}" font-weight="${run.fontWeight}" font-size="${run.fontSize}">${escapeXml(run.text)}</tspan>`,
+                  )
+                  .join('')
+          }</text>`
+        : '';
+
+    return `<g role="img" aria-label="${escapeXml(fullLineText)}" data-engine="harfbuzz-shaped">${accessibleText}${pathElements.join('')}</g>`;
+  }
+
+  // 2. Fallback SVG <text> and <tspan> rendering when outline paths are not available
+  const spacingAttr =
+    letterSpacing !== undefined && letterSpacing > 0 ? ` letter-spacing="${letterSpacing}px"` : '';
+  const anchorAttr = textAnchor !== 'start' ? ` text-anchor="${textAnchor}"` : '';
+
+  if (runs.length === 1 && runs[0] !== undefined) {
+    const single = runs[0];
+    return `<text x="${x}" y="${baselineY}" font-family="${single.fontFamily}" font-weight="${single.fontWeight}" font-size="${single.fontSize}" fill="${color}"${opacityAttr}${spacingAttr}${anchorAttr}>${escapeXml(single.text)}</text>`;
+  }
+
+  const tspans = runs
+    .map(
+      (run) =>
+        `<tspan font-family="${run.fontFamily}" font-weight="${run.fontWeight}" font-size="${run.fontSize}">${escapeXml(run.text)}</tspan>`,
+    )
+    .join('');
+
+  return `<text x="${x}" y="${baselineY}" fill="${color}"${opacityAttr}${spacingAttr}${anchorAttr}>${tspans}</text>`;
 }
 
 export interface LotusOrnamentOptions {

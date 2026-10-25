@@ -3,3 +3,8 @@ export * from './fixtures/fake-product-fixtures.js';
 export * from './fake-creative-provider.js';
 export * from './disk-asset-storage.adapter.js';
 export * from './sharp-hero-compositor.adapter.js';
+export * from './sharp-poster-compositor.adapter.js';
+export * from './fonts/font-manifest.js';
+export * from './fonts/font-registry.js';
+export * from './fonts/font-loader.js';
+export * from './fonts/harfbuzz-shaping-service.js';

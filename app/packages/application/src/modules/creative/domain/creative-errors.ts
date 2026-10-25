@@ -392,3 +392,114 @@ export class PosterFontNotFoundError extends ApplicationError {
     });
   }
 }
+
+export class PosterFontGlyphMissingError extends ApplicationError {
+  public readonly fontFamily: string;
+  public readonly codePoint: number;
+  public readonly hexCodePoint: string;
+  public readonly role?: string | undefined;
+
+  public constructor(
+    fontFamily: string,
+    codePoint: number,
+    role?: string,
+  ) {
+    const hex = 'U+' + codePoint.toString(16).toUpperCase().padStart(4, '0');
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Font "${fontFamily}" is missing glyph for code point ${hex}${role ? ` in role "${role}"` : ''}`,
+      details: { fontFamily, codePoint, hex, ...(role !== undefined ? { role } : {}) },
+    });
+    this.fontFamily = fontFamily;
+    this.codePoint = codePoint;
+    this.hexCodePoint = hex;
+    this.role = role;
+  }
+}
+
+export class PosterFontIntegrityError extends ApplicationError {
+  public constructor(fontId: string, expectedSha256: string, actualSha256: string) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Font "${fontId}" integrity verification failed. Expected SHA-256 ${expectedSha256}, actual ${actualSha256}`,
+      details: { fontId, expectedSha256, actualSha256 },
+    });
+  }
+}
+
+export class PosterFontWeightUnsupportedError extends ApplicationError {
+  public constructor(
+    fontFamily: string,
+    requestedWeight: number,
+    supportedWeights: readonly number[] | string,
+  ) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Font "${fontFamily}" does not support requested weight ${requestedWeight}`,
+      details: { fontFamily, requestedWeight, supportedWeights },
+    });
+  }
+}
+
+export class PosterTextShapingError extends ApplicationError {
+  public constructor(message: string, details?: Readonly<Record<string, unknown>>) {
+    super({
+      code: 'INFRASTRUCTURE_ERROR',
+      publicMessage: `Text shaping failed: ${message}`,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}
+
+export class PosterUnsafeUnicodeError extends ApplicationError {
+  public readonly codePoint: number;
+  public readonly hexCodePoint: string;
+  public readonly reason: string;
+  public readonly role?: string | undefined;
+
+  public constructor(codePoint: number, reason: string, role?: string) {
+    const hex = 'U+' + codePoint.toString(16).toUpperCase().padStart(4, '0');
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Unsafe Unicode sequence detected (${hex}: ${reason})${role ? ` in role "${role}"` : ''}`,
+      details: { codePoint, hex, reason, ...(role !== undefined ? { role } : {}) },
+    });
+    this.codePoint = codePoint;
+    this.hexCodePoint = hex;
+    this.reason = reason;
+    this.role = role;
+  }
+}
+
+export class PosterUnsupportedScriptError extends ApplicationError {
+  public readonly codePoint: number;
+  public readonly hexCodePoint: string;
+  public readonly character: string;
+  public readonly scriptCategory?: string | undefined;
+  public readonly role?: string | undefined;
+
+  public constructor(
+    codePoint: number,
+    character: string,
+    scriptCategory?: string,
+    role?: string,
+  ) {
+    const hex = 'U+' + codePoint.toString(16).toUpperCase().padStart(4, '0');
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Unsupported script character "${character}" (${hex}) detected${role ? ` in role "${role}"` : ''}. Parisian Shopper AI only supports Khmer, Latin, and approved neutral symbols.`,
+      details: {
+        codePoint,
+        hexCodePoint: hex,
+        character,
+        ...(scriptCategory !== undefined ? { scriptCategory } : {}),
+        ...(role !== undefined ? { role } : {}),
+      },
+    });
+    this.codePoint = codePoint;
+    this.hexCodePoint = hex;
+    this.character = character;
+    this.scriptCategory = scriptCategory;
+    this.role = role;
+  }
+}

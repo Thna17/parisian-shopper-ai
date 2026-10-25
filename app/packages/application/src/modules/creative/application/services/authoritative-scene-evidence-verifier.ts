@@ -37,7 +37,12 @@ import {
   computeApprovalEventDigest,
   computeContentVersionDigest,
   computeBrandRuleDigest,
+  computeFontAssetDigest,
+  computeTypographyPolicyDigest,
+  TYPOGRAPHY_SHAPING_ENGINE_VERSION,
+  TYPOGRAPHY_POLICY_VERSION,
 } from '../../domain/scene/scene-hash.js';
+import { APPROVED_FONT_MANIFEST } from '../../infrastructure/fonts/font-manifest.js';
 
 export const AUTHORITATIVE_SCENE_EVIDENCE_VERIFIER = Symbol('AUTHORITATIVE_SCENE_EVIDENCE_VERIFIER');
 
@@ -333,7 +338,7 @@ export class AuthoritativeSceneEvidenceVerifier {
     const brandRuleDigest = computeBrandRuleDigest(brandRuleVersion);
 
     // 10. Assemble normalized layer dependencies
-    const dependencies: readonly LayerDependencyDraft[] = [
+    const dependencies: LayerDependencyDraft[] = [
       {
         dependencyType: 'PRODUCT_SNAPSHOT',
         dependencyIdentifier: input.productSnapshotId,
@@ -393,6 +398,42 @@ export class AuthoritativeSceneEvidenceVerifier {
         sortOrder: 7,
       },
     ];
+
+    // 11. Attach typography and font asset dependencies if scene contains TYPOGRAPHY layer
+    const typoLayer = input.layers.find((l) => l.layerGroup === 'TYPOGRAPHY');
+    if (typoLayer) {
+      APPROVED_FONT_MANIFEST.forEach((entry, idx) => {
+        dependencies.push({
+          dependencyType: 'FONT_ASSET',
+          dependencyIdentifier: entry.id,
+          evidenceIdentifier: entry.assetPath,
+          sceneLayerKey: typoLayer.layerKey,
+          immutableDigest: computeFontAssetDigest({
+            fontId: entry.id,
+            fontFamily: entry.family,
+            fontSha256: entry.sha256,
+            byteSize: entry.byteSize,
+            supportedWeights: entry.supportedWeights,
+          }),
+          sortOrder: 10 + idx,
+        });
+      });
+
+      dependencies.push({
+        dependencyType: 'TYPOGRAPHY_POLICY',
+        dependencyIdentifier: 'typography-policy-w21',
+        evidenceIdentifier: TYPOGRAPHY_POLICY_VERSION,
+        sceneLayerKey: typoLayer.layerKey,
+        immutableDigest: computeTypographyPolicyDigest({
+          policyVersion: TYPOGRAPHY_POLICY_VERSION,
+          shapingEngineVersion: TYPOGRAPHY_SHAPING_ENGINE_VERSION,
+          approvedFonts: APPROVED_FONT_MANIFEST.map((f) => f.id),
+          normalization: 'NFC',
+          bidiEnforcement: 'FAIL_CLOSED',
+        }),
+        sortOrder: 20,
+      });
+    }
 
     return {
       snapshot,

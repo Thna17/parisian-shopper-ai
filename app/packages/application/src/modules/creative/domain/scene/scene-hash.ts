@@ -114,6 +114,43 @@ export function computeBrandRuleDigest(brandProfile: object): string {
   return computeCanonicalSha256(brandProfile);
 }
 
+export const TYPOGRAPHY_SHAPING_ENGINE_VERSION = 'harfbuzzjs@1.6.4/hb@15.0.0';
+export const TYPOGRAPHY_POLICY_VERSION = 'W21-v1.0';
+
+export interface TypographyDependencyMetadata {
+  readonly fontId: string;
+  readonly fontFamily: string;
+  readonly fontSha256: string;
+  readonly byteSize: number;
+  readonly supportedWeights: readonly number[] | { readonly min: number; readonly max: number };
+  readonly shapingEngineVersion?: string;
+  readonly typographyPolicyVersion?: string;
+}
+
+export function computeFontAssetDigest(metadata: TypographyDependencyMetadata): string {
+  assertAuthoritativeRecord(metadata, 'computeFontAssetDigest');
+  return computeCanonicalSha256({
+    byteSize: metadata.byteSize,
+    fontFamily: metadata.fontFamily,
+    fontId: metadata.fontId,
+    fontSha256: metadata.fontSha256.toLowerCase(),
+    shapingEngineVersion: metadata.shapingEngineVersion ?? TYPOGRAPHY_SHAPING_ENGINE_VERSION,
+    supportedWeights: metadata.supportedWeights,
+    typographyPolicyVersion: metadata.typographyPolicyVersion ?? TYPOGRAPHY_POLICY_VERSION,
+  });
+}
+
+export function computeTypographyPolicyDigest(policy: {
+  readonly policyVersion: string;
+  readonly shapingEngineVersion: string;
+  readonly approvedFonts: readonly string[];
+  readonly normalization: 'NFC';
+  readonly bidiEnforcement: 'FAIL_CLOSED';
+}): string {
+  assertAuthoritativeRecord(policy, 'computeTypographyPolicyDigest');
+  return computeCanonicalSha256(policy);
+}
+
 export function computeIdentifierDigest(identifier: string): string {
   if (typeof identifier !== 'string' || identifier.trim() === '') {
     throw new TypeError('computeIdentifierDigest requires a non-empty string identifier');
