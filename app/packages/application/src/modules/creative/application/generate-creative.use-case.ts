@@ -120,9 +120,7 @@ export class GenerateCreativeUseCase {
     this.backgroundQualityValidator =
       backgroundQualityValidator ?? new BackgroundQualityValidator();
     this.allowLegacyProductAssetFallback =
-      process.env.NODE_ENV === 'production'
-        ? false
-        : (allowLegacyProductAssetFallback ?? false);
+      process.env.NODE_ENV === 'production' ? false : (allowLegacyProductAssetFallback ?? false);
   }
 
   private readonly allowLegacyProductAssetFallback: boolean;

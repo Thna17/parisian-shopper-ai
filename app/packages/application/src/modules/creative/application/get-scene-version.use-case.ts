@@ -46,9 +46,7 @@ export class GetSceneVersionUseCase {
     return version;
   }
 
-  public async getLatestByJobId(
-    creativeJobId: string,
-  ): Promise<CreativeSceneVersionRecord> {
+  public async getLatestByJobId(creativeJobId: string): Promise<CreativeSceneVersionRecord> {
     const version = await this.sceneRepo.findLatestVersionByJobId(creativeJobId);
     if (!version) {
       throw new CreativeSceneVersionNotFoundError({ sceneId: `for-job:${creativeJobId}` });
@@ -56,9 +54,7 @@ export class GetSceneVersionUseCase {
     return version;
   }
 
-  public async getLatestBySceneId(
-    sceneId: string,
-  ): Promise<CreativeSceneVersionRecord> {
+  public async getLatestBySceneId(sceneId: string): Promise<CreativeSceneVersionRecord> {
     const version = await this.sceneRepo.findLatestVersionBySceneId(sceneId);
     if (!version) {
       throw new CreativeSceneVersionNotFoundError({ sceneId });
@@ -66,9 +62,7 @@ export class GetSceneVersionUseCase {
     return version;
   }
 
-  public async listVersions(
-    sceneId: string,
-  ): Promise<readonly CreativeSceneVersionRecord[]> {
+  public async listVersions(sceneId: string): Promise<readonly CreativeSceneVersionRecord[]> {
     const scene = await this.sceneRepo.findById(sceneId);
     if (!scene) {
       throw new CreativeSceneNotFoundError(sceneId);

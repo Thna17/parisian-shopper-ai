@@ -99,7 +99,8 @@ import { ProductsModule } from '../products/products.module.js';
     {
       provide: 'ALLOW_LEGACY_PRODUCT_ASSET_FALLBACK',
       inject: [AppConfigService],
-      useFactory: (config: AppConfigService): boolean => config.creative.allowLegacyProductAssetFallback,
+      useFactory: (config: AppConfigService): boolean =>
+        config.creative.allowLegacyProductAssetFallback,
     },
     GenerateCreativeUseCase,
     ValidateCreativeUseCase,

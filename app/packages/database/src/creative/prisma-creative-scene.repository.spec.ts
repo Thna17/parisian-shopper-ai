@@ -30,7 +30,9 @@ interface MockPrismaClient {
   sceneInvalidationEvent: MockModel;
   outboxEvent: MockModel;
   $queryRaw: AsyncMock;
-  $transaction: jest.MockedFunction<(callback: (tx: MockPrismaClient) => Promise<unknown>) => Promise<unknown>>;
+  $transaction: jest.MockedFunction<
+    (callback: (tx: MockPrismaClient) => Promise<unknown>) => Promise<unknown>
+  >;
 }
 
 describe('PrismaCreativeSceneRepository', () => {
@@ -96,7 +98,9 @@ describe('PrismaCreativeSceneRepository', () => {
         update: jest.fn(),
       },
       $queryRaw: jest.fn(),
-      $transaction: jest.fn(async (callback: (tx: MockPrismaClient) => Promise<unknown>) => await callback(mockPrisma)),
+      $transaction: jest.fn(
+        async (callback: (tx: MockPrismaClient) => Promise<unknown>) => await callback(mockPrisma),
+      ),
     };
     repository = new PrismaCreativeSceneRepository(mockPrisma as unknown as PrismaService);
   });
@@ -131,7 +135,14 @@ describe('PrismaCreativeSceneRepository', () => {
           bounds: { x: 0, y: 0, width: 1080, height: 1350 },
           payloadSchemaVersion: 1,
           sortOrder: 0,
-          payload: { assetType: 'GENERATED_BACKGROUND', casStorageKey: 'cas/bg.png', sha256: 'a'.repeat(64), provider: 'mock-ai', model: 'fixture-v1', promptVersion: '1.0' },
+          payload: {
+            assetType: 'GENERATED_BACKGROUND',
+            casStorageKey: 'cas/bg.png',
+            sha256: 'a'.repeat(64),
+            provider: 'mock-ai',
+            model: 'fixture-v1',
+            promptVersion: '1.0',
+          },
         },
       ],
       dependencies: [
@@ -227,7 +238,14 @@ describe('PrismaCreativeSceneRepository', () => {
             opacity: 1,
             blendMode: 'NORMAL',
             bounds: { x: 0, y: 0, width: 1080, height: 1350 },
-            payload: { assetType: 'GENERATED_BACKGROUND', casStorageKey: 'cas/bg.png', sha256: 'a'.repeat(64), provider: 'mock-ai', model: 'fixture-v1', promptVersion: '1.0' },
+            payload: {
+              assetType: 'GENERATED_BACKGROUND',
+              casStorageKey: 'cas/bg.png',
+              sha256: 'a'.repeat(64),
+              provider: 'mock-ai',
+              model: 'fixture-v1',
+              promptVersion: '1.0',
+            },
             payloadSchemaVersion: 1,
             layerHash: 'c'.repeat(64),
             sortOrder: 0,

@@ -53,7 +53,7 @@ export class HarfBuzzShapingService implements TextShaperPort {
     const loadedFont = this.fontRegistry.getFontForFamilyAndWeight(run.fontFamily, run.fontWeight);
 
     // 1. Pre-render cmap coverage check
-    for (let i = 0; i < run.text.length; ) {
+    for (let i = 0; i < run.text.length;) {
       const cp = run.text.codePointAt(i)!;
       // Spaces, tabs, and newlines are accepted whitespace; check other chars against cmap
       if (cp !== 0x0020 && cp !== 0x0009 && cp !== 0x000a && cp !== 0x000d && cp !== 0x200b) {
@@ -170,9 +170,9 @@ export class HarfBuzzShapingService implements TextShaperPort {
       }
 
       const advanceWidth = Math.round(penX * 100) / 100;
-      const ascent = Math.round(((loadedFont.ascender / upem) * fontSize) * 100) / 100;
-      const descent = Math.round(((Math.abs(loadedFont.descender) / upem) * fontSize) * 100) / 100;
-      const lineGap = Math.round(((loadedFont.lineGap / upem) * fontSize) * 100) / 100;
+      const ascent = Math.round((loadedFont.ascender / upem) * fontSize * 100) / 100;
+      const descent = Math.round((Math.abs(loadedFont.descender) / upem) * fontSize * 100) / 100;
+      const lineGap = Math.round((loadedFont.lineGap / upem) * fontSize * 100) / 100;
 
       const actualBoundingBox = hasInk
         ? {

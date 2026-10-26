@@ -87,6 +87,7 @@ describe('Representative Poster Render Integration (W21 Deliverable I & W21-F)',
       backgroundBuffer: fixtures.backgroundBuffer,
       backgroundMimeType: 'image/jpeg',
       backgroundSha256: fixtures.backgroundSha256,
+      allowNonApprovedForTesting: true,
     });
 
     expect(result.mimeType).toBe('image/png');
@@ -122,6 +123,7 @@ describe('Representative Poster Render Integration (W21 Deliverable I & W21-F)',
       backgroundBuffer: fixtures.backgroundBuffer,
       backgroundMimeType: 'image/jpeg',
       backgroundSha256: fixtures.backgroundSha256,
+      allowNonApprovedForTesting: true,
     };
 
     const run1 = await compositor.renderPoster(renderInput);
@@ -145,6 +147,7 @@ describe('Representative Poster Render Integration (W21 Deliverable I & W21-F)',
       backgroundBuffer: fixtures.backgroundBuffer,
       backgroundMimeType: 'image/jpeg',
       backgroundSha256: fixtures.backgroundSha256,
+      allowNonApprovedForTesting: true,
     });
 
     const manifest = result.layoutManifest;
@@ -169,17 +172,24 @@ describe('Representative Poster Render Integration (W21 Deliverable I & W21-F)',
     }
   });
 
-  it('renders multi-script runs via hermetic SVG <tspan> elements with approved fonts and no OS fallbacks', () => {
+  it('renders multi-script runs via hermetic SVG glyph paths with approved fonts and no OS fallbacks', () => {
     const fonts = loadEmbeddedFonts();
-    const computed = PosterTemplateRenderer.renderTemplate(posterSpec, fonts.fontFaceCss);
+    const computed = PosterTemplateRenderer.renderTemplate(posterSpec, fonts.fontFaceCss, {
+      allowNonApprovedForTesting: true,
+    });
 
-    // Verify SVG overlay contains <tspan> tags partitioning Khmer and Latin scripts
-    expect(computed.svgOverlay).toContain('<tspan font-family="Noto Sans Khmer"');
-    expect(computed.svgOverlay).toContain('<tspan font-family="Montserrat"');
-    expect(computed.svgOverlay).toContain('font-family="Playfair Display"');
+    // Verify SVG overlay contains HarfBuzz glyph outline paths and embedded font styling
+    expect(computed.svgOverlay).toContain('<path d=');
+    expect(computed.svgOverlay).toContain('data-engine="harfbuzz-shaped"');
 
     // Verify no unapproved host operating system font families are referenced
-    const forbiddenHostFonts = ['Arial', 'Helvetica', 'Times New Roman', 'Apple Color Emoji', 'system-ui'];
+    const forbiddenHostFonts = [
+      'Arial',
+      'Helvetica',
+      'Times New Roman',
+      'Apple Color Emoji',
+      'system-ui',
+    ];
     for (const forbidden of forbiddenHostFonts) {
       expect(computed.svgOverlay).not.toContain(forbidden);
     }

@@ -31,7 +31,8 @@ export interface GoldenCorpusItem {
   readonly text: string;
   readonly expectedLanguage?: 'EN' | 'FR' | 'KM' | 'BILINGUAL';
   readonly expectedScript: 'LATIN' | 'KHMER' | 'MIXED';
-  readonly role?: 'HEADLINE' | 'SECONDARY_HEADLINE' | 'BODY' | 'PRICE' | 'CTA' | 'LABEL' | 'SUPPORTING';
+  readonly role?:
+    'HEADLINE' | 'SECONDARY_HEADLINE' | 'BODY' | 'PRICE' | 'CTA' | 'LABEL' | 'SUPPORTING';
   readonly shouldPass: boolean;
   readonly expectedError?:
     | 'PosterFontGlyphMissingError'
@@ -49,7 +50,7 @@ export const GOLDEN_TYPOGRAPHY_CORPUS: readonly GoldenCorpusItem[] = [
     id: 'french-luxury-01',
     category: 'FRENCH_LUXURY',
     description: 'French display headline with guillemets, circumflex, and em-dash',
-    text: '« Élégance Intemporelle — L\'Âme de Paris »',
+    text: "« Élégance Intemporelle — L'Âme de Paris »",
     expectedLanguage: 'FR',
     expectedScript: 'LATIN',
     role: 'HEADLINE',
@@ -59,7 +60,7 @@ export const GOLDEN_TYPOGRAPHY_CORPUS: readonly GoldenCorpusItem[] = [
     id: 'french-luxury-02',
     category: 'FRENCH_LUXURY',
     description: 'French scent notes copy with ligature and accents',
-    text: 'Voile d\'Ambre & Cœur de Rose Mystique',
+    text: "Voile d'Ambre & Cœur de Rose Mystique",
     expectedLanguage: 'FR',
     expectedScript: 'LATIN',
     role: 'SECONDARY_HEADLINE',
@@ -69,7 +70,7 @@ export const GOLDEN_TYPOGRAPHY_CORPUS: readonly GoldenCorpusItem[] = [
     id: 'french-luxury-03',
     category: 'FRENCH_LUXURY',
     description: 'French seasonal collection eyebrow label',
-    text: 'Collection Privée d\'Automne · Paris 2026',
+    text: "Collection Privée d'Automne · Paris 2026",
     expectedLanguage: 'FR',
     expectedScript: 'LATIN',
     role: 'LABEL',
@@ -162,7 +163,8 @@ export const GOLDEN_TYPOGRAPHY_CORPUS: readonly GoldenCorpusItem[] = [
   {
     id: 'monosyllabic-rep-01',
     category: 'MONOSYLLABIC_REPETITION',
-    description: 'Monosyllabic Khmer coda consonant word with Lek Took (must not split into ពិ / តៗ)',
+    description:
+      'Monosyllabic Khmer coda consonant word with Lek Took (must not split into ពិ / តៗ)',
     text: 'ភាពទាក់ទាញបែបប៉ារីសពិតៗ',
     expectedLanguage: 'KM',
     expectedScript: 'KHMER',
@@ -197,7 +199,8 @@ export const GOLDEN_TYPOGRAPHY_CORPUS: readonly GoldenCorpusItem[] = [
   {
     id: 'orphan-guards-01',
     category: 'KHMER_ORTHOGRAPHIC',
-    description: 'Khmer sentence with Khan and Bariyoosan punctuation (must not start wrapped line)',
+    description:
+      'Khmer sentence with Khan and Bariyoosan punctuation (must not start wrapped line)',
     text: 'សម្រស់បែបបារាំងពិតៗ។ ស្អាតឥតខ្ចោះ៕',
     expectedLanguage: 'KM',
     expectedScript: 'KHMER',

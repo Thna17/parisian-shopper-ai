@@ -156,7 +156,7 @@ describe('FontRegistry and FontManifest (W21 Deliverables A & B)', () => {
       expect(css).toContain("font-family: 'Noto Sans Khmer'");
       expect(css).toContain("font-family: 'Playfair Display'");
       expect(css).toContain("font-family: 'Montserrat'");
-      expect(css).toContain("data:font/ttf;base64,");
+      expect(css).toContain('data:font/ttf;base64,');
 
       // Verify Playfair Display declared weight range is 400 900 (not 100 900)
       expect(css).toContain('font-weight: 400 900;');

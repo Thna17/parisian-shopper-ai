@@ -97,7 +97,11 @@ export class RegisterProductAssetUseCase {
     const { actor, buffer, sku, role, sourceSystem } = command;
 
     if (!actor || !actor.userId) {
-      throw new ProductAssetUnauthorizedError('anonymous', 'register-product-asset', 'AUTHENTICATED');
+      throw new ProductAssetUnauthorizedError(
+        'anonymous',
+        'register-product-asset',
+        'AUTHENTICATED',
+      );
     }
 
     const isAuthorized =

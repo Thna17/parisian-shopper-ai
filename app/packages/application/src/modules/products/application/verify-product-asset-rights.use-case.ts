@@ -55,9 +55,7 @@ export class VerifyProductAssetRightsUseCase {
     this.clock = clock ?? new SystemClock();
   }
 
-  public async execute(
-    command: VerifyProductAssetRightsCommand,
-  ): Promise<ProductAssetRightsEvent> {
+  public async execute(command: VerifyProductAssetRightsCommand): Promise<ProductAssetRightsEvent> {
     const { actor, registrationId, rightsState } = command;
 
     if (!actor || !actor.userId) {
@@ -69,10 +67,7 @@ export class VerifyProductAssetRightsUseCase {
     }
 
     if (
-      !this.permissions.hasAnyRolePermission(
-        actor.roles,
-        Permission.VERIFY_PRODUCT_ASSET_RIGHTS,
-      )
+      !this.permissions.hasAnyRolePermission(actor.roles, Permission.VERIFY_PRODUCT_ASSET_RIGHTS)
     ) {
       throw new ProductAssetUnauthorizedError(
         actor.userId,

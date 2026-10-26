@@ -411,8 +411,8 @@ describe('GenerateCreativeUseCase - W12 Governed Asset Fail-Fast Invariants', ()
       findRightsEventsByRegistration: jest.fn(
         (_regId: string): Promise<readonly ProductAssetRightsEvent[]> => Promise.resolve([]),
       ),
-      findLatestRightsEvent: jest.fn(
-        (_regId: string): Promise<ProductAssetRightsEvent | null> => Promise.resolve(null),
+      findLatestRightsEvent: jest.fn((_regId: string): Promise<ProductAssetRightsEvent | null> =>
+        Promise.resolve(null),
       ),
       findAllHeroCutoutRegistrations: jest.fn(
         (_sku: string): Promise<readonly ProductAssetRegistration[]> => Promise.resolve([]),
@@ -525,9 +525,7 @@ describe('GenerateCreativeUseCase - W12 Governed Asset Fail-Fast Invariants', ()
     jest
       .spyOn(mockProductAssetRepo, 'findApprovalEventsByRegistration')
       .mockResolvedValue([approvalEvent]);
-    jest
-      .spyOn(mockProductAssetRepo, 'findLatestApprovalEvent')
-      .mockResolvedValue(approvalEvent);
+    jest.spyOn(mockProductAssetRepo, 'findLatestApprovalEvent').mockResolvedValue(approvalEvent);
     jest.spyOn(mockProductAssetRepo, 'findLatestRightsEvent').mockResolvedValue({
       id: 'rights-1',
       productAssetRegistrationId: 'reg-unverified-rights',
@@ -602,9 +600,7 @@ describe('GenerateCreativeUseCase - W12 Governed Asset Fail-Fast Invariants', ()
     jest
       .spyOn(mockProductAssetRepo, 'findApprovalEventsByRegistration')
       .mockResolvedValue([appEvent]);
-    jest
-      .spyOn(mockProductAssetRepo, 'findLatestApprovalEvent')
-      .mockResolvedValue(appEvent);
+    jest.spyOn(mockProductAssetRepo, 'findLatestApprovalEvent').mockResolvedValue(appEvent);
     jest.spyOn(mockProductAssetRepo, 'findLatestRightsEvent').mockResolvedValue({
       id: 'rights-1',
       productAssetRegistrationId: 'reg-opaque',

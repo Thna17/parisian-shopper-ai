@@ -20,7 +20,7 @@ export function normalizeAndValidateUnicode(rawText: string, role?: string): str
   // Strict Unicode Normalization: NFC
   const normalized = rawText.normalize('NFC');
 
-  for (let i = 0; i < normalized.length; ) {
+  for (let i = 0; i < normalized.length;) {
     const codePoint = normalized.codePointAt(i);
     if (codePoint === undefined) {
       break;
@@ -78,7 +78,7 @@ export function normalizeAndValidateUnicode(rawText: string, role?: string): str
       codePoint === 0x200c || // ZWNJ
       codePoint === 0x200d || // ZWJ
       codePoint === 0x200e || // LRM
-      codePoint === 0x200f    // RLM
+      codePoint === 0x200f // RLM
     ) {
       throw new PosterUnsafeUnicodeError(
         codePoint,
@@ -111,11 +111,7 @@ export function normalizeAndValidateUnicode(rawText: string, role?: string): str
 
     // Unicode Tags block (U+E0000 to U+E007F)
     if (codePoint >= 0xe0000 && codePoint <= 0xe007f) {
-      throw new PosterUnsafeUnicodeError(
-        codePoint,
-        'Unicode tag characters are prohibited',
-        role,
-      );
+      throw new PosterUnsafeUnicodeError(codePoint, 'Unicode tag characters are prohibited', role);
     }
 
     // Advance by code point length (surrogate pairs occupy 2 code units)

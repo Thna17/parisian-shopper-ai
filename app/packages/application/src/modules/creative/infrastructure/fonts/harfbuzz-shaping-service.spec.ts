@@ -86,7 +86,9 @@ describe('HarfBuzzShapingService (W21-C Deliverables 1, 2, 3, 5)', () => {
 
     // (3 clusters - 1) * 12 = +24px (NOT (5 glyphs - 1) * 12 = 48px)
     const expectedKamDiff = 2 * 12;
-    expect(Math.round(kamWithSpacing.advanceWidth - kamNoSpacing.advanceWidth)).toBe(expectedKamDiff);
+    expect(Math.round(kamWithSpacing.advanceWidth - kamNoSpacing.advanceWidth)).toBe(
+      expectedKamDiff,
+    );
   });
 
   it('3. reports the full 32-bit code point for astral characters in PosterFontGlyphMissingError', () => {

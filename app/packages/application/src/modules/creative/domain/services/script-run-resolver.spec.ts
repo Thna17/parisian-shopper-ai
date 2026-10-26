@@ -1,7 +1,4 @@
-import {
-  PosterUnsafeUnicodeError,
-  PosterUnsupportedScriptError,
-} from '../creative-errors.js';
+import { PosterUnsafeUnicodeError, PosterUnsupportedScriptError } from '../creative-errors.js';
 import { resolveScriptRuns } from './script-run-resolver.js';
 
 describe('ScriptRunResolver & UnicodeValidator (W21-D Mixed-Script & Unicode Safety)', () => {
@@ -31,10 +28,9 @@ describe('ScriptRunResolver & UnicodeValidator (W21-D Mixed-Script & Unicode Saf
     });
 
     it('resolves pure French luxury copy with diacritics to single Latin run', () => {
-      const runs = resolveScriptRuns(
-        "Élégance suprême, crème régénérante & parfum d'exception",
-        { role: 'HEADLINE' },
-      );
+      const runs = resolveScriptRuns("Élégance suprême, crème régénérante & parfum d'exception", {
+        role: 'HEADLINE',
+      });
       expect(runs).toHaveLength(1);
       expect(runs[0]).toEqual({
         text: "Élégance suprême, crème régénérante & parfum d'exception",

@@ -1,17 +1,8 @@
 import { PosterLayoutOverflowError } from '../creative-errors.js';
-import {
-  type TextRole,
-  resolveScriptRuns,
-} from './script-run-resolver.js';
+import { type TextRole, resolveScriptRuns } from './script-run-resolver.js';
 import { normalizeAndValidateUnicode } from './unicode-validator.js';
-import {
-  safeKhmerTokenize,
-  splitTextIntoParagraphs,
-} from './khmer-line-breaker.js';
-import type {
-  ShapedRun,
-  TextShaperPort,
-} from './text-shaper.port.js';
+import { safeKhmerTokenize, splitTextIntoParagraphs } from './khmer-line-breaker.js';
+import type { ShapedRun, TextShaperPort } from './text-shaper.port.js';
 
 export interface BoundingBox {
   readonly x: number;
@@ -430,10 +421,7 @@ export class TextLayoutEngine {
       }
 
       const trueInkHeight = hasAnyInk
-        ? Math.max(
-            Math.round((aggYMax - aggYMin) * 100) / 100,
-            Math.round(aggYMax * 100) / 100,
-          )
+        ? Math.max(Math.round((aggYMax - aggYMin) * 100) / 100, Math.round(aggYMax * 100) / 100)
         : inkHeight;
 
       const totalHeight = Math.max(
@@ -462,7 +450,8 @@ export class TextLayoutEngine {
 
       const linesExceeded = allLines.length > maxLines;
       const heightExceeded =
-        maxHeight !== undefined && (totalHeight > maxHeight || actualBoundingBox.height > maxHeight);
+        maxHeight !== undefined &&
+        (totalHeight > maxHeight || actualBoundingBox.height > maxHeight);
       const widthExceeded = allShapedLines.some((l) => l.width > maxWidth);
 
       if (!linesExceeded && !heightExceeded && !widthExceeded) {
@@ -510,7 +499,9 @@ export class TextLayoutEngine {
   ): ShapedLine {
     const runs = resolveScriptRuns(lineText, {
       ...(options.role !== undefined ? { role: options.role } : {}),
-      ...(options.preferredLatinFont !== undefined ? { latinFont: options.preferredLatinFont } : {}),
+      ...(options.preferredLatinFont !== undefined
+        ? { latinFont: options.preferredLatinFont }
+        : {}),
       ...(options.latinWeight !== undefined ? { latinWeight: options.latinWeight } : {}),
       ...(options.khmerWeight !== undefined ? { khmerWeight: options.khmerWeight } : {}),
     });

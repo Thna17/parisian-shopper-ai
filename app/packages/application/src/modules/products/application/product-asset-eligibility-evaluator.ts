@@ -123,7 +123,8 @@ export class ProductAssetEligibilityEvaluator {
       registrations.map(async (registration) => {
         const events = await this.assetRepo.findApprovalEventsByRegistration(registration.id);
         const latestApprovalEvent = events[0];
-        const latestDecision = latestApprovalEvent?.decision ?? ProductAssetApprovalDecision.SUBMITTED;
+        const latestDecision =
+          latestApprovalEvent?.decision ?? ProductAssetApprovalDecision.SUBMITTED;
         return {
           registration,
           latestDecision,
@@ -430,7 +431,8 @@ export class ProductAssetEligibilityEvaluator {
 
     let assessment = hero.assessment;
     if (!assessment) {
-      assessment = (await this.assetRepo.findLatestValidationAssessment(hero.asset.id)) ?? undefined;
+      assessment =
+        (await this.assetRepo.findLatestValidationAssessment(hero.asset.id)) ?? undefined;
     }
     if (!assessment) {
       throw new ProductAssetIneligibleError(
@@ -468,40 +470,30 @@ export class ProductAssetEligibilityEvaluator {
       rightsEvent = (await this.assetRepo.findLatestRightsEvent(hero.registration.id)) ?? undefined;
     }
     if (!rightsEvent) {
-      throw new ProductAssetRightsUnverifiedError(
-        sku,
-        hero.registration.rightsState,
-        { message: 'Missing authoritative rights event record' },
-      );
+      throw new ProductAssetRightsUnverifiedError(sku, hero.registration.rightsState, {
+        message: 'Missing authoritative rights event record',
+      });
     }
     if (rightsEvent.productAssetRegistrationId !== hero.registration.id) {
-      throw new ProductAssetRightsUnverifiedError(
-        sku,
-        rightsEvent.rightsState,
-        { message: `Authoritative rights event registration "${rightsEvent.productAssetRegistrationId}" does not match active registration "${hero.registration.id}"` },
-      );
+      throw new ProductAssetRightsUnverifiedError(sku, rightsEvent.rightsState, {
+        message: `Authoritative rights event registration "${rightsEvent.productAssetRegistrationId}" does not match active registration "${hero.registration.id}"`,
+      });
     }
     if (rightsEvent.rightsState !== ProductAssetRightsState.VERIFIED) {
-      throw new ProductAssetRightsUnverifiedError(
-        sku,
-        rightsEvent.rightsState,
-        { message: 'Authoritative rights event is not VERIFIED' },
-      );
+      throw new ProductAssetRightsUnverifiedError(sku, rightsEvent.rightsState, {
+        message: 'Authoritative rights event is not VERIFIED',
+      });
     }
     const now = this.clock.now();
     if (rightsEvent.effectiveAt > now) {
-      throw new ProductAssetRightsUnverifiedError(
-        sku,
-        rightsEvent.rightsState,
-        { message: `Authoritative rights event is not yet effective (effectiveAt: ${rightsEvent.effectiveAt.toISOString()})` },
-      );
+      throw new ProductAssetRightsUnverifiedError(sku, rightsEvent.rightsState, {
+        message: `Authoritative rights event is not yet effective (effectiveAt: ${rightsEvent.effectiveAt.toISOString()})`,
+      });
     }
     if (rightsEvent.expiresAt && rightsEvent.expiresAt <= now) {
-      throw new ProductAssetRightsUnverifiedError(
-        sku,
-        rightsEvent.rightsState,
-        { message: `Authoritative rights event has expired (expiresAt: ${rightsEvent.expiresAt.toISOString()})` },
-      );
+      throw new ProductAssetRightsUnverifiedError(sku, rightsEvent.rightsState, {
+        message: `Authoritative rights event has expired (expiresAt: ${rightsEvent.expiresAt.toISOString()})`,
+      });
     }
 
     let approvalEvent = hero.approvalEvent;
@@ -524,7 +516,10 @@ export class ProductAssetEligibilityEvaluator {
         message: `Authoritative approval event is not APPROVED (decision: ${approvalEvent.decision})`,
       });
     }
-    if (approvalEvent.validationAssessmentId && approvalEvent.validationAssessmentId !== assessment.id) {
+    if (
+      approvalEvent.validationAssessmentId &&
+      approvalEvent.validationAssessmentId !== assessment.id
+    ) {
       throw new ProductAssetIneligibleError(
         sku,
         `Authoritative approval event references validation assessment "${approvalEvent.validationAssessmentId}", expected current assessment "${assessment.id}"`,

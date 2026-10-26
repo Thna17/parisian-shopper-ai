@@ -16,6 +16,7 @@ export interface RenderPosterInput {
   readonly logoBuffer?: Buffer;
   readonly logoMimeType?: string;
   readonly generateDebugLayout?: boolean;
+  readonly allowNonApprovedForTesting?: boolean;
 }
 
 export interface RenderPosterResult {

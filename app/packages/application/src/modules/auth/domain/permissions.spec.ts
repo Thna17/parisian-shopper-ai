@@ -67,13 +67,29 @@ describe('Telegram role permissions', () => {
     expect(permissions.hasAnyRolePermission(roles, Permission.REJECT_CREATIVE)).toBe(false);
     expect(permissions.hasAnyRolePermission(roles, Permission.EXPORT_CREATIVE)).toBe(false);
     expect(permissions.hasAnyRolePermission(roles, Permission.PUBLISH_CREATIVE)).toBe(false);
-    expect(permissions.hasAnyRolePermission(roles, Permission.VERIFY_PRODUCT_ASSET_RIGHTS)).toBe(false);
+    expect(permissions.hasAnyRolePermission(roles, Permission.VERIFY_PRODUCT_ASSET_RIGHTS)).toBe(
+      false,
+    );
   });
 
   it('restricts VERIFY_PRODUCT_ASSET_RIGHTS to MARKETING_APPROVER and ADMIN, denying VIEWER and MARKETING_EDITOR', () => {
-    expect(permissions.hasAnyRolePermission([RoleCode.VIEWER], Permission.VERIFY_PRODUCT_ASSET_RIGHTS)).toBe(false);
-    expect(permissions.hasAnyRolePermission([RoleCode.MARKETING_EDITOR], Permission.VERIFY_PRODUCT_ASSET_RIGHTS)).toBe(false);
-    expect(permissions.hasAnyRolePermission([RoleCode.MARKETING_APPROVER], Permission.VERIFY_PRODUCT_ASSET_RIGHTS)).toBe(true);
-    expect(permissions.hasAnyRolePermission([RoleCode.ADMIN], Permission.VERIFY_PRODUCT_ASSET_RIGHTS)).toBe(true);
+    expect(
+      permissions.hasAnyRolePermission([RoleCode.VIEWER], Permission.VERIFY_PRODUCT_ASSET_RIGHTS),
+    ).toBe(false);
+    expect(
+      permissions.hasAnyRolePermission(
+        [RoleCode.MARKETING_EDITOR],
+        Permission.VERIFY_PRODUCT_ASSET_RIGHTS,
+      ),
+    ).toBe(false);
+    expect(
+      permissions.hasAnyRolePermission(
+        [RoleCode.MARKETING_APPROVER],
+        Permission.VERIFY_PRODUCT_ASSET_RIGHTS,
+      ),
+    ).toBe(true);
+    expect(
+      permissions.hasAnyRolePermission([RoleCode.ADMIN], Permission.VERIFY_PRODUCT_ASSET_RIGHTS),
+    ).toBe(true);
   });
 });

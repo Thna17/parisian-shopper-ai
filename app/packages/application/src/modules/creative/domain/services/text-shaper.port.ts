@@ -8,12 +8,14 @@ export interface ShapedGlyph {
   readonly xOffset: number;
   readonly yOffset: number;
   readonly path?: string | undefined;
-  readonly inkBounds?: {
-    readonly xMin: number;
-    readonly yMin: number;
-    readonly xMax: number;
-    readonly yMax: number;
-  } | undefined;
+  readonly inkBounds?:
+    | {
+        readonly xMin: number;
+        readonly yMin: number;
+        readonly xMax: number;
+        readonly yMax: number;
+      }
+    | undefined;
 }
 
 export interface ShapedRunBoundingBox {

@@ -342,7 +342,10 @@ export function validateCasStorageKey(casKey: string, layerId: string): void {
 
 export function validateSha256Digest(digest: string, fieldName: string, layerId: string): void {
   if (!digest || typeof digest !== 'string') {
-    throw new InvalidSceneLayerError(layerId, `Field "${fieldName}" must be a 64-character hex string`);
+    throw new InvalidSceneLayerError(
+      layerId,
+      `Field "${fieldName}" must be a 64-character hex string`,
+    );
   }
   if (!/^[0-9a-f]{64}$/.test(digest)) {
     throw new InvalidSceneLayerError(
@@ -375,21 +378,11 @@ export function validateBoundingBox(bounds: BoundingBox, layerId: string): void 
 export function validateLayerZIndex(layerId: string, group: LayerGroup, zIndex: number): void {
   assertFiniteNumber(zIndex, 'zIndex', layerId);
   if (!Number.isInteger(zIndex)) {
-    throw new InvalidSceneZIndexError(
-      layerId,
-      group,
-      zIndex,
-      'integer',
-    );
+    throw new InvalidSceneZIndexError(layerId, group, zIndex, 'integer');
   }
   const range = LAYER_Z_INDEX_RANGES[group];
   if (zIndex < range.min || zIndex > range.max) {
-    throw new InvalidSceneZIndexError(
-      layerId,
-      group,
-      zIndex,
-      `${range.min} - ${range.max}`,
-    );
+    throw new InvalidSceneZIndexError(layerId, group, zIndex, `${range.min} - ${range.max}`);
   }
 }
 
@@ -408,7 +401,9 @@ export function validateTypographyFont(
     );
   }
 
-  if (!APPROVED_TYPOGRAPHY_FONTS.includes(fontFamily as (typeof APPROVED_TYPOGRAPHY_FONTS)[number])) {
+  if (
+    !APPROVED_TYPOGRAPHY_FONTS.includes(fontFamily as (typeof APPROVED_TYPOGRAPHY_FONTS)[number])
+  ) {
     throw new InvalidTypographyFontError(fontFamily, APPROVED_TYPOGRAPHY_FONTS);
   }
 
@@ -459,7 +454,11 @@ export function validateProductHero(payload: ProductHeroPayload, layerId: string
   validateCasStorageKey(payload.casStorageKey, layerId);
   validateSha256Digest(payload.sha256, 'sha256', layerId);
 
-  if (!payload.productSnapshotId || !payload.productAssetId || !payload.productAssetRegistrationId) {
+  if (
+    !payload.productSnapshotId ||
+    !payload.productAssetId ||
+    !payload.productAssetRegistrationId
+  ) {
     throw new InvalidSceneLayerError(
       layerId,
       'Product hero requires valid productSnapshotId, productAssetId, and productAssetRegistrationId evidence bindings',
@@ -480,14 +479,22 @@ export function validateProductHero(payload: ProductHeroPayload, layerId: string
     );
   }
 
-  if (!payload.alphaEvidence || !payload.alphaEvidence.hasAlpha || payload.alphaEvidence.transparencyRatio <= 0) {
+  if (
+    !payload.alphaEvidence ||
+    !payload.alphaEvidence.hasAlpha ||
+    payload.alphaEvidence.transparencyRatio <= 0
+  ) {
     throw new InvalidSceneLayerError(
       layerId,
       'Product hero must have alpha transparency evidence per W03-DEC-004',
     );
   }
 
-  assertFiniteNumber(payload.alphaEvidence.transparencyRatio, 'alphaEvidence.transparencyRatio', layerId);
+  assertFiniteNumber(
+    payload.alphaEvidence.transparencyRatio,
+    'alphaEvidence.transparencyRatio',
+    layerId,
+  );
 
   if (!payload.containmentConfig) {
     throw new SceneContainmentError(layerId, 'Product hero requires containmentConfig');
@@ -573,7 +580,13 @@ export function validateCanvasGeometry(
     throw new InvalidSceneLayerError(
       'canvas',
       `Dimensions ${width}x${height} do not match standard ${expected.width}x${expected.height} for aspect ratio ${aspectRatio}`,
-      { width, height, expectedWidth: expected.width, expectedHeight: expected.height, aspectRatio },
+      {
+        width,
+        height,
+        expectedWidth: expected.width,
+        expectedHeight: expected.height,
+        aspectRatio,
+      },
     );
   }
 
@@ -582,7 +595,12 @@ export function validateCanvasGeometry(
   assertFiniteNumber(safeMargins.left, 'safeMargins.left', 'canvas');
   assertFiniteNumber(safeMargins.right, 'safeMargins.right', 'canvas');
 
-  if (safeMargins.top < 0 || safeMargins.bottom < 0 || safeMargins.left < 0 || safeMargins.right < 0) {
+  if (
+    safeMargins.top < 0 ||
+    safeMargins.bottom < 0 ||
+    safeMargins.left < 0 ||
+    safeMargins.right < 0
+  ) {
     throw new InvalidSceneLayerError('canvas', 'Safe margins must be non-negative numbers');
   }
 
@@ -993,10 +1011,7 @@ export function validateSceneGraph(
 
   for (const layer of layers) {
     if (seenKeys.has(layer.layerKey)) {
-      throw new InvalidSceneLayerError(
-        layer.layerKey,
-        `Duplicate layerKey: "${layer.layerKey}"`,
-      );
+      throw new InvalidSceneLayerError(layer.layerKey, `Duplicate layerKey: "${layer.layerKey}"`);
     }
     seenKeys.add(layer.layerKey);
 

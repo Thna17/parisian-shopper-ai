@@ -163,9 +163,10 @@ const VERSION_INCLUDE_RELATIONS = {
 export class PrismaCreativeSceneRepository implements CreativeSceneRepository {
   public constructor(private readonly prisma: PrismaService) {}
 
-  public async createInitialScene(
-    input: CreateInitialSceneAtomicInput,
-  ): Promise<{ readonly scene: CreativeSceneRecord; readonly version: CreativeSceneVersionRecord }> {
+  public async createInitialScene(input: CreateInitialSceneAtomicInput): Promise<{
+    readonly scene: CreativeSceneRecord;
+    readonly version: CreativeSceneVersionRecord;
+  }> {
     return this.prisma.$transaction(async (tx) => {
       // 1. Create CreativeScene container
       const createdScene = await tx.creativeScene.create({
@@ -303,9 +304,7 @@ export class PrismaCreativeSceneRepository implements CreativeSceneRepository {
     try {
       return await this.prisma.$transaction(async (tx) => {
         // 1. Establish row lock on creative_scenes to serialize revisions
-        const sceneRows = await tx.$queryRaw<
-          Array<{ id: string; current_version_number: number }>
-        >`
+        const sceneRows = await tx.$queryRaw<Array<{ id: string; current_version_number: number }>>`
           SELECT id, current_version_number FROM creative_scenes WHERE id = ${input.sceneId}::uuid FOR UPDATE
         `;
 
@@ -469,10 +468,7 @@ export class PrismaCreativeSceneRepository implements CreativeSceneRepository {
         return toVersionRecord(fullVersion);
       });
     } catch (error: unknown) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new SceneConcurrencyConflictError(
           input.sceneId,
           input.expectedVersionNumber + 1,
@@ -546,9 +542,7 @@ export class PrismaCreativeSceneRepository implements CreativeSceneRepository {
     return row ? toSceneRecord(row) : null;
   }
 
-  public async findVersionById(
-    versionId: string,
-  ): Promise<CreativeSceneVersionRecord | null> {
+  public async findVersionById(versionId: string): Promise<CreativeSceneVersionRecord | null> {
     const row = await this.prisma.creativeSceneVersion.findUnique({
       where: { id: versionId },
       include: VERSION_INCLUDE_RELATIONS,
@@ -593,9 +587,7 @@ export class PrismaCreativeSceneRepository implements CreativeSceneRepository {
     return row ? toVersionRecord(row) : null;
   }
 
-  public async listVersions(
-    sceneId: string,
-  ): Promise<readonly CreativeSceneVersionRecord[]> {
+  public async listVersions(sceneId: string): Promise<readonly CreativeSceneVersionRecord[]> {
     const rows = await this.prisma.creativeSceneVersion.findMany({
       where: { sceneId },
       orderBy: { versionNumber: 'asc' },

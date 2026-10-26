@@ -103,7 +103,11 @@ export class ReplaceProductAssetUseCase {
     const { actor, previousRegistrationId, sku, role, buffer, sourceSystem } = command;
 
     if (!actor || !actor.userId) {
-      throw new ProductAssetUnauthorizedError('anonymous', 'replace-product-asset', 'AUTHENTICATED');
+      throw new ProductAssetUnauthorizedError(
+        'anonymous',
+        'replace-product-asset',
+        'AUTHENTICATED',
+      );
     }
 
     const isAuthorized =

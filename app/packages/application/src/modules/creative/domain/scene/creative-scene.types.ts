@@ -5,11 +5,7 @@ import type { BoundingBox } from '../services/text-layout-engine.js';
 export type { PosterAspectRatio, SafeMargins, BoundingBox };
 
 export type LayerGroup =
-  | 'BACKGROUND'
-  | 'SURFACE_SHADOW'
-  | 'PRODUCT_HERO'
-  | 'TYPOGRAPHY'
-  | 'BRAND_DECORATION';
+  'BACKGROUND' | 'SURFACE_SHADOW' | 'PRODUCT_HERO' | 'TYPOGRAPHY' | 'BRAND_DECORATION';
 
 export type BackgroundLayerType =
   | 'GENERATED_BACKGROUND'
@@ -17,19 +13,13 @@ export type BackgroundLayerType =
   | 'SOLID_COLOR_BACKGROUND'
   | 'GRADIENT_BACKGROUND';
 
-export type SurfaceShadowLayerType =
-  | 'CONTACT_SHADOW'
-  | 'PEDESTAL_SURFACE'
-  | 'DIRECTIONAL_DROP';
+export type SurfaceShadowLayerType = 'CONTACT_SHADOW' | 'PEDESTAL_SURFACE' | 'DIRECTIONAL_DROP';
 
 export type ProductHeroLayerType = 'HERO_CUTOUT';
 
 export type TypographyLayerType = 'TYPOGRAPHY_BLOCK';
 
-export type BrandDecorationLayerType =
-  | 'BRAND_MARK'
-  | 'BRAND_DIVIDER'
-  | 'BRAND_FRAME';
+export type BrandDecorationLayerType = 'BRAND_MARK' | 'BRAND_DIVIDER' | 'BRAND_FRAME';
 
 export type SceneLayerType =
   | BackgroundLayerType
@@ -38,13 +28,7 @@ export type SceneLayerType =
   | TypographyLayerType
   | BrandDecorationLayerType;
 
-export type BlendMode =
-  | 'NORMAL'
-  | 'MULTIPLY'
-  | 'SCREEN'
-  | 'OVERLAY'
-  | 'DARKEN'
-  | 'LIGHTEN';
+export type BlendMode = 'NORMAL' | 'MULTIPLY' | 'SCREEN' | 'OVERLAY' | 'DARKEN' | 'LIGHTEN';
 
 export interface CanvasDimensions {
   readonly width: number;
@@ -60,11 +44,7 @@ export const STANDARD_ASPECT_RATIO_DIMENSIONS: Record<PosterAspectRatio, CanvasD
 };
 
 export type SceneTemplateId =
-  | 'CENTERED_HERO'
-  | 'EDITORIAL_SPLIT'
-  | 'KHMER_SEASONAL'
-  | 'SCENT_STORY'
-  | 'PROMOTION_PRICE_CTA';
+  'CENTERED_HERO' | 'EDITORIAL_SPLIT' | 'KHMER_SEASONAL' | 'SCENT_STORY' | 'PROMOTION_PRICE_CTA';
 
 export const CANONICAL_SCENE_TEMPLATES: readonly SceneTemplateId[] = [
   'CENTERED_HERO',
@@ -96,7 +76,9 @@ export type SceneOperationCode =
   | 'REPROFILE'
   | 'MIGRATION';
 
-export const LAYER_Z_INDEX_RANGES: Readonly<Record<LayerGroup, { readonly min: number; readonly max: number }>> = {
+export const LAYER_Z_INDEX_RANGES: Readonly<
+  Record<LayerGroup, { readonly min: number; readonly max: number }>
+> = {
   BACKGROUND: { min: 0, max: 99 },
   SURFACE_SHADOW: { min: 100, max: 199 },
   PRODUCT_HERO: { min: 200, max: 299 },
@@ -171,9 +153,7 @@ export interface DirectionalDropPayload {
 }
 
 export type SurfaceShadowPayload =
-  | ContactShadowPayload
-  | PedestalSurfacePayload
-  | DirectionalDropPayload;
+  ContactShadowPayload | PedestalSurfacePayload | DirectionalDropPayload;
 
 export interface ProductHeroPayload {
   readonly productSnapshotId: string;
@@ -210,11 +190,13 @@ export interface ProductHeroPayload {
   };
   readonly scale?: number | undefined;
   readonly rotationDegrees?: number | undefined;
-  readonly shadow?: {
-    readonly shadowType: string;
-    readonly blurRadius: number;
-    readonly color: string;
-  } | undefined;
+  readonly shadow?:
+    | {
+        readonly shadowType: string;
+        readonly blurRadius: number;
+        readonly color: string;
+      }
+    | undefined;
 }
 
 export interface TypographyTextElement {
@@ -279,17 +261,10 @@ export interface BrandFramePayload {
   readonly thicknessPx?: number | undefined;
 }
 
-export type BrandPayload =
-  | BrandMarkPayload
-  | BrandDividerPayload
-  | BrandFramePayload;
+export type BrandPayload = BrandMarkPayload | BrandDividerPayload | BrandFramePayload;
 
 export type SceneLayerPayload =
-  | BackgroundPayload
-  | SurfaceShadowPayload
-  | ProductHeroPayload
-  | TypographyPayload
-  | BrandPayload;
+  BackgroundPayload | SurfaceShadowPayload | ProductHeroPayload | TypographyPayload | BrandPayload;
 
 export interface LayerDependencyDraft {
   readonly id?: string | undefined;
@@ -305,7 +280,8 @@ export interface LayerDependencyDraft {
     | 'CONTENT_VERSION'
     | 'BRAND_PROFILE'
     | 'FONT_ASSET'
-    | 'TYPOGRAPHY_POLICY';
+    | 'TYPOGRAPHY_POLICY'
+    | 'TEMPLATE_DEFINITION';
   readonly dependencyIdentifier: string;
   readonly evidenceIdentifier?: string | null | undefined;
   readonly immutableDigest: string;

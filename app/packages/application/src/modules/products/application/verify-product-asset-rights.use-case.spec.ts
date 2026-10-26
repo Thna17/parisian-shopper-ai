@@ -74,9 +74,7 @@ class MockProductAssetRepository implements ProductAssetRepository {
     return Promise.resolve(Array.from(this.registrations.values()).filter((r) => r.sku === sku));
   }
 
-  public findAllHeroCutoutRegistrations(
-    sku: string,
-  ): Promise<readonly ProductAssetRegistration[]> {
+  public findAllHeroCutoutRegistrations(sku: string): Promise<readonly ProductAssetRegistration[]> {
     return Promise.resolve(
       Array.from(this.registrations.values()).filter(
         (r) => r.sku === sku && r.role === ProductAssetRole.HERO_CUTOUT,
@@ -125,9 +123,7 @@ class MockProductAssetRepository implements ProductAssetRepository {
     return Promise.resolve(event);
   }
 
-  public findLatestRightsEvent(
-    registrationId: string,
-  ): Promise<ProductAssetRightsEvent | null> {
+  public findLatestRightsEvent(registrationId: string): Promise<ProductAssetRightsEvent | null> {
     const current = this.rightsEvents.get(registrationId) ?? [];
     return Promise.resolve(current[0] ?? null);
   }
@@ -217,7 +213,9 @@ class MockUnitOfWork implements ProductAssetRegistrationUnitOfWork {
     };
   }
 
-  public async executeApproval(input: ApprovalTransactionInput): Promise<ProductAssetApprovalEvent> {
+  public async executeApproval(
+    input: ApprovalTransactionInput,
+  ): Promise<ProductAssetApprovalEvent> {
     await this.repo.saveApprovalEvent(input.approvalEvent);
     if (input.predecessorRetiredEvent) {
       await this.repo.saveApprovalEvent(input.predecessorRetiredEvent);

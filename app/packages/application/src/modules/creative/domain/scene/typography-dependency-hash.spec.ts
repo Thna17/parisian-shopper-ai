@@ -7,10 +7,7 @@ import {
   TYPOGRAPHY_POLICY_VERSION,
   TYPOGRAPHY_SHAPING_ENGINE_VERSION,
 } from './scene-hash.js';
-import type {
-  LayerDependencyDraft,
-  SceneLayerDraft,
-} from './creative-scene.types.js';
+import type { LayerDependencyDraft, SceneLayerDraft } from './creative-scene.types.js';
 
 describe('Typography Dependency Hashing and W20 Reproducibility (W21 Deliverable H)', () => {
   const baseTypographyLayer: SceneLayerDraft = {

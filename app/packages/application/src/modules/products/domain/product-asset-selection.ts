@@ -1,7 +1,4 @@
-import {
-  ProductAssetApprovalDecision,
-  type ProductAssetRegistration,
-} from './product-asset.js';
+import { ProductAssetApprovalDecision, type ProductAssetRegistration } from './product-asset.js';
 
 export interface RegistrationWithApprovalDecision {
   readonly registration: ProductAssetRegistration;
@@ -22,7 +19,10 @@ export interface RegistrationWithApprovalDecision {
  * 5. If all registrations are RETIRED, returns null.
  */
 export function selectActiveHeroCutoutCandidate<
-  T extends { registration: ProductAssetRegistration; latestDecision: ProductAssetApprovalDecision },
+  T extends {
+    registration: ProductAssetRegistration;
+    latestDecision: ProductAssetApprovalDecision;
+  },
 >(items: readonly T[]): T | null {
   if (!items || items.length === 0) {
     return null;

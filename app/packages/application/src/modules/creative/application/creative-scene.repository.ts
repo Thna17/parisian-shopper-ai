@@ -76,9 +76,7 @@ export interface CreativeSceneRepository {
     input: CreateInitialSceneAtomicInput,
   ): Promise<{ readonly scene: CreativeSceneRecord; readonly version: CreativeSceneVersionRecord }>;
 
-  createRevision(
-    input: CreateRevisionAtomicInput,
-  ): Promise<CreativeSceneVersionRecord>;
+  createRevision(input: CreateRevisionAtomicInput): Promise<CreativeSceneVersionRecord>;
 
   recordDependencyInvalidation(
     input: RecordDependencyInvalidationInput,
@@ -91,11 +89,7 @@ export interface CreativeSceneRepository {
     sceneId: string,
     versionNumber: number,
   ): Promise<CreativeSceneVersionRecord | null>;
-  findLatestVersionByJobId(
-    creativeJobId: string,
-  ): Promise<CreativeSceneVersionRecord | null>;
-  findLatestVersionBySceneId(
-    sceneId: string,
-  ): Promise<CreativeSceneVersionRecord | null>;
+  findLatestVersionByJobId(creativeJobId: string): Promise<CreativeSceneVersionRecord | null>;
+  findLatestVersionBySceneId(sceneId: string): Promise<CreativeSceneVersionRecord | null>;
   listVersions(sceneId: string): Promise<readonly CreativeSceneVersionRecord[]>;
 }
