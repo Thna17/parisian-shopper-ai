@@ -374,7 +374,9 @@ describe('configuration validation', () => {
           PRODUCT_API_BASE_URL: 'https://untrusted-host.example.com',
           PRODUCT_API_ALLOWED_HOSTS: 'api.mekhla.digital',
         }),
-      ).toThrow("PRODUCT_API_BASE_URL host 'untrusted-host.example.com' is not in PRODUCT_API_ALLOWED_HOSTS");
+      ).toThrow(
+        "PRODUCT_API_BASE_URL host 'untrusted-host.example.com' is not in PRODUCT_API_ALLOWED_HOSTS",
+      );
     });
 
     it('rejects missing PRODUCT_API_BUSINESS_ID when FEATURE_PRODUCT_API=true', () => {

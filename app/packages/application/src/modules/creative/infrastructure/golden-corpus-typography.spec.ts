@@ -46,9 +46,7 @@ async function createFixtures(width = 1080, height = 1350): Promise<TestFixtures
   })
     .png()
     .toBuffer();
-  const canonicalProductSha256 = createHash('sha256')
-    .update(canonicalProductBuffer)
-    .digest('hex');
+  const canonicalProductSha256 = createHash('sha256').update(canonicalProductBuffer).digest('hex');
 
   return {
     backgroundBuffer,
@@ -129,7 +127,8 @@ describe('Golden Corpus Typography & Acceptance Verification (W21-G)', () => {
 
     it('asserts no wrapped line index > 0 starts with orphan Khmer punctuation or repetition mark', () => {
       const khmerItems = GOLDEN_TYPOGRAPHY_CORPUS.filter(
-        (item) => item.shouldPass && (item.expectedScript === 'KHMER' || item.expectedScript === 'MIXED'),
+        (item) =>
+          item.shouldPass && (item.expectedScript === 'KHMER' || item.expectedScript === 'MIXED'),
       );
 
       for (const item of khmerItems) {
@@ -180,7 +179,9 @@ describe('Golden Corpus Typography & Acceptance Verification (W21-G)', () => {
     });
 
     it('asserts Khmer Coeng (U+17D2) is never stranded at line-end or detached at line-start', () => {
-      const coengItem = GOLDEN_TYPOGRAPHY_CORPUS.find((item) => item.id === 'khmer-coeng-clusters')!;
+      const coengItem = GOLDEN_TYPOGRAPHY_CORPUS.find(
+        (item) => item.id === 'khmer-coeng-clusters',
+      )!;
       const wrapped = TextLayoutEngine.wrapText({
         text: coengItem.text,
         maxWidth: 220,
@@ -259,7 +260,11 @@ describe('Golden Corpus Typography & Acceptance Verification (W21-G)', () => {
   });
 
   describe('4. Full Template Poster Composition across Multiple Aspect Ratios', () => {
-    const aspectRatios: { readonly ratio: '1:1' | '4:5' | '9:16'; readonly width: number; readonly height: number }[] = [
+    const aspectRatios: {
+      readonly ratio: '1:1' | '4:5' | '9:16';
+      readonly width: number;
+      readonly height: number;
+    }[] = [
       { ratio: '1:1', width: 1080, height: 1080 },
       { ratio: '4:5', width: 1080, height: 1350 },
       { ratio: '9:16', width: 1080, height: 1920 },
@@ -317,6 +322,7 @@ describe('Golden Corpus Typography & Acceptance Verification (W21-G)', () => {
             backgroundBuffer: fixtures.backgroundBuffer,
             backgroundMimeType: 'image/jpeg',
             backgroundSha256: fixtures.backgroundSha256,
+            allowNonApprovedForTesting: true,
           });
 
           expect(result.mimeType).toBe('image/png');
@@ -467,6 +473,7 @@ describe('Golden Corpus Typography & Acceptance Verification (W21-G)', () => {
         backgroundBuffer: fixtures.backgroundBuffer,
         backgroundMimeType: 'image/jpeg',
         backgroundSha256: fixtures.backgroundSha256,
+        allowNonApprovedForTesting: true,
       };
 
       const run1 = await compositor.renderPoster(input);

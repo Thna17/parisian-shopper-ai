@@ -1,8 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import {
-  type LayerDependencyDraft,
-  type SceneLayerDraft,
-} from './creative-scene.types.js';
+import { type LayerDependencyDraft, type SceneLayerDraft } from './creative-scene.types.js';
 import {
   canonicalStringify,
   computeApprovalEventDigest,
@@ -19,6 +16,7 @@ import {
   computeRightsEventDigest,
   computeSceneHash,
   computeSnapshotDigest,
+  computeTemplateDependencyDigest,
   computeTypographyPolicyDigest,
   type TypographyDependencyMetadata,
   TYPOGRAPHY_POLICY_VERSION,
@@ -211,7 +209,9 @@ describe('Scene Hashing and Canonical Serialization', () => {
       };
       const original = computeRegistrationDigest(registration);
 
-      expect(computeRegistrationDigest({ ...registration, rightsState: 'EXPIRED' })).not.toBe(original);
+      expect(computeRegistrationDigest({ ...registration, rightsState: 'EXPIRED' })).not.toBe(
+        original,
+      );
       expect(computeRegistrationDigest({ ...registration, role: 'DETAIL' })).not.toBe(original);
       expect(computeRegistrationDigest({ ...registration, sku: 'CHANEL-NO19' })).not.toBe(original);
     });
@@ -227,7 +227,9 @@ describe('Scene Hashing and Canonical Serialization', () => {
       const original = computeAssessmentDigest(assessment);
 
       expect(computeAssessmentDigest({ ...assessment, isValid: false })).not.toBe(original);
-      expect(computeAssessmentDigest({ ...assessment, validatorVersion: '2.0.0' })).not.toBe(original);
+      expect(computeAssessmentDigest({ ...assessment, validatorVersion: '2.0.0' })).not.toBe(
+        original,
+      );
       expect(computeAssessmentDigest({ ...assessment, status: 'FAIL' })).not.toBe(original);
     });
 
@@ -238,7 +240,9 @@ describe('Scene Hashing and Canonical Serialization', () => {
         effectiveAt: new Date('2026-01-01T00:00:00Z'),
       };
       const rightsOrig = computeRightsEventDigest(rights);
-      expect(computeRightsEventDigest({ ...rights, rightsState: 'RESTRICTED' })).not.toBe(rightsOrig);
+      expect(computeRightsEventDigest({ ...rights, rightsState: 'RESTRICTED' })).not.toBe(
+        rightsOrig,
+      );
 
       const approval = {
         id: '66666666-6666-4666-8666-666666666666',
@@ -250,7 +254,9 @@ describe('Scene Hashing and Canonical Serialization', () => {
     });
 
     it('computeContentVersionDigest requires an authoritative record object and changes on property mutations', () => {
-      expect(() => computeContentVersionDigest('string-id' as unknown as object)).toThrow(TypeError);
+      expect(() => computeContentVersionDigest('string-id' as unknown as object)).toThrow(
+        TypeError,
+      );
 
       const contentVersion = {
         id: 'cv-100',
@@ -268,8 +274,12 @@ describe('Scene Hashing and Canonical Serialization', () => {
       const origDigest = computeContentVersionDigest(contentVersion);
       expect(origDigest).toMatch(/^[0-9a-f]{64}$/);
 
-      expect(computeContentVersionDigest({ ...contentVersion, model: 'gpt-4o-mini' })).not.toBe(origDigest);
-      expect(computeContentVersionDigest({ ...contentVersion, promptVersion: '1.3.0' })).not.toBe(origDigest);
+      expect(computeContentVersionDigest({ ...contentVersion, model: 'gpt-4o-mini' })).not.toBe(
+        origDigest,
+      );
+      expect(computeContentVersionDigest({ ...contentVersion, promptVersion: '1.3.0' })).not.toBe(
+        origDigest,
+      );
       expect(
         computeContentVersionDigest({
           ...contentVersion,
@@ -293,8 +303,12 @@ describe('Scene Hashing and Canonical Serialization', () => {
       expect(origDigest).toMatch(/^[0-9a-f]{64}$/);
 
       expect(computeBrandRuleDigest({ ...brandRuleVersion, version: 3 })).not.toBe(origDigest);
-      expect(computeBrandRuleDigest({ ...brandRuleVersion, status: 'RETIRED' })).not.toBe(origDigest);
-      expect(computeBrandRuleDigest({ ...brandRuleVersion, name: 'Parisian Luxury Winter 2026' })).not.toBe(origDigest);
+      expect(computeBrandRuleDigest({ ...brandRuleVersion, status: 'RETIRED' })).not.toBe(
+        origDigest,
+      );
+      expect(
+        computeBrandRuleDigest({ ...brandRuleVersion, name: 'Parisian Luxury Winter 2026' }),
+      ).not.toBe(origDigest);
       expect(
         computeBrandRuleDigest({
           ...brandRuleVersion,
@@ -304,7 +318,9 @@ describe('Scene Hashing and Canonical Serialization', () => {
     });
 
     it('computeFontAssetDigest produces stable 64-char hex digest and alters on any font metadata property change', () => {
-      expect(() => computeFontAssetDigest('not-an-object' as unknown as TypographyDependencyMetadata)).toThrow(TypeError);
+      expect(() =>
+        computeFontAssetDigest('not-an-object' as unknown as TypographyDependencyMetadata),
+      ).toThrow(TypeError);
 
       const fontMeta = {
         fontId: 'noto-sans-khmer-regular',
@@ -327,8 +343,12 @@ describe('Scene Hashing and Canonical Serialization', () => {
       expect(computeFontAssetDigest(reordered)).toBe(origDigest);
 
       expect(computeFontAssetDigest({ ...fontMeta, byteSize: 147793 })).not.toBe(origDigest);
-      expect(computeFontAssetDigest({ ...fontMeta, fontFamily: 'Noto Serif Khmer' })).not.toBe(origDigest);
-      expect(computeFontAssetDigest({ ...fontMeta, fontSha256: 'a'.repeat(64) })).not.toBe(origDigest);
+      expect(computeFontAssetDigest({ ...fontMeta, fontFamily: 'Noto Serif Khmer' })).not.toBe(
+        origDigest,
+      );
+      expect(computeFontAssetDigest({ ...fontMeta, fontSha256: 'a'.repeat(64) })).not.toBe(
+        origDigest,
+      );
     });
 
     it('computeTypographyPolicyDigest produces stable 64-char hex digest and alters on any policy property change', () => {
@@ -341,15 +361,24 @@ describe('Scene Hashing and Canonical Serialization', () => {
       const policy = {
         policyVersion: TYPOGRAPHY_POLICY_VERSION,
         shapingEngineVersion: TYPOGRAPHY_SHAPING_ENGINE_VERSION,
-        approvedFonts: ['playfair-display-variable', 'montserrat-variable', 'noto-sans-khmer-regular', 'noto-sans-khmer-bold'],
+        approvedFonts: [
+          'playfair-display-variable',
+          'montserrat-variable',
+          'noto-sans-khmer-regular',
+          'noto-sans-khmer-bold',
+        ],
         normalization: 'NFC' as const,
         bidiEnforcement: 'FAIL_CLOSED' as const,
       };
       const origDigest = computeTypographyPolicyDigest(policy);
       expect(origDigest).toMatch(/^[0-9a-f]{64}$/);
 
-      expect(computeTypographyPolicyDigest({ ...policy, policyVersion: 'W22-v1.0' })).not.toBe(origDigest);
-      expect(computeTypographyPolicyDigest({ ...policy, shapingEngineVersion: 'harfbuzzjs@2.0.0' })).not.toBe(origDigest);
+      expect(computeTypographyPolicyDigest({ ...policy, policyVersion: 'W22-v1.0' })).not.toBe(
+        origDigest,
+      );
+      expect(
+        computeTypographyPolicyDigest({ ...policy, shapingEngineVersion: 'harfbuzzjs@2.0.0' }),
+      ).not.toBe(origDigest);
       expect(
         computeTypographyPolicyDigest({
           ...policy,
@@ -490,6 +519,69 @@ describe('Scene Hashing and Canonical Serialization', () => {
         layers: [baseBgLayer, baseHeroLayer, revisedTypo],
       });
       expect(hashAfter).not.toBe(hashBefore);
+    });
+
+    it('changes scene hash when templateId or templateVersion changes', () => {
+      const hashV1 = computeSceneHash(sceneInput);
+      const hashV2 = computeSceneHash({
+        ...sceneInput,
+        templateVersion: '1.3.0',
+      });
+      expect(hashV2).not.toBe(hashV1);
+
+      const hashOtherFamily = computeSceneHash({
+        ...sceneInput,
+        templateId: 'CENTERED_HERO',
+      });
+      expect(hashOtherFamily).not.toBe(hashV1);
+    });
+  });
+
+  describe('Template Definition Dependency Integration', () => {
+    it('computes deterministic digest for template definition dependency metadata', () => {
+      const metadata = {
+        templateId: 'CENTERED_HERO',
+        templateVersion: '1.0.0',
+        tokenSetVersion: '2026.1',
+        contentDigest: 'a'.repeat(64),
+        approvalReference: 'W03-DEC-006',
+      };
+      const digest1 = computeTemplateDependencyDigest(metadata);
+      const digest2 = computeTemplateDependencyDigest({ ...metadata });
+      expect(digest1).toMatch(/^[0-9a-f]{64}$/);
+      expect(digest1).toBe(digest2);
+    });
+
+    it('detects changes in template content digest or approval reference', () => {
+      const base = {
+        templateId: 'EDITORIAL_SPLIT',
+        templateVersion: '1.0.0',
+        tokenSetVersion: '2026.1',
+        contentDigest: 'b'.repeat(64),
+        approvalReference: 'W03-DEC-006',
+      };
+      const digest1 = computeTemplateDependencyDigest(base);
+      const digest2 = computeTemplateDependencyDigest({
+        ...base,
+        contentDigest: 'c'.repeat(64),
+      });
+      expect(digest2).not.toBe(digest1);
+    });
+
+    it('binds TEMPLATE_DEFINITION layer dependency into deterministic dependencyHash', () => {
+      const templateDep: LayerDependencyDraft = {
+        dependencyType: 'TEMPLATE_DEFINITION',
+        dependencyIdentifier: 'SCENT_STORY@1.0.0',
+        evidenceIdentifier: 'W03-DEC-006',
+        immutableDigest: 'f'.repeat(64),
+        sortOrder: 30,
+      };
+      const depsWithTemplate = [...sampleDependencies, templateDep];
+      const hashWithTemplate = computeDependencyHash(depsWithTemplate);
+      const hashWithoutTemplate = computeDependencyHash(sampleDependencies);
+
+      expect(hashWithTemplate).toMatch(/^[0-9a-f]{64}$/);
+      expect(hashWithTemplate).not.toBe(hashWithoutTemplate);
     });
   });
 });

@@ -76,9 +76,10 @@ class InMemoryCreativeSceneRepository implements CreativeSceneRepository {
   public invalidationEvents: SceneInvalidationEventRecord[] = [];
   public outboxEvents: OutboxEventDraft[] = [];
 
-  public async createInitialScene(
-    input: CreateInitialSceneAtomicInput,
-  ): Promise<{ readonly scene: CreativeSceneRecord; readonly version: CreativeSceneVersionRecord }> {
+  public async createInitialScene(input: CreateInitialSceneAtomicInput): Promise<{
+    readonly scene: CreativeSceneRecord;
+    readonly version: CreativeSceneVersionRecord;
+  }> {
     const sceneId = 'scene-uuid-1';
     const versionId = 'version-uuid-1';
     const scene: CreativeSceneRecord = {
@@ -303,9 +304,7 @@ class InMemoryCreativeSceneRepository implements CreativeSceneRepository {
     return await Promise.resolve(latest);
   }
 
-  public async listVersions(
-    sceneId: string,
-  ): Promise<readonly CreativeSceneVersionRecord[]> {
+  public async listVersions(sceneId: string): Promise<readonly CreativeSceneVersionRecord[]> {
     const result: CreativeSceneVersionRecord[] = [];
     for (const v of this.versions.values()) {
       if (v.sceneId === sceneId) result.push(v);
@@ -612,8 +611,10 @@ describe('CreativeScene Use Cases', () => {
         }
         return Promise.resolve(createAuthoritativeEvidence());
       },
-      evaluateHeroEligibility: (): Promise<{ isEligible: boolean }> => Promise.resolve({ isEligible: true }),
-      assertHeroEligible: (): Promise<AuthoritativeHeroEvidence> => Promise.resolve(createAuthoritativeEvidence()),
+      evaluateHeroEligibility: (): Promise<{ isEligible: boolean }> =>
+        Promise.resolve({ isEligible: true }),
+      assertHeroEligible: (): Promise<AuthoritativeHeroEvidence> =>
+        Promise.resolve(createAuthoritativeEvidence()),
     } as unknown as ProductAssetEligibilityEvaluator;
 
     contentRepo = {
@@ -707,8 +708,8 @@ describe('CreativeScene Use Cases', () => {
       const result = await createUseCase.execute(validCreateInput);
       const deps = result.version.dependencies;
 
-      // 8 base (0..7) + 4 font assets (10..13) + 1 typography policy (20) = 13 dependencies
-      expect(deps).toHaveLength(13);
+      // 8 base (0..7) + 4 font assets (10..13) + 1 typography policy (20) + 1 template definition (30) = 14 dependencies
+      expect(deps).toHaveLength(14);
 
       // Verify all 4 approved fonts are bound
       const fontDeps = deps.filter((d) => d.dependencyType === 'FONT_ASSET');
@@ -748,6 +749,12 @@ describe('CreativeScene Use Cases', () => {
         bidiEnforcement: 'FAIL_CLOSED',
       });
       expect(policyDep?.immutableDigest).toBe(expectedPolicyDigest);
+
+      // Verify template definition dependency (sortOrder: 30)
+      const templateDep = deps.find((d) => d.dependencyType === 'TEMPLATE_DEFINITION');
+      expect(templateDep).toBeDefined();
+      expect(templateDep?.sortOrder).toBe(30);
+      expect(templateDep?.dependencyIdentifier).toBe('EDITORIAL_SPLIT@1.0.0');
     });
 
     it('attaches sceneLayerKey to typoLayer.layerKey in verifier drafts', async () => {
@@ -912,7 +919,10 @@ describe('CreativeScene Use Cases', () => {
       const hero = layers[2]!;
       layers[2] = {
         ...hero,
-        payload: { ...hero.payload, productAssetRegistrationId: '99999999-9999-4999-8999-999999999999' },
+        payload: {
+          ...hero.payload,
+          productAssetRegistrationId: '99999999-9999-4999-8999-999999999999',
+        },
       };
 
       await expect(createUseCase.execute({ ...validCreateInput, layers })).rejects.toThrow(
@@ -960,7 +970,10 @@ describe('CreativeScene Use Cases', () => {
       const hero = layers[2]!;
       layers[2] = {
         ...hero,
-        payload: { ...hero.payload, validationAssessmentId: '99999999-9999-4999-8999-999999999999' },
+        payload: {
+          ...hero.payload,
+          validationAssessmentId: '99999999-9999-4999-8999-999999999999',
+        },
       };
 
       await expect(createUseCase.execute({ ...validCreateInput, layers })).rejects.toThrow(
@@ -1133,9 +1146,7 @@ describe('CreativeScene Use Cases', () => {
 
     it('16. rejects creation fail-closed when authoritative rights event is unverified or absent', async () => {
       assetEvaluator.resolveAuthoritativeHeroEvidence = (): Promise<AuthoritativeHeroEvidence> =>
-        Promise.reject(
-          new ProductAssetRightsUnverifiedError('CHANEL-NO5', 'UNVERIFIED'),
-        );
+        Promise.reject(new ProductAssetRightsUnverifiedError('CHANEL-NO5', 'UNVERIFIED'));
 
       await expect(createUseCase.execute(validCreateInput)).rejects.toThrow(
         ProductAssetRightsUnverifiedError,
@@ -1147,9 +1158,7 @@ describe('CreativeScene Use Cases', () => {
 
     it('17. rejects creation fail-closed when authoritative approval event is unapproved or absent', async () => {
       assetEvaluator.resolveAuthoritativeHeroEvidence = (): Promise<AuthoritativeHeroEvidence> =>
-        Promise.reject(
-          new ProductAssetUnapprovedError('CHANEL-NO5', 'REJECTED'),
-        );
+        Promise.reject(new ProductAssetUnapprovedError('CHANEL-NO5', 'REJECTED'));
 
       await expect(createUseCase.execute(validCreateInput)).rejects.toThrow(
         ProductAssetUnapprovedError,

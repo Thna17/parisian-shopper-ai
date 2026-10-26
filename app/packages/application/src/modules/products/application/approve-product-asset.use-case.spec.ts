@@ -39,14 +39,9 @@ import {
   type ProductAssetStoragePort,
   type StoredProductAssetInfo,
 } from './product-asset-storage.port.js';
-import {
-  CURRENT_VALIDATOR_VERSION,
-} from '../../creative/domain/services/product-asset-validator.js';
+import { CURRENT_VALIDATOR_VERSION } from '../../creative/domain/services/product-asset-validator.js';
 import { generateTransparentProductPng_TEST_ONLY } from '../../creative/infrastructure/fixtures/fake-product-fixtures.js';
-import {
-  TEST_ACTOR_APPROVER,
-  TEST_ACTOR_EDITOR,
-} from '../testing/test-product-asset.helper.js';
+import { TEST_ACTOR_APPROVER, TEST_ACTOR_EDITOR } from '../testing/test-product-asset.helper.js';
 
 class MockProductAssetRepository implements ProductAssetRepository {
   public assets = new Map<string, ProductAsset>();
@@ -87,9 +82,7 @@ class MockProductAssetRepository implements ProductAssetRepository {
     return Promise.resolve(Array.from(this.registrations.values()).filter((r) => r.sku === sku));
   }
 
-  public findAllHeroCutoutRegistrations(
-    sku: string,
-  ): Promise<readonly ProductAssetRegistration[]> {
+  public findAllHeroCutoutRegistrations(sku: string): Promise<readonly ProductAssetRegistration[]> {
     return Promise.resolve(
       Array.from(this.registrations.values()).filter(
         (r) => r.sku === sku && r.role === ProductAssetRole.HERO_CUTOUT,
@@ -166,9 +159,7 @@ class MockProductAssetRepository implements ProductAssetRepository {
     return Promise.resolve(this.rightsEvents.get(registrationId) ?? []);
   }
 
-  public findLatestRightsEvent(
-    registrationId: string,
-  ): Promise<ProductAssetRightsEvent | null> {
+  public findLatestRightsEvent(registrationId: string): Promise<ProductAssetRightsEvent | null> {
     const list = this.rightsEvents.get(registrationId) ?? [];
     return Promise.resolve(list[0] ?? null);
   }
@@ -743,6 +734,11 @@ describe('ApproveProductAssetUseCase', () => {
     expect(invalidationOutbox?.payload.previousRegistrationId).toBe(prev.reg.id);
     expect(invalidationOutbox?.payload.newRegistrationId).toBe(repRegId);
     expect(invalidationOutbox?.payload.changedScopes).toEqual(['visualAssets']);
-    expect(invalidationOutbox?.payload.preservedScopes).toEqual(['pricing', 'stock', 'promotion', 'facts']);
+    expect(invalidationOutbox?.payload.preservedScopes).toEqual([
+      'pricing',
+      'stock',
+      'promotion',
+      'facts',
+    ]);
   });
 });

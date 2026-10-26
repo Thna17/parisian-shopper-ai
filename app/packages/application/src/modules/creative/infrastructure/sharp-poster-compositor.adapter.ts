@@ -71,6 +71,7 @@ export class SharpPosterCompositor implements PosterCompositor {
     const computedLayout: ComputedTemplateLayout = PosterTemplateRenderer.renderTemplate(
       input.posterSpec,
       fonts.fontFaceCss,
+      { allowNonApprovedForTesting: input.allowNonApprovedForTesting },
     );
 
     // 4. Measure & trim authentic product image

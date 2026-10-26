@@ -97,9 +97,7 @@ export interface ProductAssetRepository {
   /**
    * Finds the latest approval event for a given registration.
    */
-  findLatestApprovalEvent(
-    registrationId: string,
-  ): Promise<ProductAssetApprovalEvent | null>;
+  findLatestApprovalEvent(registrationId: string): Promise<ProductAssetApprovalEvent | null>;
 
   /**
    * Saves an append-only ProductAssetRightsEvent record.
@@ -116,9 +114,7 @@ export interface ProductAssetRepository {
   /**
    * Finds the latest rights event for a registration.
    */
-  findLatestRightsEvent(
-    registrationId: string,
-  ): Promise<ProductAssetRightsEvent | null>;
+  findLatestRightsEvent(registrationId: string): Promise<ProductAssetRightsEvent | null>;
 
   /**
    * Saves an append-only ProductAssetTransform record.

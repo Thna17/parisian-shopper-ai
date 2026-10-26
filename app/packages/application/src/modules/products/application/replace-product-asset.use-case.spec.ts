@@ -83,9 +83,7 @@ class MockProductAssetRepository implements ProductAssetRepository {
     return Promise.resolve(Array.from(this.registrations.values()).filter((r) => r.sku === sku));
   }
 
-  public findAllHeroCutoutRegistrations(
-    sku: string,
-  ): Promise<readonly ProductAssetRegistration[]> {
+  public findAllHeroCutoutRegistrations(sku: string): Promise<readonly ProductAssetRegistration[]> {
     return Promise.resolve(
       Array.from(this.registrations.values()).filter(
         (r) => r.sku === sku && r.role === ProductAssetRole.HERO_CUTOUT,
@@ -162,9 +160,7 @@ class MockProductAssetRepository implements ProductAssetRepository {
     return Promise.resolve(this.rightsEvents.get(registrationId) ?? []);
   }
 
-  public findLatestRightsEvent(
-    registrationId: string,
-  ): Promise<ProductAssetRightsEvent | null> {
+  public findLatestRightsEvent(registrationId: string): Promise<ProductAssetRightsEvent | null> {
     const list = this.rightsEvents.get(registrationId) ?? [];
     return Promise.resolve(list[0] ?? null);
   }
@@ -365,7 +361,14 @@ describe('ReplaceProductAssetUseCase', () => {
     const uow = new MockUnitOfWork(repo);
     const { prevRegId } = await setupPreviousApprovedAsset(repo, storage);
 
-    const useCase = new ReplaceProductAssetUseCase(repo, storage, uow, validator, permissions, clock);
+    const useCase = new ReplaceProductAssetUseCase(
+      repo,
+      storage,
+      uow,
+      validator,
+      permissions,
+      clock,
+    );
 
     await expect(
       useCase.execute({
@@ -385,7 +388,14 @@ describe('ReplaceProductAssetUseCase', () => {
     const uow = new MockUnitOfWork(repo);
     const { prevRegId } = await setupPreviousApprovedAsset(repo, storage);
 
-    const useCase = new ReplaceProductAssetUseCase(repo, storage, uow, validator, permissions, clock);
+    const useCase = new ReplaceProductAssetUseCase(
+      repo,
+      storage,
+      uow,
+      validator,
+      permissions,
+      clock,
+    );
 
     const result = await useCase.execute({
       actor: TEST_ACTOR_APPROVER,
@@ -407,7 +417,14 @@ describe('ReplaceProductAssetUseCase', () => {
     const storage = new MockStoragePort();
     const uow = new MockUnitOfWork(repo);
 
-    const useCase = new ReplaceProductAssetUseCase(repo, storage, uow, validator, permissions, clock);
+    const useCase = new ReplaceProductAssetUseCase(
+      repo,
+      storage,
+      uow,
+      validator,
+      permissions,
+      clock,
+    );
 
     await expect(
       useCase.execute({
@@ -427,7 +444,14 @@ describe('ReplaceProductAssetUseCase', () => {
     const uow = new MockUnitOfWork(repo);
     const { prevRegId } = await setupPreviousApprovedAsset(repo, storage);
 
-    const useCase = new ReplaceProductAssetUseCase(repo, storage, uow, validator, permissions, clock);
+    const useCase = new ReplaceProductAssetUseCase(
+      repo,
+      storage,
+      uow,
+      validator,
+      permissions,
+      clock,
+    );
 
     await expect(
       useCase.execute({
@@ -458,7 +482,14 @@ describe('ReplaceProductAssetUseCase', () => {
       .jpeg()
       .toBuffer();
 
-    const useCase = new ReplaceProductAssetUseCase(repo, storage, uow, validator, permissions, clock);
+    const useCase = new ReplaceProductAssetUseCase(
+      repo,
+      storage,
+      uow,
+      validator,
+      permissions,
+      clock,
+    );
 
     await expect(
       useCase.execute({
@@ -478,7 +509,14 @@ describe('ReplaceProductAssetUseCase', () => {
     const uow = new MockUnitOfWork(repo);
     const { prevRegId } = await setupPreviousApprovedAsset(repo, storage);
 
-    const useCase = new ReplaceProductAssetUseCase(repo, storage, uow, validator, permissions, clock);
+    const useCase = new ReplaceProductAssetUseCase(
+      repo,
+      storage,
+      uow,
+      validator,
+      permissions,
+      clock,
+    );
 
     const result = await useCase.execute({
       actor: TEST_ACTOR_EDITOR,
@@ -504,9 +542,7 @@ describe('ReplaceProductAssetUseCase', () => {
     expect(topics).not.toContain('product_asset.approved');
     expect(topics).not.toContain('approval.invalidation_requested_by_asset_change');
 
-    const depEvent = uow.outboxDrafts.find(
-      (d) => d.topic === 'product_asset.dependency_changed',
-    );
+    const depEvent = uow.outboxDrafts.find((d) => d.topic === 'product_asset.dependency_changed');
     expect(depEvent).toBeDefined();
     expect(depEvent?.payload.previousRegistrationId).toBe(prevRegId);
     expect(depEvent?.payload.newRegistrationId).toBe(result.newRegistration.id);

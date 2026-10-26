@@ -45,7 +45,13 @@ export const NegativeSpaceZoneSchema = z.object({
 export type NegativeSpaceZone = z.infer<typeof NegativeSpaceZoneSchema>;
 
 export const LayoutIntentSchema = z.object({
-  templateId: z.enum(['EDITORIAL_SPLIT', 'CENTERED_HERO', 'SCENT_STORY', 'KHMER_SEASONAL']),
+  templateId: z.enum([
+    'EDITORIAL_SPLIT',
+    'CENTERED_HERO',
+    'SCENT_STORY',
+    'KHMER_SEASONAL',
+    'PROMOTION_PRICE_CTA',
+  ]),
   outputFormat: z.object({
     width: z.number().int().positive(),
     height: z.number().int().positive(),
@@ -257,6 +263,63 @@ export function deriveLayoutIntentForTemplate(
         formatSpecificSafeMargins: safeMargins,
         promptGuidance:
           'Split composition for fragrance notes. The right side features a solid mineral or dark stone pedestal for perfume placement. Artfully arranged around the right base perimeter are natural fragrance elements in crisp detail. The left half of the frame is soft, dark, and muted negative space with atmospheric falloff and deep shadows, reserved for clean text readability.',
+      });
+    }
+
+    case 'PROMOTION_PRICE_CTA': {
+      return LayoutIntentSchema.parse({
+        templateId: 'PROMOTION_PRICE_CTA',
+        outputFormat: { width, height, aspectRatio },
+        productZone: {
+          xPercent: 0.25,
+          yPercent: 0.18,
+          widthPercent: 0.5,
+          heightPercent: 0.48,
+          description: 'Prominently grounded centered product hero on high-contrast surface.',
+        },
+        textZone: {
+          xPercent: 0.08,
+          yPercent: 0.05,
+          widthPercent: 0.84,
+          heightPercent: 0.9,
+          description:
+            'Promotional eyebrow banner, headline, dual strike-through pricing, and conversion CTA button.',
+        },
+        logoZone: {
+          xPercent: 0.06,
+          yPercent: 0.05,
+          widthPercent: 0.18,
+          heightPercent: 0.05,
+          description: 'Top-left safe brand identifier.',
+        },
+        priceZone: {
+          xPercent: 0.15,
+          yPercent: 0.7,
+          widthPercent: 0.7,
+          heightPercent: 0.12,
+          description: 'High-visibility dual-currency strike-through promotional price block.',
+        },
+        pedestalZone: {
+          baselineYPercent: 0.68,
+          description:
+            'Polished studio surface with direct rim lighting for conversion product display.',
+          surfaceType: 'reflective studio pedestal',
+        },
+        lightingDirection: 'DRAMATIC_BACKLIGHT',
+        reservedNegativeSpace: {
+          xPercent: 0.06,
+          yPercent: 0.04,
+          widthPercent: 0.88,
+          heightPercent: 0.15,
+          guidance:
+            'Top header area and lower footer area must maintain clean negative space for promotional badge and high-contrast CTA button.',
+          maxEdgeDensity: 25,
+        },
+        backgroundComplexity: 'MINIMAL',
+        horizonOrPedestalPosition: 0.68,
+        formatSpecificSafeMargins: safeMargins,
+        promptGuidance:
+          'High-conversion luxury commercial studio product photography. Clean, uncluttered background with dramatic chiaroscuro lighting and soft rim highlights. Minimal background complexity to maximize contrast and focus on the central hero product flacon. Clean horizontal ground surface centered at 68% height.',
       });
     }
 

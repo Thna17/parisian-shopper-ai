@@ -883,10 +883,14 @@ describe('W20 Layered CreativeScene Database & Immutability Integration Tests', 
       const heroLayer = initial.version.layers.find((l) => l.layerKey === 'hero_01')!;
       expect(heroLayer).toBeDefined();
 
-      const heroDep = initial.version.dependencies.find((d) => d.dependencyType === 'PRODUCT_ASSET')!;
+      const heroDep = initial.version.dependencies.find(
+        (d) => d.dependencyType === 'PRODUCT_ASSET',
+      )!;
       expect(heroDep.sceneLayerId).toBe(heroLayer.id);
 
-      const snapshotDep = initial.version.dependencies.find((d) => d.dependencyType === 'PRODUCT_SNAPSHOT')!;
+      const snapshotDep = initial.version.dependencies.find(
+        (d) => d.dependencyType === 'PRODUCT_SNAPSHOT',
+      )!;
       expect(snapshotDep.sceneLayerId).toBeNull();
     });
 

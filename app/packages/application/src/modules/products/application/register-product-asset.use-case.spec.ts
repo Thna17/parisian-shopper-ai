@@ -37,10 +37,7 @@ import {
 } from './product-asset-storage.port.js';
 import { ProductAssetValidator } from '../../creative/domain/services/product-asset-validator.js';
 import { generateTransparentProductPng_TEST_ONLY } from '../../creative/infrastructure/fixtures/fake-product-fixtures.js';
-import {
-  TEST_ACTOR_EDITOR,
-  TEST_ACTOR_VIEWER,
-} from '../testing/test-product-asset.helper.js';
+import { TEST_ACTOR_EDITOR, TEST_ACTOR_VIEWER } from '../testing/test-product-asset.helper.js';
 
 class MockProductAssetRepository implements ProductAssetRepository {
   public assets = new Map<string, ProductAsset>();
@@ -81,9 +78,7 @@ class MockProductAssetRepository implements ProductAssetRepository {
     return Promise.resolve(Array.from(this.registrations.values()).filter((r) => r.sku === sku));
   }
 
-  public findAllHeroCutoutRegistrations(
-    sku: string,
-  ): Promise<readonly ProductAssetRegistration[]> {
+  public findAllHeroCutoutRegistrations(sku: string): Promise<readonly ProductAssetRegistration[]> {
     return Promise.resolve(
       Array.from(this.registrations.values()).filter(
         (r) => r.sku === sku && r.role === ProductAssetRole.HERO_CUTOUT,
@@ -160,9 +155,7 @@ class MockProductAssetRepository implements ProductAssetRepository {
     return Promise.resolve(this.rightsEvents.get(registrationId) ?? []);
   }
 
-  public findLatestRightsEvent(
-    registrationId: string,
-  ): Promise<ProductAssetRightsEvent | null> {
+  public findLatestRightsEvent(registrationId: string): Promise<ProductAssetRightsEvent | null> {
     const list = this.rightsEvents.get(registrationId) ?? [];
     return Promise.resolve(list[0] ?? null);
   }
@@ -306,7 +299,14 @@ describe('RegisterProductAssetUseCase', () => {
     const repo = new MockProductAssetRepository();
     const storage = new MockStoragePort();
     const uow = new MockUnitOfWork(repo);
-    const useCase = new RegisterProductAssetUseCase(repo, storage, uow, validator, permissions, clock);
+    const useCase = new RegisterProductAssetUseCase(
+      repo,
+      storage,
+      uow,
+      validator,
+      permissions,
+      clock,
+    );
 
     await expect(
       useCase.execute({
@@ -323,7 +323,14 @@ describe('RegisterProductAssetUseCase', () => {
     const repo = new MockProductAssetRepository();
     const storage = new MockStoragePort();
     const uow = new MockUnitOfWork(repo);
-    const useCase = new RegisterProductAssetUseCase(repo, storage, uow, validator, permissions, clock);
+    const useCase = new RegisterProductAssetUseCase(
+      repo,
+      storage,
+      uow,
+      validator,
+      permissions,
+      clock,
+    );
 
     const result = await useCase.execute({
       actor: TEST_ACTOR_EDITOR,
@@ -354,7 +361,14 @@ describe('RegisterProductAssetUseCase', () => {
     const repo = new MockProductAssetRepository();
     const storage = new MockStoragePort();
     const uow = new MockUnitOfWork(repo);
-    const useCase = new RegisterProductAssetUseCase(repo, storage, uow, validator, permissions, clock);
+    const useCase = new RegisterProductAssetUseCase(
+      repo,
+      storage,
+      uow,
+      validator,
+      permissions,
+      clock,
+    );
 
     const opaqueJpeg = await sharp({
       create: {
@@ -385,7 +399,14 @@ describe('RegisterProductAssetUseCase', () => {
     const repo = new MockProductAssetRepository();
     const storage = new MockStoragePort();
     const uow = new MockUnitOfWork(repo);
-    const useCase = new RegisterProductAssetUseCase(repo, storage, uow, validator, permissions, clock);
+    const useCase = new RegisterProductAssetUseCase(
+      repo,
+      storage,
+      uow,
+      validator,
+      permissions,
+      clock,
+    );
 
     const opaqueJpeg = await sharp({
       create: {
@@ -413,7 +434,14 @@ describe('RegisterProductAssetUseCase', () => {
     const repo = new MockProductAssetRepository();
     const storage = new MockStoragePort();
     const uow = new MockUnitOfWork(repo);
-    const useCase = new RegisterProductAssetUseCase(repo, storage, uow, validator, permissions, clock);
+    const useCase = new RegisterProductAssetUseCase(
+      repo,
+      storage,
+      uow,
+      validator,
+      permissions,
+      clock,
+    );
 
     await expect(
       useCase.execute({

@@ -209,3 +209,22 @@ export function renderCornerAccentsSvg(options: FrameBorderOptions): string {
     </g>
   `;
 }
+
+export function renderHaussmannFrameSvg(options: FrameBorderOptions): string {
+  const { width, height, margin, color } = options;
+  const m1 = margin;
+  const m2 = margin + 8;
+  const w1 = width - m1 * 2;
+  const h1 = height - m1 * 2;
+  const w2 = width - m2 * 2;
+  const h2 = height - m2 * 2;
+
+  return `
+    <g stroke="${color}" fill="none">
+      <!-- Haussmann Outer Border -->
+      <rect x="${m1}" y="${m1}" width="${w1}" height="${h1}" stroke-width="1.2" stroke-opacity="0.65" />
+      <!-- Haussmann Inset Line -->
+      <rect x="${m2}" y="${m2}" width="${w2}" height="${h2}" stroke-width="0.8" stroke-opacity="0.35" />
+    </g>
+  `;
+}

@@ -1,11 +1,7 @@
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
-import {
-  type ProductAssetValidationStatus,
-} from '../../../products/domain/product-asset.js';
-import {
-  ProductAssetMaskDimensionMismatchError,
-} from '../../../products/domain/product-asset-errors.js';
+import { type ProductAssetValidationStatus } from '../../../products/domain/product-asset.js';
+import { ProductAssetMaskDimensionMismatchError } from '../../../products/domain/product-asset-errors.js';
 import {
   AssetDigestMismatchError,
   CanonicalProductOpaqueError,
@@ -151,7 +147,9 @@ export class ProductAssetValidator {
     // 5. File size limits
     const maxBytes = input.maxFileSizeBytes ?? this.options.maxFileSizeBytes;
     if (input.assetBuffer.length > maxBytes) {
-      findings.push(`File size (${input.assetBuffer.length} bytes) exceeds limit of ${maxBytes} bytes`);
+      findings.push(
+        `File size (${input.assetBuffer.length} bytes) exceeds limit of ${maxBytes} bytes`,
+      );
       reasonCodes.push('FILE_SIZE_LIMIT_EXCEEDED');
     }
 
@@ -227,7 +225,9 @@ export class ProductAssetValidator {
     const totalPixelCount = width * height;
     const maxPixels = input.maxDecodedPixels ?? this.options.maxDecodedPixels;
     if (totalPixelCount > maxPixels) {
-      findings.push(`Decoded pixel count (${totalPixelCount}) exceeds maximum limit (${maxPixels})`);
+      findings.push(
+        `Decoded pixel count (${totalPixelCount}) exceeds maximum limit (${maxPixels})`,
+      );
       reasonCodes.push('PIXEL_COUNT_EXCEEDED');
     }
 
@@ -290,7 +290,9 @@ export class ProductAssetValidator {
           }
         }
       } catch (err) {
-        findings.push(`Failed to inspect alpha channel: ${err instanceof Error ? err.message : String(err)}`);
+        findings.push(
+          `Failed to inspect alpha channel: ${err instanceof Error ? err.message : String(err)}`,
+        );
         reasonCodes.push('ALPHA_INSPECTION_FAILED');
       }
     }

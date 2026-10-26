@@ -32,13 +32,8 @@ import {
   type CreativeSceneVersionRecord,
   type OutboxEventDraft,
 } from '../domain/scene/creative-scene.types.js';
-import {
-  validateSceneGraph,
-} from '../domain/scene/creative-scene.validator.js';
-import {
-  computeDependencyHash,
-  computeSceneHash,
-} from '../domain/scene/scene-hash.js';
+import { validateSceneGraph } from '../domain/scene/creative-scene.validator.js';
+import { computeDependencyHash, computeSceneHash } from '../domain/scene/scene-hash.js';
 import {
   CREATIVE_SCENE_REPOSITORY,
   type CreativeSceneRepository,
@@ -86,10 +81,14 @@ export class CreateInitialSceneUseCase {
   public async execute(input: CreateInitialSceneInput): Promise<CreateInitialSceneResult> {
     // 1. Enforce authorization: require Permission.EDIT_CREATIVE
     if (!input.requesterUserId || input.requesterUserId.trim() === '') {
-      throw new ForbiddenError({ publicMessage: 'Permission denied: requesterUserId is required.' });
+      throw new ForbiddenError({
+        publicMessage: 'Permission denied: requesterUserId is required.',
+      });
     }
     if (!this.permissions.hasAnyRolePermission(input.requesterRoles, Permission.EDIT_CREATIVE)) {
-      throw new ForbiddenError({ publicMessage: 'Permission denied: Cannot create creative scene.' });
+      throw new ForbiddenError({
+        publicMessage: 'Permission denied: Cannot create creative scene.',
+      });
     }
 
     // 2. Validate Canvas Geometry & Complete Scene Graph
@@ -108,6 +107,10 @@ export class CreateInitialSceneUseCase {
       productSnapshotId: input.productSnapshotId,
       sourceContentVersionId: input.sourceContentVersionId,
       brandProfileVersionId: input.brandProfileVersionId,
+      templateId: input.templateId,
+      templateVersion: input.templateVersion,
+      aspectRatio: input.aspectRatio,
+      language: input.language,
     });
     const dependencies = verifiedEvidence.dependencies;
 

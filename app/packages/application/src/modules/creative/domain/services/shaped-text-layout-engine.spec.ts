@@ -90,7 +90,8 @@ describe('ShapedTextLayoutEngine and Golden Typography Corpus (W21 Deliverables 
 
   describe('Deterministic Repeated Shaping and Measurement', () => {
     it('produces byte-for-byte and floating-point identical metrics across 50 repeated executions', () => {
-      const testString = 'សូមស្វាគមន៍មកកាន់ Parisian Shopper ផ្លូវការ — Luxury Collection 2026 ($48.00)';
+      const testString =
+        'សូមស្វាគមន៍មកកាន់ Parisian Shopper ផ្លូវការ — Luxury Collection 2026 ($48.00)';
       const runs = 50;
       const initial = TextLayoutEngine.wrapText({
         text: testString,

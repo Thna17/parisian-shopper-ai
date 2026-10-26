@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { InvalidPosterSpecError } from './creative-errors.js';
 
 export type PosterTemplateId =
-  'EDITORIAL_SPLIT' | 'CENTERED_HERO' | 'SCENT_STORY' | 'KHMER_SEASONAL';
+  'EDITORIAL_SPLIT' | 'CENTERED_HERO' | 'SCENT_STORY' | 'KHMER_SEASONAL' | 'PROMOTION_PRICE_CTA';
 
 export type PosterAspectRatio = '1:1' | '4:5' | '9:16';
 export type PosterLanguage = 'EN' | 'KM' | 'BILINGUAL';
@@ -52,8 +52,22 @@ export interface PosterOutputFormat {
   readonly height: number;
 }
 
+export interface CommercialFactProvenance {
+  readonly productSnapshotId: string;
+  readonly snapshotDigest: string;
+  readonly priceValue: string;
+  readonly currency: string;
+  readonly promotionalPriceValue?: string | undefined;
+  readonly originalPriceAuthorized?: boolean | undefined;
+  readonly campaignLabelAuthorized?: boolean | undefined;
+  readonly verifiedAt?: string | undefined;
+  readonly sourceFieldRef?: string | undefined;
+  readonly isFixture?: boolean | undefined;
+}
+
 export interface PosterSpec {
   readonly templateId: PosterTemplateId;
+  readonly templateVersion?: string | undefined;
   readonly outputFormat: PosterOutputFormat;
   readonly language: PosterLanguage;
   readonly headline: string;
@@ -73,6 +87,7 @@ export interface PosterSpec {
   readonly decorativeSelection?: PosterDecorativeSelection | undefined;
   readonly backgroundArtDirection?: PosterBackgroundArtDirection | undefined;
   readonly layoutIntent?: unknown;
+  readonly commercialProvenance?: CommercialFactProvenance | undefined;
 }
 
 export const POSTER_LIMITS = {
@@ -94,7 +109,14 @@ export const POSTER_FORMATS: Record<PosterAspectRatio, PosterOutputFormat> = {
 };
 
 const PosterSpecSchema = z.object({
-  templateId: z.enum(['EDITORIAL_SPLIT', 'CENTERED_HERO', 'SCENT_STORY', 'KHMER_SEASONAL']),
+  templateId: z.enum([
+    'EDITORIAL_SPLIT',
+    'CENTERED_HERO',
+    'SCENT_STORY',
+    'KHMER_SEASONAL',
+    'PROMOTION_PRICE_CTA',
+  ]),
+  templateVersion: z.string().optional(),
   outputFormat: z.object({
     aspectRatio: z.enum(['1:1', '4:5', '9:16']),
     width: z.number().int().min(400).max(4096),

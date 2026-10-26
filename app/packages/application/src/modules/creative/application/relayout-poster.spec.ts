@@ -82,6 +82,7 @@ describe('RelayoutPosterUseCase (Zero-AI Re-Layout)', () => {
       posterSpec: baseSpec,
       backgroundBuffer,
       canonicalProductBuffer: productBuffer,
+      allowNonApprovedForTesting: true,
     });
 
     expect(result.posterBuffer).toBeDefined();
@@ -118,6 +119,7 @@ describe('RelayoutPosterUseCase (Zero-AI Re-Layout)', () => {
       posterSpec: centeredSpec,
       backgroundBuffer,
       canonicalProductBuffer: productBuffer,
+      allowNonApprovedForTesting: true,
     });
 
     expect(result.layoutManifest.templateId).toBe('CENTERED_HERO');
@@ -147,6 +149,7 @@ describe('RelayoutPosterUseCase (Zero-AI Re-Layout)', () => {
       posterSpec: modifiedSpec,
       backgroundBuffer,
       canonicalProductBuffer: productBuffer,
+      allowNonApprovedForTesting: true,
     });
 
     const headline = result.layoutManifest.elements.find((e) => e.id === 'headline');

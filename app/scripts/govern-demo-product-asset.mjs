@@ -43,11 +43,8 @@ const {
   RegisterProductAssetUseCase,
   VerifyProductAssetRightsUseCase,
 } = application;
-const {
-  PrismaProductAssetRegistrationUnitOfWork,
-  PrismaProductAssetRepository,
-  PrismaService,
-} = database;
+const { PrismaProductAssetRegistrationUnitOfWork, PrismaProductAssetRepository, PrismaService } =
+  database;
 
 const prisma = new PrismaService();
 

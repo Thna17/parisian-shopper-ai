@@ -2,14 +2,7 @@ import { PosterUnsupportedScriptError } from '../creative-errors.js';
 import { normalizeAndValidateUnicode } from './unicode-validator.js';
 
 export type TextRole =
-  | 'DISPLAY'
-  | 'HEADLINE'
-  | 'SECONDARY_HEADLINE'
-  | 'BODY'
-  | 'SUPPORTING'
-  | 'PRICE'
-  | 'CTA'
-  | 'LABEL';
+  'DISPLAY' | 'HEADLINE' | 'SECONDARY_HEADLINE' | 'BODY' | 'SUPPORTING' | 'PRICE' | 'CTA' | 'LABEL';
 
 export interface ScriptRun {
   readonly text: string;
@@ -83,7 +76,7 @@ export function isApprovedNeutralCodePoint(cp: number): boolean {
     (cp >= 0x002b && cp <= 0x002f) || // + , - . /
     (cp >= 0x003a && cp <= 0x0040) || // : ; < = > ? @
     (cp >= 0x005b && cp <= 0x0060) || // [ \ ] ^ _ `
-    (cp >= 0x007b && cp <= 0x007e)    // { | } ~
+    (cp >= 0x007b && cp <= 0x007e) // { | } ~
   ) {
     return true;
   }
@@ -233,7 +226,7 @@ export function resolveScriptRuns(
   for (const seg of segments) {
     const text = seg.segment;
     const cps: number[] = [];
-    for (let i = 0; i < text.length; ) {
+    for (let i = 0; i < text.length;) {
       const cp = text.codePointAt(i)!;
       cps.push(cp);
       i += cp > 0xffff ? 2 : 1;
@@ -241,11 +234,7 @@ export function resolveScriptRuns(
 
     // Fail closed immediately on unsupported scripts/symbols
     for (const cp of cps) {
-      if (
-        !isKhmerCodePoint(cp) &&
-        !isLatinCodePoint(cp) &&
-        !isApprovedNeutralCodePoint(cp)
-      ) {
+      if (!isKhmerCodePoint(cp) && !isLatinCodePoint(cp) && !isApprovedNeutralCodePoint(cp)) {
         throw new PosterUnsupportedScriptError(
           cp,
           String.fromCodePoint(cp),

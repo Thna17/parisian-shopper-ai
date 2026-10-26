@@ -21,13 +21,7 @@ export function isKhmerSubscriptConsonant(cp: number): boolean {
 
 export function isKhmerPunctuation(cp: number): boolean {
   // Khmer punctuation: Khan (U+17D4 ។), Bariyoosan (U+17D5 ៕), Colon (U+17D6 ៖), Beyyal (U+17D8 ៘), Koomuut (U+17DA ៚)
-  return (
-    cp === 0x17d4 ||
-    cp === 0x17d5 ||
-    cp === 0x17d6 ||
-    cp === 0x17d8 ||
-    cp === 0x17da
-  );
+  return cp === 0x17d4 || cp === 0x17d5 || cp === 0x17d6 || cp === 0x17d8 || cp === 0x17da;
 }
 
 export function isKhmerLekTook(cp: number): boolean {

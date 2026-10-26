@@ -47,9 +47,7 @@ export function canonicalStringify(value: unknown): string {
       .filter(([, v]) => v !== undefined)
       .sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
 
-    const fields = entries.map(
-      ([k, v]) => `${JSON.stringify(k)}:${canonicalStringify(v)}`,
-    );
+    const fields = entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalStringify(v)}`);
     return `{${fields.join(',')}}`;
   }
 
@@ -68,9 +66,14 @@ export function computeCanonicalSha256(content: unknown): string {
   return sha256Hex(canonicalStringify(content));
 }
 
-function assertAuthoritativeRecord(record: unknown, helperName: string): asserts record is Record<string, unknown> {
+function assertAuthoritativeRecord(
+  record: unknown,
+  helperName: string,
+): asserts record is Record<string, unknown> {
   if (!record || typeof record !== 'object' || Array.isArray(record)) {
-    throw new TypeError(`${helperName} requires an authoritative record object; got ${typeof record}`);
+    throw new TypeError(
+      `${helperName} requires an authoritative record object; got ${typeof record}`,
+    );
   }
 }
 
@@ -149,6 +152,27 @@ export function computeTypographyPolicyDigest(policy: {
 }): string {
   assertAuthoritativeRecord(policy, 'computeTypographyPolicyDigest');
   return computeCanonicalSha256(policy);
+}
+
+export interface TemplateDefinitionDependencyMetadata {
+  readonly templateId: string;
+  readonly templateVersion: string;
+  readonly tokenSetVersion: string;
+  readonly contentDigest: string;
+  readonly approvalReference: string;
+}
+
+export function computeTemplateDependencyDigest(
+  metadata: TemplateDefinitionDependencyMetadata,
+): string {
+  assertAuthoritativeRecord(metadata, 'computeTemplateDependencyDigest');
+  return computeCanonicalSha256({
+    approvalReference: metadata.approvalReference,
+    contentDigest: metadata.contentDigest.toLowerCase(),
+    templateId: metadata.templateId,
+    templateVersion: metadata.templateVersion,
+    tokenSetVersion: metadata.tokenSetVersion,
+  });
 }
 
 export function computeIdentifierDigest(identifier: string): string {

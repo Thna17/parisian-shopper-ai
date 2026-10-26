@@ -1,8 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import {
-  type ProductHeroPayload,
-  type SceneLayerDraft,
-} from './creative-scene.types.js';
+import { type ProductHeroPayload, type SceneLayerDraft } from './creative-scene.types.js';
 import {
   assertFiniteNumber,
   validateBoundingBox,
@@ -198,21 +195,33 @@ describe('CreativeScene Validator', () => {
     });
 
     it('rejects absolute paths', () => {
-      expect(() => validateSafePathString('/etc/passwd', 'key', 'l1')).toThrow(InvalidSceneLayerError);
+      expect(() => validateSafePathString('/etc/passwd', 'key', 'l1')).toThrow(
+        InvalidSceneLayerError,
+      );
     });
 
     it('rejects path traversal', () => {
-      expect(() => validateSafePathString('cas/../../secret', 'key', 'l1')).toThrow(InvalidSceneLayerError);
+      expect(() => validateSafePathString('cas/../../secret', 'key', 'l1')).toThrow(
+        InvalidSceneLayerError,
+      );
     });
 
     it('rejects URL schemes', () => {
-      expect(() => validateSafePathString('https://evil.com/img.png', 'key', 'l1')).toThrow(InvalidSceneLayerError);
-      expect(() => validateSafePathString('data:image/png;base64,...', 'key', 'l1')).toThrow(InvalidSceneLayerError);
-      expect(() => validateSafePathString('file:///local', 'key', 'l1')).toThrow(InvalidSceneLayerError);
+      expect(() => validateSafePathString('https://evil.com/img.png', 'key', 'l1')).toThrow(
+        InvalidSceneLayerError,
+      );
+      expect(() => validateSafePathString('data:image/png;base64,...', 'key', 'l1')).toThrow(
+        InvalidSceneLayerError,
+      );
+      expect(() => validateSafePathString('file:///local', 'key', 'l1')).toThrow(
+        InvalidSceneLayerError,
+      );
     });
 
     it('rejects keys not starting with cas/', () => {
-      expect(() => validateCasStorageKey('images/cutout.png', 'l1')).toThrow(InvalidSceneLayerError);
+      expect(() => validateCasStorageKey('images/cutout.png', 'l1')).toThrow(
+        InvalidSceneLayerError,
+      );
     });
   });
 
@@ -222,13 +231,21 @@ describe('CreativeScene Validator', () => {
     });
 
     it('rejects uppercase SHA-256 digest', () => {
-      expect(() => validateSha256Digest('A'.repeat(64), 'sha256', 'l1')).toThrow(InvalidSceneLayerError);
+      expect(() => validateSha256Digest('A'.repeat(64), 'sha256', 'l1')).toThrow(
+        InvalidSceneLayerError,
+      );
     });
 
     it('rejects malformed digests', () => {
-      expect(() => validateSha256Digest('not-a-hash', 'sha256', 'l1')).toThrow(InvalidSceneLayerError);
-      expect(() => validateSha256Digest('a'.repeat(63), 'sha256', 'l1')).toThrow(InvalidSceneLayerError);
-      expect(() => validateSha256Digest('a'.repeat(65), 'sha256', 'l1')).toThrow(InvalidSceneLayerError);
+      expect(() => validateSha256Digest('not-a-hash', 'sha256', 'l1')).toThrow(
+        InvalidSceneLayerError,
+      );
+      expect(() => validateSha256Digest('a'.repeat(63), 'sha256', 'l1')).toThrow(
+        InvalidSceneLayerError,
+      );
+      expect(() => validateSha256Digest('a'.repeat(65), 'sha256', 'l1')).toThrow(
+        InvalidSceneLayerError,
+      );
     });
   });
 
@@ -255,18 +272,18 @@ describe('CreativeScene Validator', () => {
     });
 
     it('rejects zero or negative width with NegativeCoordinateSpaceError', () => {
-      expect(() =>
-        validateBoundingBox({ x: 0, y: 0, width: 0, height: 100 }, 'layer-w0'),
-      ).toThrow(NegativeCoordinateSpaceError);
+      expect(() => validateBoundingBox({ x: 0, y: 0, width: 0, height: 100 }, 'layer-w0')).toThrow(
+        NegativeCoordinateSpaceError,
+      );
       expect(() =>
         validateBoundingBox({ x: 0, y: 0, width: -50, height: 100 }, 'layer-w-neg'),
       ).toThrow(NegativeCoordinateSpaceError);
     });
 
     it('rejects zero or negative height with NegativeCoordinateSpaceError', () => {
-      expect(() =>
-        validateBoundingBox({ x: 0, y: 0, width: 100, height: 0 }, 'layer-h0'),
-      ).toThrow(NegativeCoordinateSpaceError);
+      expect(() => validateBoundingBox({ x: 0, y: 0, width: 100, height: 0 }, 'layer-h0')).toThrow(
+        NegativeCoordinateSpaceError,
+      );
       expect(() =>
         validateBoundingBox({ x: 0, y: 0, width: 100, height: -20 }, 'layer-h-neg'),
       ).toThrow(NegativeCoordinateSpaceError);
@@ -288,9 +305,7 @@ describe('CreativeScene Validator', () => {
     });
 
     it('rejects zIndex outside group boundaries', () => {
-      expect(() => validateLayerZIndex('l-bg', 'BACKGROUND', 100)).toThrow(
-        InvalidSceneZIndexError,
-      );
+      expect(() => validateLayerZIndex('l-bg', 'BACKGROUND', 100)).toThrow(InvalidSceneZIndexError);
       expect(() => validateLayerZIndex('l-hero', 'PRODUCT_HERO', 150)).toThrow(
         InvalidSceneZIndexError,
       );
@@ -319,12 +334,18 @@ describe('CreativeScene Validator', () => {
     });
 
     it('fails closed when assetRole is not HERO_CUTOUT', () => {
-      const invalid = { ...createValidHeroPayload(), assetRole: 'ORIGINAL_SOURCE' as unknown as 'HERO_CUTOUT' };
+      const invalid = {
+        ...createValidHeroPayload(),
+        assetRole: 'ORIGINAL_SOURCE' as unknown as 'HERO_CUTOUT',
+      };
       expect(() => validateProductHero(invalid, 'hero-l')).toThrow(InvalidSceneLayerError);
     });
 
     it('fails closed when mimeType is opaque JPEG', () => {
-      const invalid = { ...createValidHeroPayload(), mimeType: 'image/jpeg' as unknown as 'image/png' };
+      const invalid = {
+        ...createValidHeroPayload(),
+        mimeType: 'image/jpeg' as unknown as 'image/png',
+      };
       expect(() => validateProductHero(invalid, 'hero-l')).toThrow(InvalidSceneLayerError);
     });
 
@@ -358,72 +379,56 @@ describe('CreativeScene Validator', () => {
 
   describe('validateTypographyFont (W03-DEC-007)', () => {
     it('accepts Playfair Display with weights 400 through 900', () => {
-      expect(() =>
-        validateTypographyFont('Playfair Display', 400, 'headline', 'l1'),
-      ).not.toThrow();
-      expect(() =>
-        validateTypographyFont('Playfair Display', 700, 'headline', 'l1'),
-      ).not.toThrow();
-      expect(() =>
-        validateTypographyFont('Playfair Display', 900, 'headline', 'l1'),
-      ).not.toThrow();
+      expect(() => validateTypographyFont('Playfair Display', 400, 'headline', 'l1')).not.toThrow();
+      expect(() => validateTypographyFont('Playfair Display', 700, 'headline', 'l1')).not.toThrow();
+      expect(() => validateTypographyFont('Playfair Display', 900, 'headline', 'l1')).not.toThrow();
     });
 
     it('rejects Playfair Display with weights below 400', () => {
-      expect(() =>
-        validateTypographyFont('Playfair Display', 300, 'headline', 'l1'),
-      ).toThrow(InvalidTypographyWeightError);
+      expect(() => validateTypographyFont('Playfair Display', 300, 'headline', 'l1')).toThrow(
+        InvalidTypographyWeightError,
+      );
     });
 
     it('rejects fractional font weights', () => {
-      expect(() =>
-        validateTypographyFont('Playfair Display', 400.5, 'headline', 'l1'),
-      ).toThrow(InvalidTypographyWeightError);
+      expect(() => validateTypographyFont('Playfair Display', 400.5, 'headline', 'l1')).toThrow(
+        InvalidTypographyWeightError,
+      );
     });
 
     it('accepts Montserrat with weights 100 through 900', () => {
-      expect(() =>
-        validateTypographyFont('Montserrat', 100, 'body', 'l1'),
-      ).not.toThrow();
-      expect(() =>
-        validateTypographyFont('Montserrat', 400, 'body', 'l1'),
-      ).not.toThrow();
-      expect(() =>
-        validateTypographyFont('Montserrat', 900, 'body', 'l1'),
-      ).not.toThrow();
+      expect(() => validateTypographyFont('Montserrat', 100, 'body', 'l1')).not.toThrow();
+      expect(() => validateTypographyFont('Montserrat', 400, 'body', 'l1')).not.toThrow();
+      expect(() => validateTypographyFont('Montserrat', 900, 'body', 'l1')).not.toThrow();
     });
 
     it('strictly accepts Noto Sans Khmer weights 400 and 700 only', () => {
-      expect(() =>
-        validateTypographyFont('Noto Sans Khmer', 400, 'headline', 'l1'),
-      ).not.toThrow();
-      expect(() =>
-        validateTypographyFont('Noto Sans Khmer', 700, 'headline', 'l1'),
-      ).not.toThrow();
+      expect(() => validateTypographyFont('Noto Sans Khmer', 400, 'headline', 'l1')).not.toThrow();
+      expect(() => validateTypographyFont('Noto Sans Khmer', 700, 'headline', 'l1')).not.toThrow();
     });
 
     it('rejects Noto Sans Khmer synthetic weights like 500, 600, 300', () => {
-      expect(() =>
-        validateTypographyFont('Noto Sans Khmer', 500, 'headline', 'l1'),
-      ).toThrow(InvalidTypographyWeightError);
-      expect(() =>
-        validateTypographyFont('Noto Sans Khmer', 600, 'headline', 'l1'),
-      ).toThrow(InvalidTypographyWeightError);
-      expect(() =>
-        validateTypographyFont('Noto Sans Khmer', 300, 'headline', 'l1'),
-      ).toThrow(InvalidTypographyWeightError);
+      expect(() => validateTypographyFont('Noto Sans Khmer', 500, 'headline', 'l1')).toThrow(
+        InvalidTypographyWeightError,
+      );
+      expect(() => validateTypographyFont('Noto Sans Khmer', 600, 'headline', 'l1')).toThrow(
+        InvalidTypographyWeightError,
+      );
+      expect(() => validateTypographyFont('Noto Sans Khmer', 300, 'headline', 'l1')).toThrow(
+        InvalidTypographyWeightError,
+      );
     });
 
     it('rejects deferred or unapproved fonts like Moul, Kantumruy Pro, Roboto', () => {
-      expect(() =>
-        validateTypographyFont('Moul', 400, 'headline', 'l1'),
-      ).toThrow(InvalidTypographyFontError);
-      expect(() =>
-        validateTypographyFont('Kantumruy Pro', 400, 'headline', 'l1'),
-      ).toThrow(InvalidTypographyFontError);
-      expect(() =>
-        validateTypographyFont('Helvetica', 400, 'headline', 'l1'),
-      ).toThrow(InvalidTypographyFontError);
+      expect(() => validateTypographyFont('Moul', 400, 'headline', 'l1')).toThrow(
+        InvalidTypographyFontError,
+      );
+      expect(() => validateTypographyFont('Kantumruy Pro', 400, 'headline', 'l1')).toThrow(
+        InvalidTypographyFontError,
+      );
+      expect(() => validateTypographyFont('Helvetica', 400, 'headline', 'l1')).toThrow(
+        InvalidTypographyFontError,
+      );
     });
   });
 
@@ -457,33 +462,31 @@ describe('CreativeScene Validator', () => {
 
     it('validates a complete, compliant scene graph', () => {
       const layers = createValidLayers();
-      expect(() =>
-        validateSceneGraph(layers, '4:5', 1080, 1350, validMargins),
-      ).not.toThrow();
+      expect(() => validateSceneGraph(layers, '4:5', 1080, 1350, validMargins)).not.toThrow();
     });
 
     it('rejects duplicate layerKey', () => {
       const layers = createValidLayers();
       layers[1] = { ...layers[1]!, layerKey: layers[0]!.layerKey };
-      expect(() =>
-        validateSceneGraph(layers, '4:5', 1080, 1350, validMargins),
-      ).toThrow(InvalidSceneLayerError);
+      expect(() => validateSceneGraph(layers, '4:5', 1080, 1350, validMargins)).toThrow(
+        InvalidSceneLayerError,
+      );
     });
 
     it('rejects duplicate zIndex', () => {
       const layers = createValidLayers();
       layers[1] = { ...layers[1]!, zIndex: layers[0]!.zIndex };
-      expect(() =>
-        validateSceneGraph(layers, '4:5', 1080, 1350, validMargins),
-      ).toThrow(InvalidSceneLayerError);
+      expect(() => validateSceneGraph(layers, '4:5', 1080, 1350, validMargins)).toThrow(
+        InvalidSceneLayerError,
+      );
     });
 
     it('rejects duplicate sortOrder', () => {
       const layers = createValidLayers();
       layers[1] = { ...layers[1]!, sortOrder: layers[0]!.sortOrder };
-      expect(() =>
-        validateSceneGraph(layers, '4:5', 1080, 1350, validMargins),
-      ).toThrow(InvalidSceneLayerError);
+      expect(() => validateSceneGraph(layers, '4:5', 1080, 1350, validMargins)).toThrow(
+        InvalidSceneLayerError,
+      );
     });
 
     it('rejects typography layer placed outside safe margins', () => {
@@ -493,9 +496,9 @@ describe('CreativeScene Validator', () => {
         ...layers[3]!,
         bounds: { ...layers[3]!.bounds, x: 50 },
       };
-      expect(() =>
-        validateSceneGraph(layers, '4:5', 1080, 1350, validMargins),
-      ).toThrow(InvalidSceneLayerError);
+      expect(() => validateSceneGraph(layers, '4:5', 1080, 1350, validMargins)).toThrow(
+        InvalidSceneLayerError,
+      );
     });
 
     it('rejects background layer not covering 100% of canvas', () => {
@@ -504,9 +507,9 @@ describe('CreativeScene Validator', () => {
         ...layers[0]!,
         bounds: { x: 0, y: 0, width: 1000, height: 1350 },
       };
-      expect(() =>
-        validateSceneGraph(layers, '4:5', 1080, 1350, validMargins),
-      ).toThrow(InvalidSceneLayerError);
+      expect(() => validateSceneGraph(layers, '4:5', 1080, 1350, validMargins)).toThrow(
+        InvalidSceneLayerError,
+      );
     });
   });
 
@@ -532,9 +535,9 @@ describe('CreativeScene Validator', () => {
           unauthorizedExtraProperty: 'forbidden',
         },
       };
-      expect(() => validateSceneLayer(layer as unknown as SceneLayerDraft, 1080, 1350, validMargins)).toThrow(
-        InvalidSceneLayerError,
-      );
+      expect(() =>
+        validateSceneLayer(layer as unknown as SceneLayerDraft, 1080, 1350, validMargins),
+      ).toThrow(InvalidSceneLayerError);
     });
 
     it('rejects unknown properties in PRODUCT_HERO payload', () => {
@@ -556,9 +559,9 @@ describe('CreativeScene Validator', () => {
         sortOrder: 2,
         payload: heroPayload,
       };
-      expect(() => validateSceneLayer(layer as unknown as SceneLayerDraft, 1080, 1350, validMargins)).toThrow(
-        InvalidSceneLayerError,
-      );
+      expect(() =>
+        validateSceneLayer(layer as unknown as SceneLayerDraft, 1080, 1350, validMargins),
+      ).toThrow(InvalidSceneLayerError);
     });
 
     it('rejects unknown properties in TYPOGRAPHY payload', () => {
@@ -585,9 +588,9 @@ describe('CreativeScene Validator', () => {
           },
         },
       };
-      expect(() => validateSceneLayer(layer as unknown as SceneLayerDraft, 1080, 1350, validMargins)).toThrow(
-        InvalidSceneLayerError,
-      );
+      expect(() =>
+        validateSceneLayer(layer as unknown as SceneLayerDraft, 1080, 1350, validMargins),
+      ).toThrow(InvalidSceneLayerError);
     });
 
     it('rejects unknown properties on the whole layer object', () => {

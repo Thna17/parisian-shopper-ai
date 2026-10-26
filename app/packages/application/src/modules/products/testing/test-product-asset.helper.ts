@@ -42,13 +42,13 @@ export function createTestProductAsset(options?: CreateTestProductAssetOptions):
   assertTestOnlyEnvironment();
   const width = options?.width ?? 600;
   const height = options?.height ?? 600;
-  const sha256 =
-    options?.sha256 ?? 'a'.repeat(64);
+  const sha256 = options?.sha256 ?? 'a'.repeat(64);
 
   return {
     id: options?.id ?? crypto.randomUUID(),
     sha256,
-    storageKey: options?.storageKey ?? `cas/${sha256.slice(0, 2)}/${sha256.slice(2, 4)}/${sha256}.png`,
+    storageKey:
+      options?.storageKey ?? `cas/${sha256.slice(0, 2)}/${sha256.slice(2, 4)}/${sha256}.png`,
     mimeType: options?.mimeType ?? 'image/png',
     format: options?.format ?? 'png',
     byteSize: options?.byteSize ?? 10240,

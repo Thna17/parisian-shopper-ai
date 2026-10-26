@@ -399,11 +399,7 @@ export class PosterFontGlyphMissingError extends ApplicationError {
   public readonly hexCodePoint: string;
   public readonly role?: string | undefined;
 
-  public constructor(
-    fontFamily: string,
-    codePoint: number,
-    role?: string,
-  ) {
+  public constructor(fontFamily: string, codePoint: number, role?: string) {
     const hex = 'U+' + codePoint.toString(16).toUpperCase().padStart(4, '0');
     super({
       code: 'VALIDATION_ERROR',
@@ -478,12 +474,7 @@ export class PosterUnsupportedScriptError extends ApplicationError {
   public readonly scriptCategory?: string | undefined;
   public readonly role?: string | undefined;
 
-  public constructor(
-    codePoint: number,
-    character: string,
-    scriptCategory?: string,
-    role?: string,
-  ) {
+  public constructor(codePoint: number, character: string, scriptCategory?: string, role?: string) {
     const hex = 'U+' + codePoint.toString(16).toUpperCase().padStart(4, '0');
     super({
       code: 'VALIDATION_ERROR',
@@ -501,5 +492,86 @@ export class PosterUnsupportedScriptError extends ApplicationError {
     this.character = character;
     this.scriptCategory = scriptCategory;
     this.role = role;
+  }
+}
+
+export class TemplateNotFoundError extends ApplicationError {
+  public constructor(templateId: string, version?: string) {
+    super({
+      code: 'NOT_FOUND',
+      publicMessage: version
+        ? `Template not found: ${templateId} (version ${version})`
+        : `Template not found: ${templateId}`,
+      details: { templateId, ...(version ? { version } : {}) },
+    });
+  }
+}
+
+export class TemplateNotEligibleForProductionError extends ApplicationError {
+  public constructor(templateId: string, version: string, state: string) {
+    super({
+      code: 'FORBIDDEN',
+      publicMessage: `Template ${templateId}@${version} is in state "${state}" and is not eligible for production use. Only APPROVED templates may be used in production.`,
+      details: { templateId, version, state },
+    });
+  }
+}
+
+export class InvalidTemplateDefinitionError extends ApplicationError {
+  public constructor(reason: string, details?: Record<string, unknown>) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Invalid template definition: ${reason}`,
+      ...(details ? { details } : {}),
+    });
+  }
+}
+
+export class DuplicateTemplateRegistrationError extends ApplicationError {
+  public constructor(templateId: string, version: string) {
+    super({
+      code: 'CONFLICT',
+      publicMessage: `Template ${templateId}@${version} is already registered. Template definitions are immutable and cannot be overwritten.`,
+      details: { templateId, version },
+    });
+  }
+}
+
+export class UnsatisfiableLayoutConstraintError extends ApplicationError {
+  public constructor(
+    constraintName: string,
+    message: string,
+    details?: Readonly<Record<string, unknown>>,
+  ) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Unsatisfiable layout constraint "${constraintName}": ${message}`,
+      details: { constraintName, ...(details ?? {}) },
+    });
+  }
+}
+
+export class TemplateDigestMismatchError extends ApplicationError {
+  public constructor(
+    templateId: string,
+    version: string,
+    expectedDigest: string,
+    actualDigest: string,
+  ) {
+    super({
+      code: 'CONFLICT',
+      publicMessage: `Template ${templateId}@${version} digest mismatch. Expected ${expectedDigest}, got ${actualDigest}. Template approval rejected.`,
+      details: { templateId, version, expectedDigest, actualDigest },
+    });
+  }
+}
+
+export class UnverifiedCommercialFactError extends ApplicationError {
+  public constructor(reason: string, details?: Readonly<Record<string, unknown>>) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Unverified commercial fact: ${reason}`,
+      details: details ?? {},
+    });
   }
 }

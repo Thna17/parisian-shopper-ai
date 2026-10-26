@@ -31,16 +31,9 @@ import {
   type OutboxEventDraft,
   type ReviseSceneInput,
 } from '../domain/scene/creative-scene.types.js';
-import {
-  CreativeSceneNotFoundError,
-} from '../domain/scene/creative-scene-errors.js';
-import {
-  validateSceneGraph,
-} from '../domain/scene/creative-scene.validator.js';
-import {
-  computeDependencyHash,
-  computeSceneHash,
-} from '../domain/scene/scene-hash.js';
+import { CreativeSceneNotFoundError } from '../domain/scene/creative-scene-errors.js';
+import { validateSceneGraph } from '../domain/scene/creative-scene.validator.js';
+import { computeDependencyHash, computeSceneHash } from '../domain/scene/scene-hash.js';
 import {
   CREATIVE_SCENE_REPOSITORY,
   type CreativeSceneRepository,
@@ -83,10 +76,14 @@ export class ReviseSceneUseCase {
   public async execute(input: ReviseSceneInput): Promise<CreativeSceneVersionRecord> {
     // 1. Enforce authorization: require Permission.EDIT_CREATIVE
     if (!input.requesterUserId || input.requesterUserId.trim() === '') {
-      throw new ForbiddenError({ publicMessage: 'Permission denied: requesterUserId is required.' });
+      throw new ForbiddenError({
+        publicMessage: 'Permission denied: requesterUserId is required.',
+      });
     }
     if (!this.permissions.hasAnyRolePermission(input.requesterRoles, Permission.EDIT_CREATIVE)) {
-      throw new ForbiddenError({ publicMessage: 'Permission denied: Cannot revise creative scene.' });
+      throw new ForbiddenError({
+        publicMessage: 'Permission denied: Cannot revise creative scene.',
+      });
     }
 
     // 2. Lookup Scene & Parent Version
@@ -114,8 +111,7 @@ export class ReviseSceneUseCase {
       input.brandProfileVersionId ?? parentVersion.brandProfileVersionId;
     const sourceContentVersionId =
       input.sourceContentVersionId ?? parentVersion.sourceContentVersionId;
-    const productSnapshotId =
-      input.productSnapshotId ?? parentVersion.productSnapshotId;
+    const productSnapshotId = input.productSnapshotId ?? parentVersion.productSnapshotId;
 
     // 3. Validate Geometry & Scene Graph
     const dimensions = STANDARD_ASPECT_RATIO_DIMENSIONS[parentVersion.aspectRatio];
@@ -133,6 +129,10 @@ export class ReviseSceneUseCase {
       productSnapshotId,
       sourceContentVersionId,
       brandProfileVersionId,
+      templateId,
+      templateVersion,
+      aspectRatio: parentVersion.aspectRatio,
+      language,
     });
     const dependencies = verifiedEvidence.dependencies;
 

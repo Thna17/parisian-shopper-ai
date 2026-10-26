@@ -1,8 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import {
-  type ApplicationLogger,
-  APPLICATION_LOGGER,
-} from '@parisian-shopper/common';
+import { type ApplicationLogger, APPLICATION_LOGGER } from '@parisian-shopper/common';
 import {
   type CreativeSceneVersionRecord,
   type OutboxEventDraft,

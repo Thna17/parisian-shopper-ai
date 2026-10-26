@@ -30,7 +30,7 @@ In strict accordance with the Master Engineering Blueprint v3.0, **no business c
 | **W03-DEC-003** | Campaign Validity & Promotion Stacking     | PFC            | W11, W50        | **PROPOSED** |    NO     | Strict upstream precedence; single promo price; no AI discount calculations                 |
 | **W03-DEC-004** | Approved Product Image Sources & Roles     | PFC, LCS       | W10, W20        | **APPROVED** |    NO     | Governed pre-clipped transparent PNG/WebP from approved sources and CAS only                |
 | **W03-DEC-005** | Supported Initial Output Formats           | LCS            | W20, W21, W30   | **PROPOSED** |    NO     | Square 1:1 (1080×1080), Portrait 4:5 (1080×1350), Story 9:16 (1080×1920)                    |
-| **W03-DEC-006** | Initial Five Template Families             | LCS            | W20, W21, W22   | **PROPOSED** |    NO     | Centered Hero, Editorial Split, Khmer Seasonal, Scent Story, Promotion/CTA                  |
+| **W03-DEC-006** | Initial Five Template Families             | LCS            | W20, W21, W22   | **APPROVED** |    NO     | Option A: 5 Canonical Families (Centered Hero, Editorial Split, Khmer Seasonal, Scent Story, Promotion/CTA) with Haussmann Style Preset |
 | **W03-DEC-007** | Approved Latin & Khmer Typography          | LCS, BID       | W21, W30        | **APPROVED** |    NO     | Playfair Display, Montserrat, Noto Sans Khmer (Option A conditional approval)               |
 | **W03-DEC-008** | Brand Archive Licensing & Ingestion Rights | BID            | W40, W41        | **PROPOSED** |  **YES**  | Whitelist verified owned Facebook posts (2024–2026)                                         |
 | **W03-DEC-009** | Visual & Copy Similarity Thresholds        | BID, LCS       | W40, W41        | **PROPOSED** |    NO     | Configurable EvaluationPolicy benchmark candidates: 0.70 text, 0.85 visual                  |
@@ -180,8 +180,8 @@ In strict accordance with the Master Engineering Blueprint v3.0, **no business c
 - **Blocks Implementation:** NO.
 - **Owner:** Creative Director & Brand Director.
 - **Due Milestone:** W22.
-- **Status:** **PROPOSED**
-- **Evidence / Approval Reference:** Implementation Plan v1.0 §W22; Blueprint v3.0 §11.1.
+- **Status:** **APPROVED** (Option A architectural selection formally approved by Project Owner on 2026-10-25; all five canonical template families v1.0.0 and immutable digests formally reviewed and approved by Project Owner Brathna on 2026-10-26 for production use)
+- **Evidence / Approval Reference:** Project Owner Formal Sign-Off (2026-10-26T17:53:59+07:00 / 2026-10-26T10:53:59.000Z); Implementation Plan v1.0 §W22; Blueprint v3.0 §11.1; W22 Evidence Dossier: [`W22-five-approved-template-families.md`](../implementation-evidence/W22-five-approved-template-families.md); Golden Review Manifest: `app/.data/w22-golden-review/manifest.json`.
 
 ---
 

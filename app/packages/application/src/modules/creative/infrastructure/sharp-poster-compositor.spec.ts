@@ -82,6 +82,7 @@ describe('SharpPosterCompositor (POSTER-2 Layout Engine)', () => {
       backgroundBuffer: bg.buffer,
       backgroundMimeType: 'image/png',
       backgroundSha256: bg.sha256,
+      allowNonApprovedForTesting: true,
       generateDebugLayout: true,
     });
 
@@ -136,6 +137,7 @@ describe('SharpPosterCompositor (POSTER-2 Layout Engine)', () => {
       backgroundBuffer: bg.buffer,
       backgroundMimeType: 'image/png',
       backgroundSha256: bg.sha256,
+      allowNonApprovedForTesting: true,
     });
 
     expect(result.width).toBe(1080);
@@ -180,6 +182,7 @@ describe('SharpPosterCompositor (POSTER-2 Layout Engine)', () => {
       backgroundBuffer: bg.buffer,
       backgroundMimeType: 'image/png',
       backgroundSha256: bg.sha256,
+      allowNonApprovedForTesting: true,
     });
 
     expect(result.layoutManifest.templateId).toBe('SCENT_STORY');
@@ -214,6 +217,7 @@ describe('SharpPosterCompositor (POSTER-2 Layout Engine)', () => {
       backgroundBuffer: bg.buffer,
       backgroundMimeType: 'image/png',
       backgroundSha256: bg.sha256,
+      allowNonApprovedForTesting: true,
     });
 
     expect(result.layoutManifest.templateId).toBe('KHMER_SEASONAL');
@@ -246,6 +250,7 @@ describe('SharpPosterCompositor (POSTER-2 Layout Engine)', () => {
       backgroundBuffer: bg.buffer,
       backgroundMimeType: 'image/png',
       backgroundSha256: bg.sha256,
+      allowNonApprovedForTesting: true,
     });
 
     expect(result.width).toBe(1080);
@@ -270,6 +275,7 @@ describe('SharpPosterCompositor (POSTER-2 Layout Engine)', () => {
       backgroundBuffer: bg.buffer,
       backgroundMimeType: 'image/png',
       backgroundSha256: bg.sha256,
+      allowNonApprovedForTesting: true,
     });
 
     expect(result.width).toBe(1080);
@@ -294,6 +300,7 @@ describe('SharpPosterCompositor (POSTER-2 Layout Engine)', () => {
       backgroundBuffer: bg.buffer,
       backgroundMimeType: 'image/png',
       backgroundSha256: bg.sha256,
+      allowNonApprovedForTesting: true,
     };
 
     const run1 = await compositor.renderPoster(input);
@@ -334,6 +341,7 @@ describe('SharpPosterCompositor (POSTER-2 Layout Engine)', () => {
       backgroundBuffer: bg.buffer,
       backgroundMimeType: 'image/png',
       backgroundSha256: bg.sha256,
+      allowNonApprovedForTesting: true,
     });
 
     for (const el of result.layoutManifest.elements) {

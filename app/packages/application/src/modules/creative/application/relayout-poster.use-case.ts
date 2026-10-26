@@ -20,6 +20,7 @@ export interface RelayoutPosterInput {
   readonly canonicalProductSha256?: string;
   readonly logoBuffer?: Buffer;
   readonly generateDebugLayout?: boolean;
+  readonly allowNonApprovedForTesting?: boolean;
 }
 
 /**
@@ -76,6 +77,9 @@ export class RelayoutPosterUseCase {
       ...(input.logoBuffer !== undefined ? { logoBuffer: input.logoBuffer } : {}),
       ...(input.generateDebugLayout !== undefined
         ? { generateDebugLayout: input.generateDebugLayout }
+        : {}),
+      ...(input.allowNonApprovedForTesting !== undefined
+        ? { allowNonApprovedForTesting: input.allowNonApprovedForTesting }
         : {}),
     });
 

@@ -39,18 +39,30 @@ import {
   computeBrandRuleDigest,
   computeFontAssetDigest,
   computeTypographyPolicyDigest,
+  computeTemplateDependencyDigest,
   TYPOGRAPHY_SHAPING_ENGINE_VERSION,
   TYPOGRAPHY_POLICY_VERSION,
 } from '../../domain/scene/scene-hash.js';
 import { APPROVED_FONT_MANIFEST } from '../../infrastructure/fonts/font-manifest.js';
+import { TemplateRegistry } from '../../domain/templates/template-registry.js';
+import type {
+  CanonicalTemplateId,
+  TemplateSemVer,
+} from '../../domain/templates/template-registry.types.js';
 
-export const AUTHORITATIVE_SCENE_EVIDENCE_VERIFIER = Symbol('AUTHORITATIVE_SCENE_EVIDENCE_VERIFIER');
+export const AUTHORITATIVE_SCENE_EVIDENCE_VERIFIER = Symbol(
+  'AUTHORITATIVE_SCENE_EVIDENCE_VERIFIER',
+);
 
 export interface VerifyAuthoritativeSceneEvidenceInput {
   readonly layers: readonly SceneLayerDraft[];
   readonly productSnapshotId: string;
   readonly sourceContentVersionId: string;
   readonly brandProfileVersionId: string;
+  readonly templateId?: string | undefined;
+  readonly templateVersion?: string | undefined;
+  readonly aspectRatio?: string | undefined;
+  readonly language?: string | undefined;
 }
 
 export interface VerifiedAuthoritativeSceneEvidence {
@@ -213,7 +225,10 @@ export class AuthoritativeSceneEvidenceVerifier {
         `CAS buffer length (${evidence.buffer.length}) does not match asset byteSize (${evidence.asset.byteSize})`,
       );
     }
-    const computedBufferSha = createHash('sha256').update(evidence.buffer).digest('hex').toLowerCase();
+    const computedBufferSha = createHash('sha256')
+      .update(evidence.buffer)
+      .digest('hex')
+      .toLowerCase();
     if (computedBufferSha !== evidence.asset.sha256.toLowerCase()) {
       throw new ProductHeroEvidenceMismatchError(
         `CAS buffer digest "${computedBufferSha}" does not match asset sha256 "${evidence.asset.sha256}"`,
@@ -286,12 +301,18 @@ export class AuthoritativeSceneEvidenceVerifier {
         `Hero transparencyRatio mismatch: expected "${evidence.asset.transparencyRatio}", got "${heroPayload.transparencyRatio}"`,
       );
     }
-    if (heroPayload.rightsState !== evidence.rightsEvent.rightsState || evidence.rightsEvent.rightsState !== 'VERIFIED') {
+    if (
+      heroPayload.rightsState !== evidence.rightsEvent.rightsState ||
+      evidence.rightsEvent.rightsState !== 'VERIFIED'
+    ) {
       throw new ProductHeroEvidenceMismatchError(
         `Hero rightsState mismatch: expected "${String(evidence.rightsEvent.rightsState)}", got "${String(heroPayload.rightsState)}"`,
       );
     }
-    if (heroPayload.approvalDecision !== evidence.approvalEvent.decision || evidence.approvalEvent.decision !== 'APPROVED') {
+    if (
+      heroPayload.approvalDecision !== evidence.approvalEvent.decision ||
+      evidence.approvalEvent.decision !== 'APPROVED'
+    ) {
       throw new ProductHeroEvidenceMismatchError(
         `Hero approvalDecision mismatch: expected "${String(evidence.approvalEvent.decision)}", got "${String(heroPayload.approvalDecision)}"`,
       );
@@ -433,6 +454,32 @@ export class AuthoritativeSceneEvidenceVerifier {
         }),
         sortOrder: 20,
       });
+    }
+
+    // 12. Attach TEMPLATE_DEFINITION dependency if templateId is specified
+    if (input.templateId) {
+      const registry = TemplateRegistry.getInstance();
+      const templateId = input.templateId as CanonicalTemplateId;
+      const templateVersion = (input.templateVersion ?? '1.0.0') as TemplateSemVer;
+      if (registry.hasTemplate(templateId, templateVersion)) {
+        const template = registry.getTemplate(templateId, templateVersion);
+        const approvalRef =
+          template.provenance.approverRef ?? template.provenance.sourceDecisionRef ?? 'W03-DEC-006';
+        dependencies.push({
+          dependencyType: 'TEMPLATE_DEFINITION',
+          dependencyIdentifier: `${template.id}@${template.version}`,
+          evidenceIdentifier: approvalRef,
+          sceneLayerKey: null,
+          immutableDigest: computeTemplateDependencyDigest({
+            templateId: template.id,
+            templateVersion: template.version,
+            tokenSetVersion: template.tokens.tokenSetVersion,
+            contentDigest: template.provenance.contentDigest,
+            approvalReference: approvalRef,
+          }),
+          sortOrder: 30,
+        });
+      }
     }
 
     return {

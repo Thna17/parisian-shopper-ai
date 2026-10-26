@@ -20,3 +20,4 @@ export * from './services/text-layout-engine.js';
 export * from './services/safe-svg-renderer.js';
 export * from './services/poster-copy-builder.js';
 export * from './scene/index.js';
+export * from './templates/index.js';
