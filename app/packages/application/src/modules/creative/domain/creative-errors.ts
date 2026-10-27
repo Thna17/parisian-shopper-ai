@@ -575,3 +575,70 @@ export class UnverifiedCommercialFactError extends ApplicationError {
     });
   }
 }
+
+export class CompositorLayerMissingAssetError extends ApplicationError {
+  public readonly failedLayerIndex: number;
+
+  public constructor(
+    layerIndex: number,
+    reason: string,
+    details?: Readonly<Record<string, unknown>>,
+  ) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Compositor layer at index ${layerIndex} is missing required asset: ${reason}`,
+      details: { failedLayerIndex: layerIndex, layerIndex, reason, ...(details ?? {}) },
+    });
+    this.failedLayerIndex = layerIndex;
+  }
+}
+
+export class CompositorCorruptedLayerAssetError extends ApplicationError {
+  public constructor(
+    layerIndex: number,
+    expectedDigest: string,
+    actualDigest: string,
+    details?: Readonly<Record<string, unknown>>,
+  ) {
+    super({
+      code: 'CONFLICT',
+      publicMessage: `Compositor layer at index ${layerIndex} asset is corrupted. Expected digest ${expectedDigest}, got ${actualDigest}.`,
+      details: { layerIndex, expectedDigest, actualDigest, ...(details ?? {}) },
+    });
+  }
+}
+
+export class CompositorUnsupportedCanvasGeometryError extends ApplicationError {
+  public constructor(
+    width: number,
+    height: number,
+    reason?: string,
+    details?: Readonly<Record<string, unknown>>,
+  ) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Unsupported compositor canvas geometry (${width}x${height}): ${reason ?? 'Dimensions must be positive integers'}`,
+      details: { width, height, reason, ...(details ?? {}) },
+    });
+  }
+}
+
+export class CompositorColorProfileError extends ApplicationError {
+  public constructor(profile: string, reason: string, details?: Readonly<Record<string, unknown>>) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Compositor color profile error for "${profile}": ${reason}`,
+      details: { profile, reason, ...(details ?? {}) },
+    });
+  }
+}
+
+export class ProductHeroContainmentError extends ApplicationError {
+  public constructor(reason: string, details?: Readonly<Record<string, unknown>>) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Product hero containment error: ${reason}`,
+      details: { reason, ...(details ?? {}) },
+    });
+  }
+}

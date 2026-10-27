@@ -9,6 +9,8 @@ import {
   type SourceProductBoundingBox,
   PS_COMPOSITOR_VERSION,
 } from '../application/hero-compositor.port.js';
+import { type CompositorLayerInput } from '../application/hybrid-compositor.port.js';
+import { SharpHybridCompositorAdapter } from './sharp-hybrid-compositor.adapter.js';
 
 import {
   CreativeImageDecodeFailedError,
@@ -108,10 +110,17 @@ export function configureSharpResourceLimits(): void {
  */
 export class SharpHeroCompositor implements HeroCompositor {
   private readonly options: Required<SharpHeroCompositorOptions>;
+  private readonly hybridCompositor: SharpHybridCompositorAdapter;
 
   public constructor(options?: SharpHeroCompositorOptions) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
     configureSharpResourceLimits();
+    this.hybridCompositor = new SharpHybridCompositorAdapter({
+      maxOutputBytes: this.options.maxOutputBytes,
+      maxDecodedPixels: this.options.maxDecodedPixels,
+      timeoutMs: this.options.timeoutMs,
+      defaultMarginPercent: this.options.defaultMarginPercent,
+    });
   }
 
   public async composite(input: CompositeVisualInput): Promise<CompositeVisualResult> {
@@ -299,45 +308,23 @@ export class SharpHeroCompositor implements HeroCompositor {
       height: targetHeroHeight,
     };
 
-    // 8. Execute Deterministic Composition via Sharp
+    // 8. Execute Deterministic 3-Layer Composition via SharpHybridCompositor
     try {
-      // Step A: Process Background (resize cover, center, strip metadata, convert to sRGB)
-      const resizedBgBuffer = await sharp(input.backgroundBuffer, {
-        limitInputPixels: this.options.maxDecodedPixels,
-      })
-        .resize({
-          width: canvasWidth,
-          height: canvasHeight,
-          fit: sharp.fit.cover,
-          position: sharp.strategy.attention ? 'center' : 'center',
-          kernel: sharp.kernel.lanczos3,
-        })
-        .toColorspace('srgb')
-        .removeAlpha()
-        .toBuffer();
-
-      // Step B: Process Product Hero from trimmed bounds (resize preserving aspect ratio, Lanczos3, sRGB)
-      const resizedProductBuffer = await sharp(trimmedBuffer, {
-        limitInputPixels: this.options.maxDecodedPixels,
-      })
-        .resize({
-          width: targetHeroWidth,
-          height: targetHeroHeight,
-          fit: sharp.fit.fill, // Exact aspect ratio already computed
-          kernel: sharp.kernel.lanczos3,
-        })
-        .toColorspace('srgb')
-        .png({ compressionLevel: 9 })
-        .toBuffer();
-
-      // Step C: Optional Subtle Contact Shadow generated from product alpha mask
       let contactShadowBoundingBox: HeroBoundingBox | undefined;
-      const compositeLayers: sharp.OverlayOptions[] = [];
+      let shadowBuffer: Buffer | undefined;
 
       const enableShadow = input.enableContactShadow ?? true;
       if (enableShadow && targetHeroWidth > 0 && targetHeroHeight > 0) {
         try {
-          const alphaOnly = await sharp(resizedProductBuffer).extractChannel('alpha').toBuffer();
+          const alphaOnly = await sharp(trimmedBuffer)
+            .resize({
+              width: targetHeroWidth,
+              height: targetHeroHeight,
+              fit: sharp.fit.fill,
+              kernel: sharp.kernel.lanczos3,
+            })
+            .extractChannel('alpha')
+            .toBuffer();
 
           const bottomSliceH = Math.max(4, Math.round(targetHeroHeight * 0.2));
           const shadowW = Math.round(targetHeroWidth * 1.05);
@@ -364,10 +351,10 @@ export class SharpHeroCompositor implements HeroCompositor {
             shadowRgba[offset] = 0; // R
             shadowRgba[offset + 1] = 0; // G
             shadowRgba[offset + 2] = 0; // B
-            shadowRgba[offset + 3] = Math.round(shadowRaw[i]! * 0.32); // Max 32% opacity
+            shadowRgba[offset + 3] = Math.round((shadowRaw[i] ?? 0) * 0.32); // Max 32% opacity
           }
 
-          const shadowBuffer = await sharp(shadowRgba, {
+          shadowBuffer = await sharp(shadowRgba, {
             raw: {
               width: shadowInfo.width,
               height: shadowInfo.height,
@@ -386,51 +373,72 @@ export class SharpHeroCompositor implements HeroCompositor {
             width: shadowInfo.width,
             height: shadowInfo.height,
           };
-
-          compositeLayers.push({
-            input: shadowBuffer,
-            left: shadowLeft,
-            top: shadowTop,
-            blend: 'over',
-          });
         } catch {
           // If shadow generation fails, composite hero cleanly without shadow
         }
       }
 
-      // Step D: Composite Product Hero over contact shadow (original pixels never modified)
-      compositeLayers.push({
-        input: resizedProductBuffer,
-        top: heroY,
-        left: heroX,
-        blend: 'over',
-      });
+      // Delegate to SharpHybridCompositor as strict 3-layer composition
+      const layers: CompositorLayerInput[] = [
+        {
+          layerIndex: 0,
+          layerGroup: 'BACKGROUND',
+          buffer: input.backgroundBuffer,
+          mimeType: input.backgroundMimeType,
+          contentDigest: actualBackgroundSha,
+          placement: {
+            x: 0,
+            y: 0,
+            width: canvasWidth,
+            height: canvasHeight,
+          },
+        },
+      ];
 
-      const compositedBuffer = await sharp(resizedBgBuffer, {
-        limitInputPixels: this.options.maxDecodedPixels,
-      })
-        .composite(compositeLayers)
-        .png({
-          compressionLevel: 9,
-          adaptiveFiltering: true,
-          effort: 7,
-        })
-        .toBuffer();
-
-      if (compositedBuffer.length > this.options.maxOutputBytes) {
-        throw new CreativeOutputTooLargeError(compositedBuffer.length, this.options.maxOutputBytes);
+      if (shadowBuffer && contactShadowBoundingBox) {
+        const shadowSha = createHash('sha256').update(shadowBuffer).digest('hex');
+        layers.push({
+          layerIndex: 1,
+          layerGroup: 'SHADOW',
+          buffer: shadowBuffer,
+          mimeType: 'image/png',
+          contentDigest: shadowSha,
+          placement: contactShadowBoundingBox,
+        });
       }
 
-      const outputDigest = createHash('sha256').update(compositedBuffer).digest('hex');
+      layers.push({
+        layerIndex: 2,
+        layerGroup: 'PRODUCT_HERO',
+        buffer: input.canonicalProductBuffer,
+        mimeType: input.canonicalProductMimeType,
+        contentDigest: actualProductSha,
+        placement: heroBoundingBox,
+      });
+
+      const hybridResult = await this.hybridCompositor.composite({
+        creativeJobId: input.creativeJobId,
+        aspectRatio: input.aspectRatio as '1:1' | '4:5' | '9:16',
+        canvas: {
+          width: canvasWidth,
+          height: canvasHeight,
+          safeMargins: { left: safeLeft, top: safeTop, right: safeRight, bottom: safeBottom },
+        },
+        layers,
+        colorProfile: 'sRGB',
+        enableContactShadow: false, // Explicit shadow layer supplied if enabled
+        allowNonApprovedForTesting: true,
+      });
+
       const latencyMs = Date.now() - startTime;
 
       return {
-        compositedBuffer,
+        compositedBuffer: hybridResult.compositedBuffer,
         mimeType: 'image/png',
         width: canvasWidth,
         height: canvasHeight,
-        byteSize: compositedBuffer.length,
-        sha256: outputDigest,
+        byteSize: hybridResult.byteSize,
+        sha256: hybridResult.sha256,
         latencyMs,
         compositorVersion: PS_COMPOSITOR_VERSION,
         heroScale: targetHeroHeight / canvasHeight,
@@ -440,7 +448,7 @@ export class SharpHeroCompositor implements HeroCompositor {
         contactShadowBoundingBox,
         productDigest: actualProductSha,
         backgroundDigest: actualBackgroundSha,
-        outputDigest,
+        outputDigest: hybridResult.sha256,
       };
     } catch (error) {
       if (

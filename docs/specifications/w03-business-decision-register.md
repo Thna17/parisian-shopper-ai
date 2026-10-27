@@ -155,7 +155,7 @@ In strict accordance with the Master Engineering Blueprint v3.0, **no business c
 - **Owner:** Social Media Lead & Digital Marketing Specialist.
 - **Due Milestone:** W20.
 - **Status:** **PROPOSED**
-- **Evidence / Approval Reference:** Blueprint v3.0 §8.1, §9; `creative-business-rules.md` §3 Decision 4.
+- **Evidence / Approval Reference:** Blueprint v3.0 §8.1, §9; `creative-business-rules.md` §3 Decision 4; W23 Hybrid Compositor Multi-Format Determinism Evidence ([`W23-deterministic-hybrid-compositor.md`](../implementation-evidence/W23-deterministic-hybrid-compositor.md)).
 
 ---
 
@@ -181,7 +181,7 @@ In strict accordance with the Master Engineering Blueprint v3.0, **no business c
 - **Owner:** Creative Director & Brand Director.
 - **Due Milestone:** W22.
 - **Status:** **APPROVED** (Option A architectural selection formally approved by Project Owner on 2026-10-25; all five canonical template families v1.0.0 and immutable digests formally reviewed and approved by Project Owner Brathna on 2026-10-26 for production use)
-- **Evidence / Approval Reference:** Project Owner Formal Sign-Off (2026-10-26T17:53:59+07:00 / 2026-10-26T10:53:59.000Z); Implementation Plan v1.0 §W22; Blueprint v3.0 §11.1; W22 Evidence Dossier: [`W22-five-approved-template-families.md`](../implementation-evidence/W22-five-approved-template-families.md); Golden Review Manifest: `app/.data/w22-golden-review/manifest.json`.
+- **Evidence / Approval Reference:** Project Owner Formal Sign-Off (2026-10-26T17:53:59+07:00 / 2026-10-26T10:53:59.000Z); Implementation Plan v1.0 §W22; Blueprint v3.0 §11.1; W22 Evidence Dossier: [`W22-five-approved-template-families.md`](../implementation-evidence/W22-five-approved-template-families.md); W23 Hybrid Compositor Evidence: [`W23-deterministic-hybrid-compositor.md`](../implementation-evidence/W23-deterministic-hybrid-compositor.md); Golden Review Manifest: `app/.data/w22-golden-review/manifest.json`.
 
 ---
 

@@ -1,4 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import { CompositorMetricsTracker } from '@parisian-shopper/application';
 
 import { QueueRegistry } from '../queue.registry.js';
 import { AIMetricsTracker } from './ai-metrics.tracker.js';
@@ -10,6 +11,9 @@ export class PrometheusMetricsService {
     private readonly queueRegistry: QueueRegistry,
     @Inject(AIMetricsTracker)
     private readonly aiMetrics: AIMetricsTracker,
+    @Optional()
+    @Inject(CompositorMetricsTracker)
+    private readonly compositorMetrics?: CompositorMetricsTracker,
   ) {}
 
   public async getPrometheusMetrics(): Promise<string> {
@@ -230,6 +234,74 @@ export class PrometheusMetricsService {
     }
     lines.push('');
 
+    // ==========================================
+    // 5. Creative Compositor Metrics
+    // ==========================================
+    const compositorTracker = this.compositorMetrics ?? CompositorMetricsTracker.getInstance();
+    const histSummaries = compositorTracker.getHistogramSummaries();
+    const renderSummaries = compositorTracker.getRenderSummaries();
+    const failureSummaries = compositorTracker.getLayerFailureSummaries();
+
+    // 5a. Render Duration Histogram
+    lines.push(
+      '# HELP creative_compositor_render_duration_seconds Latency of creative compositor render operations in seconds',
+    );
+    lines.push('# TYPE creative_compositor_render_duration_seconds histogram');
+    for (const h of histSummaries) {
+      for (const b of h.buckets) {
+        lines.push(
+          `creative_compositor_render_duration_seconds_bucket{template_id="${h.templateId}",format="${h.format}",cache_status="${h.cacheStatus}",le="${b.le}"} ${b.count}`,
+        );
+      }
+      lines.push(
+        `creative_compositor_render_duration_seconds_sum{template_id="${h.templateId}",format="${h.format}",cache_status="${h.cacheStatus}"} ${h.sum.toFixed(6)}`,
+      );
+      lines.push(
+        `creative_compositor_render_duration_seconds_count{template_id="${h.templateId}",format="${h.format}",cache_status="${h.cacheStatus}"} ${h.count}`,
+      );
+    }
+    lines.push('');
+
+    // 5b. Renders Total Counter
+    lines.push(
+      '# HELP creative_compositor_renders_total Total number of creative hybrid compositor render operations',
+    );
+    lines.push('# TYPE creative_compositor_renders_total counter');
+    for (const r of renderSummaries) {
+      lines.push(
+        `creative_compositor_renders_total{template_id="${r.templateId}",format="${r.format}",cache_status="${r.cacheStatus}",status="${r.status}"} ${r.count}`,
+      );
+    }
+    lines.push('');
+
+    // 5c. Layer Failures Total Counter
+    lines.push(
+      '# HELP creative_compositor_layer_failures_total Total number of individual layer processing failures in compositor',
+    );
+    lines.push('# TYPE creative_compositor_layer_failures_total counter');
+    for (const f of failureSummaries) {
+      lines.push(
+        `creative_compositor_layer_failures_total{layer_group="${f.layerGroup}",error_code="${f.errorCode}"} ${f.count}`,
+      );
+    }
+    lines.push('');
+
     return lines.join('\n') + '\n';
+  }
+
+  public recordCompositorRender(input: {
+    templateId?: string;
+    format?: string;
+    cacheStatus: 'HIT' | 'MISS' | 'BYPASS';
+    durationSeconds: number;
+    status: 'success' | 'failure';
+  }): void {
+    const tracker = this.compositorMetrics ?? CompositorMetricsTracker.getInstance();
+    tracker.recordRender(input);
+  }
+
+  public recordCompositorLayerFailure(layerGroup: string, errorCode: string): void {
+    const tracker = this.compositorMetrics ?? CompositorMetricsTracker.getInstance();
+    tracker.recordLayerFailure(layerGroup, errorCode);
   }
 }
