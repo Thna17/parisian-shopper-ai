@@ -17,3 +17,4 @@ export * from './outbox-relay.worker.js';
 export * from './outbox-relay-worker.module.js';
 export * from './metrics/ai-metrics.tracker.js';
 export * from './metrics/prometheus-metrics.service.js';
+export { CompositorMetricsTracker } from '@parisian-shopper/application';

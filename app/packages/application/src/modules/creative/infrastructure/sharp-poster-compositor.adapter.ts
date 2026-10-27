@@ -6,17 +6,16 @@ import {
   type RenderPosterResult,
   POSTER_COMPOSITOR_VERSION,
 } from '../application/poster-compositor.port.js';
+import { type CompositorLayerInput } from '../application/hybrid-compositor.port.js';
+import { SharpHybridCompositorAdapter } from './sharp-hybrid-compositor.adapter.js';
+import { configureSharpResourceLimits } from './sharp-hero-compositor.adapter.js';
 import {
   PosterTemplateRenderer,
   type ComputedTemplateLayout,
   type LayoutManifestElement,
 } from '../domain/poster-templates.js';
 import { loadEmbeddedFonts } from './fonts/font-loader.js';
-import {
-  CreativeCompositionFailedError,
-  CreativeOutputTooLargeError,
-  PosterCollisionError,
-} from '../domain/creative-errors.js';
+import { CreativeCompositionFailedError, PosterCollisionError } from '../domain/creative-errors.js';
 import { TextLayoutEngine, type BoundingBox } from '../domain/services/text-layout-engine.js';
 
 export interface SharpPosterCompositorOptions {
@@ -33,14 +32,16 @@ const DEFAULT_OPTIONS: Required<SharpPosterCompositorOptions> = {
 
 export class SharpPosterCompositor implements PosterCompositor {
   private readonly options: Required<SharpPosterCompositorOptions>;
+  private readonly hybridCompositor: SharpHybridCompositorAdapter;
 
   public constructor(options?: SharpPosterCompositorOptions) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
-    try {
-      sharp.unblock({ operation: ['VipsForeignLoadSvg'] });
-    } catch {
-      // Ignore
-    }
+    configureSharpResourceLimits();
+    this.hybridCompositor = new SharpHybridCompositorAdapter({
+      maxOutputBytes: this.options.maxOutputBytes,
+      maxDecodedPixels: this.options.maxDecodedPixels,
+      timeoutMs: this.options.timeoutMs,
+    });
   }
 
   public async renderPoster(input: RenderPosterInput): Promise<RenderPosterResult> {
@@ -176,26 +177,18 @@ export class SharpPosterCompositor implements PosterCompositor {
       return el;
     });
 
-    // 7. Render resized product hero (Lanczos3, sRGB)
-    const resizedProductBuffer = await sharp(trimmedBuffer, {
-      limitInputPixels: this.options.maxDecodedPixels,
-    })
-      .resize({
-        width: targetHeroWidth,
-        height: targetHeroHeight,
-        fit: sharp.fit.fill,
-        kernel: sharp.kernel.lanczos3,
-      })
-      .toColorspace('srgb')
-      .png({ compressionLevel: 9 })
-      .toBuffer();
-
     // 8. Generate Separate Contact Shadow Layer from Alpha Mask
-    const compositeLayers: sharp.OverlayOptions[] = [];
     let contactShadowBox: BoundingBox | undefined;
+    let shadowBuffer: Buffer | undefined;
 
     try {
-      const alphaOnly = await sharp(resizedProductBuffer).extractChannel('alpha').toBuffer();
+      const alphaOnly = await sharp(trimmedBuffer)
+        .resize(targetHeroWidth, targetHeroHeight, {
+          fit: sharp.fit.fill,
+          kernel: sharp.kernel.lanczos3,
+        })
+        .extractChannel('alpha')
+        .toBuffer();
       const bottomSliceH = Math.max(4, Math.round(targetHeroHeight * 0.18));
       const shadowW = Math.round(targetHeroWidth * 1.05);
       const shadowH = Math.max(8, Math.round(targetHeroHeight * 0.035));
@@ -221,10 +214,10 @@ export class SharpPosterCompositor implements PosterCompositor {
         shadowRgba[offset] = 0;
         shadowRgba[offset + 1] = 0;
         shadowRgba[offset + 2] = 0;
-        shadowRgba[offset + 3] = Math.round(shadowRaw[i]! * 0.35); // 35% shadow opacity
+        shadowRgba[offset + 3] = Math.round((shadowRaw[i] ?? 0) * 0.35); // 35% shadow opacity
       }
 
-      const shadowBuffer = await sharp(shadowRgba, {
+      shadowBuffer = await sharp(shadowRgba, {
         raw: { width: shadowInfo.width, height: shadowInfo.height, channels: 4 },
       })
         .png({ compressionLevel: 9 })
@@ -245,78 +238,99 @@ export class SharpPosterCompositor implements PosterCompositor {
         type: 'SHADOW',
         boundingBox: contactShadowBox,
       });
-
-      compositeLayers.push({
-        input: shadowBuffer,
-        left: shadowLeft,
-        top: shadowTop,
-        blend: 'over',
-      });
     } catch {
       // Continue without contact shadow if mask extraction fails
     }
 
-    // 9. Add Product Layer (unmodified canonical pixels)
-    compositeLayers.push({
-      input: resizedProductBuffer,
-      left: heroX,
-      top: heroY,
-      blend: 'over',
-    });
+    // 9. Delegate to SharpHybridCompositor
+    const layers: CompositorLayerInput[] = [
+      {
+        layerIndex: 0,
+        layerGroup: 'BACKGROUND',
+        buffer: input.backgroundBuffer,
+        mimeType: input.backgroundMimeType,
+        contentDigest: actualBackgroundSha,
+        placement: {
+          x: 0,
+          y: 0,
+          width: targetWidth,
+          height: targetHeight,
+        },
+      },
+    ];
 
-    // 10. Optional Logo Layer
-    if (input.logoBuffer) {
-      const logoW = Math.min(180, Math.round(targetWidth * 0.2));
-      const resizedLogo = await sharp(input.logoBuffer)
-        .resize({ width: logoW, fit: 'inside' })
-        .png()
-        .toBuffer();
-      compositeLayers.push({
-        input: resizedLogo,
-        left: computedLayout.manifest.safeMargins.left,
-        top: computedLayout.manifest.safeMargins.top,
-        blend: 'over',
+    if (shadowBuffer && contactShadowBox) {
+      const shadowSha = createHash('sha256').update(shadowBuffer).digest('hex');
+      layers.push({
+        layerIndex: 1,
+        layerGroup: 'SHADOW',
+        buffer: shadowBuffer,
+        mimeType: 'image/png',
+        contentDigest: shadowSha,
+        placement: contactShadowBox,
       });
     }
 
-    // 11. Render SVG Typography & Graphic Overlay
-    const svgOverlayBuffer = await sharp(Buffer.from(computedLayout.svgOverlay))
-      .resize(targetWidth, targetHeight)
-      .png({ compressionLevel: 9 })
-      .toBuffer();
-
-    compositeLayers.push({
-      input: svgOverlayBuffer,
-      left: 0,
-      top: 0,
-      blend: 'over',
+    layers.push({
+      layerIndex: 2,
+      layerGroup: 'PRODUCT_HERO',
+      buffer: input.canonicalProductBuffer,
+      mimeType: input.canonicalProductMimeType,
+      contentDigest: actualProductSha,
+      placement: actualProductBox,
     });
 
-    // 12. Process Background Layer (cover, centered, sRGB)
-    const resizedBgBuffer = await sharp(input.backgroundBuffer, {
-      limitInputPixels: this.options.maxDecodedPixels,
-    })
-      .resize({
-        width: targetWidth,
-        height: targetHeight,
-        fit: sharp.fit.cover,
-        position: sharp.strategy.attention,
-      })
-      .toColorspace('srgb')
-      .removeAlpha()
-      .toBuffer();
-
-    // 13. Execute Final Compositing
-    const posterBuffer = await sharp(resizedBgBuffer)
-      .composite(compositeLayers)
-      .png({ compressionLevel: 9, adaptiveFiltering: true })
-      .toBuffer();
-
-    if (posterBuffer.length > this.options.maxOutputBytes) {
-      throw new CreativeOutputTooLargeError(posterBuffer.length, this.options.maxOutputBytes);
+    if (input.logoBuffer) {
+      const logoW = Math.min(180, Math.round(targetWidth * 0.2));
+      const logoSha = createHash('sha256').update(input.logoBuffer).digest('hex');
+      layers.push({
+        layerIndex: 3,
+        layerGroup: 'BRAND_LOGO',
+        buffer: input.logoBuffer,
+        mimeType: 'image/png',
+        contentDigest: logoSha,
+        placement: {
+          x: computedLayout.manifest.safeMargins.left,
+          y: computedLayout.manifest.safeMargins.top,
+          width: logoW,
+          height: logoW,
+        },
+      });
     }
 
-    const outputDigest = createHash('sha256').update(posterBuffer).digest('hex');
+    const svgBuffer = Buffer.from(computedLayout.svgOverlay, 'utf8');
+    const svgSha = createHash('sha256').update(svgBuffer).digest('hex');
+    layers.push({
+      layerIndex: 4,
+      layerGroup: 'TYPOGRAPHY',
+      buffer: svgBuffer,
+      mimeType: 'image/svg+xml',
+      contentDigest: svgSha,
+      placement: {
+        x: 0,
+        y: 0,
+        width: targetWidth,
+        height: targetHeight,
+      },
+    });
+
+    const hybridResult = await this.hybridCompositor.composite({
+      creativeJobId: input.creativeJobId,
+      templateId: input.posterSpec.templateId,
+      aspectRatio: input.posterSpec.outputFormat.aspectRatio,
+      canvas: {
+        width: targetWidth,
+        height: targetHeight,
+        safeMargins: computedLayout.manifest.safeMargins,
+      },
+      layers,
+      colorProfile: 'sRGB',
+      enableContactShadow: false,
+      allowNonApprovedForTesting: input.allowNonApprovedForTesting,
+    });
+
+    const posterBuffer = hybridResult.compositedBuffer;
+    const outputDigest = hybridResult.sha256;
     const latencyMs = Date.now() - startTime;
 
     // 14. Optional Debug Layout Rendering (draws bounding boxes for QA/manifest validation)

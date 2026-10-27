@@ -1,5 +1,8 @@
 import { Global, Module } from '@nestjs/common';
-import { CONTENT_GENERATION_ENQUEUER } from '@parisian-shopper/application';
+import {
+  CONTENT_GENERATION_ENQUEUER,
+  CompositorMetricsTracker,
+} from '@parisian-shopper/application';
 
 import { QueueRegistry } from './queue.registry.js';
 import { ValkeyConnectionService } from './valkey-connection.service.js';
@@ -21,6 +24,7 @@ import { PrometheusMetricsService } from './metrics/prometheus-metrics.service.j
     ContentGenerationQueue,
     CreativeGenerationQueue,
     AIMetricsTracker,
+    CompositorMetricsTracker,
     PrometheusMetricsService,
     { provide: CONTENT_GENERATION_ENQUEUER, useExisting: ContentGenerationQueue },
     { provide: CREATIVE_GENERATION_ENQUEUER, useExisting: CreativeGenerationQueue },
@@ -32,6 +36,7 @@ import { PrometheusMetricsService } from './metrics/prometheus-metrics.service.j
     ContentGenerationQueue,
     CreativeGenerationQueue,
     AIMetricsTracker,
+    CompositorMetricsTracker,
     PrometheusMetricsService,
     CONTENT_GENERATION_ENQUEUER,
     CREATIVE_GENERATION_ENQUEUER,

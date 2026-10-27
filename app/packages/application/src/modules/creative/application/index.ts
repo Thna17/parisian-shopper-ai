@@ -15,6 +15,7 @@ export * from './creative-generation-enqueuer.port.js';
 export * from './outbox-relay.repository.js';
 export * from './visual-review-notification.port.js';
 export * from './poster-compositor.port.js';
+export * from './hybrid-compositor.port.js';
 export * from './relayout-poster.use-case.js';
 export * from './revise-poster.use-case.js';
 export * from './export-poster.use-case.js';

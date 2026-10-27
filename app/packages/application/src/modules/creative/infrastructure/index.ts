@@ -8,3 +8,6 @@ export * from './fonts/font-manifest.js';
 export * from './fonts/font-registry.js';
 export * from './fonts/font-loader.js';
 export * from './fonts/harfbuzz-shaping-service.js';
+export * from './compositor-render-cache.js';
+export * from './compositor-metrics.tracker.js';
+export * from './sharp-hybrid-compositor.adapter.js';

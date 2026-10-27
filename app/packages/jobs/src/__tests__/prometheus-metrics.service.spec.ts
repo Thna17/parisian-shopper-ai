@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { type Queue } from 'bullmq';
+import { CompositorMetricsTracker } from '@parisian-shopper/application';
 
 import { AIMetricsTracker } from '../metrics/ai-metrics.tracker.js';
 import { PrometheusMetricsService } from '../metrics/prometheus-metrics.service.js';
@@ -53,7 +54,29 @@ describe('PrometheusMetricsService', () => {
       status: 'failure',
     });
 
-    const metricsService = new PrometheusMetricsService(queueRegistry, aiTracker);
+    // Record Creative Compositor metrics
+    const compositorTracker = new CompositorMetricsTracker();
+    compositorTracker.recordRender({
+      templateId: 'CENTERED_HERO',
+      format: '1:1',
+      cacheStatus: 'HIT',
+      durationSeconds: 0.002,
+      status: 'success',
+    });
+    compositorTracker.recordRender({
+      templateId: 'EDITORIAL_SPLIT',
+      format: '4:5',
+      cacheStatus: 'MISS',
+      durationSeconds: 0.415,
+      status: 'success',
+    });
+    compositorTracker.recordLayerFailure('PRODUCT_HERO', 'COMPOSITOR_CORRUPTED_LAYER');
+
+    const metricsService = new PrometheusMetricsService(
+      queueRegistry,
+      aiTracker,
+      compositorTracker,
+    );
     const output = await metricsService.getPrometheusMetrics();
 
     // Assert Process metrics
@@ -97,6 +120,37 @@ describe('PrometheusMetricsService', () => {
     );
     expect(output).toContain(
       'ai_request_latency_seconds_count{provider="openai",model="gpt-4o"} 1',
+    );
+
+    // Assert Creative Compositor metrics
+    expect(output).toContain('# HELP creative_compositor_render_duration_seconds');
+    expect(output).toContain('# TYPE creative_compositor_render_duration_seconds histogram');
+    expect(output).toContain(
+      'creative_compositor_render_duration_seconds_bucket{template_id="CENTERED_HERO",format="1:1",cache_status="HIT",le="0.005"} 1',
+    );
+    expect(output).toContain(
+      'creative_compositor_render_duration_seconds_bucket{template_id="EDITORIAL_SPLIT",format="4:5",cache_status="MISS",le="0.5"} 1',
+    );
+    expect(output).toContain(
+      'creative_compositor_render_duration_seconds_sum{template_id="CENTERED_HERO",format="1:1",cache_status="HIT"} 0.002000',
+    );
+    expect(output).toContain(
+      'creative_compositor_render_duration_seconds_count{template_id="CENTERED_HERO",format="1:1",cache_status="HIT"} 1',
+    );
+
+    expect(output).toContain('# HELP creative_compositor_renders_total');
+    expect(output).toContain('# TYPE creative_compositor_renders_total counter');
+    expect(output).toContain(
+      'creative_compositor_renders_total{template_id="CENTERED_HERO",format="1:1",cache_status="HIT",status="success"} 1',
+    );
+    expect(output).toContain(
+      'creative_compositor_renders_total{template_id="EDITORIAL_SPLIT",format="4:5",cache_status="MISS",status="success"} 1',
+    );
+
+    expect(output).toContain('# HELP creative_compositor_layer_failures_total');
+    expect(output).toContain('# TYPE creative_compositor_layer_failures_total counter');
+    expect(output).toContain(
+      'creative_compositor_layer_failures_total{layer_group="PRODUCT_HERO",error_code="COMPOSITOR_CORRUPTED_LAYER"} 1',
     );
   });
 });
