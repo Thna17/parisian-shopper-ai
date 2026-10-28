@@ -1,8 +1,10 @@
-import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import {
+  TELEGRAM_WORKFLOW_REPOSITORY,
   TelegramCommandCenter,
   type TelegramResponse,
   type TelegramUserProfile,
+  type TelegramWorkflowRepository,
   assertTelegramUserId,
 } from '@parisian-shopper/application';
 import { AppConfigService, FeatureFlag, FeatureFlagService } from '@parisian-shopper/config';
@@ -20,6 +22,9 @@ export class GrammyBotAdapter implements OnModuleInit, OnModuleDestroy {
     private readonly config: AppConfigService,
     private readonly flags: FeatureFlagService,
     @Inject(APPLICATION_LOGGER) private readonly logger: ApplicationLogger,
+    @Optional()
+    @Inject(TELEGRAM_WORKFLOW_REPOSITORY)
+    private readonly workflowRepo?: TelegramWorkflowRepository,
   ) {
     if (bot !== null) this.register(bot);
   }
@@ -66,7 +71,7 @@ export class GrammyBotAdapter implements OnModuleInit, OnModuleDestroy {
         text: context.message.text,
         messageId,
       });
-      await reply(context, response);
+      await this.deliverResponse(context, response);
     });
 
     bot.on('callback_query:data', async (context) => {
@@ -100,7 +105,7 @@ export class GrammyBotAdapter implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      await reply(context, response, callbackMessageId);
+      await this.deliverResponse(context, response, callbackMessageId);
     });
 
     bot.catch((error) => {
@@ -111,72 +116,165 @@ export class GrammyBotAdapter implements OnModuleInit, OnModuleDestroy {
       });
     });
   }
-}
 
-async function reply(
-  context: Context,
-  response: TelegramResponse,
-  callbackMessageId?: number,
-): Promise<void> {
-  const chatId = context.chat?.id ?? context.from?.id;
+  public async deliverResponse(
+    context: Context,
+    response: TelegramResponse,
+    callbackMessageId?: number,
+  ): Promise<void> {
+    const defaultChatId = context.chat?.id ?? context.from?.id;
 
-  for (const message of response.messages) {
-    const replyMarkup = message.buttons === undefined ? undefined : keyboard(message.buttons);
-    const targetMessageId = message.messageId ?? callbackMessageId;
-    const action =
-      message.action ?? (callbackMessageId && !message.photoBuffer ? 'EDIT_TEXT' : 'SEND');
+    for (const message of response.messages) {
+      const replyMarkup = message.buttons === undefined ? undefined : keyboard(message.buttons);
+      const chatId =
+        message.chatId ?? (defaultChatId !== undefined ? String(defaultChatId) : undefined);
+      const resourceKey = message.resourceKey ?? response.resourceKey;
+      const flowId =
+        message.flowId ??
+        response.flowId ??
+        (resourceKey && resourceKey.startsWith('flow-') ? resourceKey : undefined);
+      const messageType =
+        message.messageType ??
+        response.messageType ??
+        (flowId ? 'WIZARD_PROMPT' : 'VISUAL_REVIEW_CARD');
 
-    if (action === 'DELETE' && targetMessageId && chatId !== undefined) {
-      try {
-        await context.api.deleteMessage(chatId, targetMessageId);
-      } catch {
-        // Ignore deletion failure
-      }
-      continue;
-    }
-
-    if (action === 'EDIT_TEXT' && targetMessageId && !message.photoBuffer && chatId !== undefined) {
-      try {
-        await context.api.editMessageText(chatId, targetMessageId, message.text, {
-          ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
-          ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
-        });
-        continue;
-      } catch (err: unknown) {
-        // If content did not change, ignore cleanly
-        if (err instanceof Error && err.message.toLowerCase().includes('not modified')) {
-          continue;
-        }
-        // Fall back to sending message if edit failed (e.g. message expired or deleted)
-      }
-    }
-
-    if (action === 'EDIT_CAPTION' && targetMessageId && chatId !== undefined) {
-      try {
-        await context.api.editMessageCaption(chatId, targetMessageId, {
-          caption: message.text,
-          ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
-          ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
-        });
-        continue;
-      } catch (err: unknown) {
-        if (err instanceof Error && err.message.toLowerCase().includes('not modified')) {
-          continue;
+      let targetMessageId = message.messageId ?? callbackMessageId;
+      if (targetMessageId === undefined && resourceKey && this.workflowRepo) {
+        try {
+          const active = await this.workflowRepo.getActiveWorkflowMessage(resourceKey);
+          if (active) targetMessageId = active.messageId;
+        } catch {
+          // Ignore retrieval failure
         }
       }
-    }
 
-    if (message.photoBuffer !== undefined) {
-      await context.replyWithPhoto(new InputFile(message.photoBuffer, 'poster.png'), {
-        caption: message.text,
-        ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
-        ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
-      });
-    } else {
-      await context.reply(message.text, {
-        ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
-        ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
-      });
+      const action =
+        message.action ??
+        (targetMessageId !== undefined
+          ? message.photoBuffer !== undefined
+            ? 'EDIT_CAPTION'
+            : 'EDIT_TEXT'
+          : 'SEND');
+
+      if (action === 'DELETE' && targetMessageId && chatId !== undefined) {
+        try {
+          await context.api.deleteMessage(chatId, targetMessageId);
+        } catch {
+          // Ignore deletion failure
+        }
+        continue;
+      }
+
+      // Track 1: Edit-First Attempt
+      let editSucceeded = false;
+      if (
+        (action === 'EDIT_TEXT' || action === 'EDIT_CAPTION' || action === 'EDIT_MEDIA') &&
+        targetMessageId !== undefined &&
+        chatId !== undefined
+      ) {
+        try {
+          if (action === 'EDIT_TEXT' && !message.photoBuffer) {
+            await context.api.editMessageText(chatId, targetMessageId, message.text, {
+              ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
+              ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
+            });
+            editSucceeded = true;
+          } else if (action === 'EDIT_CAPTION') {
+            await context.api.editMessageCaption(chatId, targetMessageId, {
+              caption: message.text,
+              ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
+              ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
+            });
+            editSucceeded = true;
+          } else if (action === 'EDIT_MEDIA' && message.photoBuffer) {
+            await context.api.editMessageMedia(
+              chatId,
+              targetMessageId,
+              {
+                type: 'photo',
+                media: new InputFile(message.photoBuffer, 'poster.png'),
+                caption: message.text,
+                ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
+              },
+              {
+                ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
+              },
+            );
+            editSucceeded = true;
+          }
+
+          if (editSucceeded) {
+            if (resourceKey && this.workflowRepo) {
+              await this.workflowRepo.setActiveWorkflowMessage(resourceKey, {
+                messageId: targetMessageId,
+                messageType,
+                ...(chatId !== undefined ? { chatId } : {}),
+              });
+            }
+            continue;
+          }
+        } catch (err: unknown) {
+          // If content did not change, ignore cleanly
+          if (err instanceof Error && err.message.toLowerCase().includes('not modified')) {
+            continue;
+          }
+          this.logger.warn('Telegram edit failed, falling back to sending new message', {
+            targetMessageId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          // Fall through to Track 2
+        }
+      }
+
+      // Track 2: Send New Message & Synchronize Pointer
+      let sentMessageId: number | undefined;
+      if (message.photoBuffer !== undefined) {
+        const file = new InputFile(message.photoBuffer, 'poster.png');
+        const sent = context.replyWithPhoto
+          ? await context.replyWithPhoto(file, {
+              caption: message.text,
+              ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
+              ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
+            })
+          : await context.api.sendPhoto(chatId ?? '', file, {
+              caption: message.text,
+              ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
+              ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
+            });
+        sentMessageId = sent?.message_id;
+      } else {
+        const sent = context.reply
+          ? await context.reply(message.text, {
+              ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
+              ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
+            })
+          : await context.api.sendMessage(chatId ?? '', message.text, {
+              ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
+              ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
+            });
+        sentMessageId = sent?.message_id;
+      }
+
+      // CRITICAL: Synchronize pointer back to durable storage
+      if (sentMessageId !== undefined && this.workflowRepo) {
+        if (resourceKey) {
+          await this.workflowRepo.setActiveWorkflowMessage(resourceKey, {
+            messageId: sentMessageId,
+            messageType,
+            ...(chatId !== undefined ? { chatId } : {}),
+          });
+        }
+        if (flowId) {
+          await this.workflowRepo.setFlowMetadata?.(flowId, {
+            wizardMessageId: sentMessageId,
+          });
+          try {
+            await this.workflowRepo.updateFlowSelection(flowId, 'wizardMessageId', sentMessageId);
+          } catch {
+            // Flow may not be in an updateable status or already metadata-updated
+          }
+        }
+      }
     }
   }
 }

@@ -53,7 +53,9 @@ import {
   formatPreviousVersions,
   formatProduct,
   formatProductCardCompact,
+  formatProductSelectionSummary,
   formatProgressCard,
+  formatResumePrompt,
   formatValidation,
   formatWizardStep,
   friendlyContentType,
@@ -67,6 +69,7 @@ import {
 import {
   TELEGRAM_WORKFLOW_REPOSITORY,
   type TelegramCreateFlow,
+  type TelegramWorkflowMetadata,
   type TelegramWorkflowRepository,
 } from './telegram-workflow.repository.js';
 
@@ -312,6 +315,12 @@ export class TelegramCommandCenter {
 
     if (command.name === 'cancel') {
       this.pendingEditFields.delete(actor.identityId);
+      const activeFlow = await this.repository.findActiveFlowByIdentity(actor.identityId);
+      if (activeFlow != null) {
+        await this.repository.cancelFlow(activeFlow.id);
+        await this.repository.clearActiveWorkflowMessage(activeFlow.id);
+        return one('Creation cancelled.');
+      }
       return one('There is no active pending action to cancel.');
     }
 
@@ -323,6 +332,8 @@ export class TelegramCommandCenter {
           return one(helpText(actor, this.permissions));
         case 'create':
           return await this.beginCreate(actor, command.argument);
+        case 'resume':
+          return await this.handleResumeCommand(actor);
         case 'search':
           return await this.search(actor, command.argument, 0);
         case 'status':
@@ -416,6 +427,16 @@ export class TelegramCommandCenter {
           return {
             ...(await this.handleWizardCancel(actor, token.resourceId)),
             callbackNotice: 'Creation cancelled.',
+          };
+        case TelegramAction.WIZARD_RESUME:
+          return {
+            ...(await this.handleWizardResume(actor, token.resourceId)),
+            callbackNotice: 'Resuming draft...',
+          };
+        case TelegramAction.WIZARD_START_NEW:
+          return {
+            ...(await this.handleWizardStartNew(actor, token.resourceId)),
+            callbackNotice: 'Starting new draft...',
           };
         case TelegramAction.WIZARD_RETRY:
           return {
@@ -532,7 +553,11 @@ export class TelegramCommandCenter {
         if (product) {
           const expiresAt = this.expiry();
           const flow = await this.repository.createFlow(actor.identityId, product, expiresAt);
-          await this.repository.setFlowMetadata?.(flow.id, { step: 2 });
+          await this.repository.setFlowMetadata?.(flow.id, {
+            step: 2,
+            stepHistory: [1],
+            history: [1],
+          });
           await this.repository.appendAudit({
             actor,
             action: 'TELEGRAM_PRODUCT_SELECTED',
@@ -545,6 +570,11 @@ export class TelegramCommandCenter {
         // Not a direct SKU match, proceed to search
       }
       return this.renderProductSelection(actor, trimmed, 0, action);
+    }
+
+    const activeFlow = await this.repository.findActiveFlowByIdentity(actor.identityId);
+    if (activeFlow !== null) {
+      return this.renderResumePrompt(actor, activeFlow, action);
     }
     return this.renderProductSelection(actor, '', 0, action);
   }
@@ -582,7 +612,7 @@ export class TelegramCommandCenter {
 
     const productButtons: TelegramButton[][] = items.map((item, index) => [
       {
-        text: `🛍️ ${item.product.product_name.slice(0, 24)}…`,
+        text: `🛍️ ${index + 1}. ${item.product.product_name.slice(0, 24)}…`,
         callbackData: callbackData(required(itemTokens[index])),
       },
     ]);
@@ -616,28 +646,29 @@ export class TelegramCommandCenter {
       );
       navRow.push({ text: 'Next ➡️', callbackData: callbackData(required(nextToken)) });
     }
-    if (navRow.length > 0) {
-      productButtons.push(navRow);
-    }
-
-    const cardsText = items
-      .map((item, idx) => formatProductCardCompact(item, offset + idx, this.formatOptions))
-      .join('\n\n');
+    const [cancelToken] = await this.tokens.create(
+      actor.identityId,
+      [{ action: TelegramAction.CANCEL_ACTION, resourceId: 'wizard_start', singleUse: true }],
+      expiresAt,
+    );
+    navRow.push({ text: '❌ Cancel', callbackData: callbackData(required(cancelToken)) });
+    productButtons.push(navRow);
 
     const totalPages = Math.ceil(result.items.length / PAGE_SIZE_PRODUCTS);
-    const pageIndicator = totalPages > 1 ? ` (Page ${page + 1}/${totalPages})` : '';
+    const text = formatProductSelectionSummary({
+      items,
+      offset,
+      totalCount: result.items.length,
+      page,
+      totalPages,
+      ...(query ? { query } : {}),
+      options: this.formatOptions,
+    });
 
     return {
       messages: [
         {
-          text: [
-            `🛍️ *Content Creation Wizard* · Step 1 of 6${pageIndicator}`,
-            '*Select a Product*',
-            '',
-            'Choose a product below or type `/create <SKU>` to begin:',
-            '',
-            cardsText,
-          ].join('\n'),
+          text,
           buttons: productButtons,
           action,
         },
@@ -650,7 +681,11 @@ export class TelegramCommandCenter {
     const product = await this.products.execute({ sku });
     const expiresAt = this.expiry();
     const flow = await this.repository.createFlow(actor.identityId, product, expiresAt);
-    await this.repository.setFlowMetadata?.(flow.id, { step: 2 });
+    await this.repository.setFlowMetadata?.(flow.id, {
+      step: 2,
+      stepHistory: [1],
+      history: [1],
+    });
     await this.repository.appendAudit({
       actor,
       action: 'TELEGRAM_PRODUCT_SELECTED',
@@ -695,7 +730,19 @@ export class TelegramCommandCenter {
     });
 
     return {
-      messages: [{ text, buttons, action }],
+      messages: [
+        {
+          text,
+          buttons,
+          action,
+          resourceKey: flow.id,
+          flowId: flow.id,
+          messageType: 'WIZARD_PROMPT',
+        },
+      ],
+      resourceKey: flow.id,
+      flowId: flow.id,
+      messageType: 'WIZARD_PROMPT',
     };
   }
 
@@ -705,9 +752,16 @@ export class TelegramCommandCenter {
     metadata?: Readonly<Record<string, unknown>>,
   ): Promise<TelegramResponse> {
     this.require(actor, Permission.CREATE_CONTENT);
+    const flowBefore = await this.repository.findFlowById(flowId);
+    const prevHistory = extractStepHistory(flowBefore?.metadata, 1);
+    const nextHistory = [...prevHistory, 2];
     const value = contentTypeSchema.parse(metadata?.value);
     const flow = await this.repository.updateFlowSelection(flowId, 'contentType', value);
-    await this.repository.setFlowMetadata?.(flowId, { step: 3 });
+    await this.repository.setFlowMetadata?.(flowId, {
+      step: 3,
+      stepHistory: nextHistory,
+      history: nextHistory,
+    });
     return this.renderStep3(actor, flow, 'EDIT_TEXT');
   }
 
@@ -743,7 +797,19 @@ export class TelegramCommandCenter {
     });
 
     return {
-      messages: [{ text, buttons, action }],
+      messages: [
+        {
+          text,
+          buttons,
+          action,
+          resourceKey: flow.id,
+          flowId: flow.id,
+          messageType: 'WIZARD_PROMPT',
+        },
+      ],
+      resourceKey: flow.id,
+      flowId: flow.id,
+      messageType: 'WIZARD_PROMPT',
     };
   }
 
@@ -753,9 +819,16 @@ export class TelegramCommandCenter {
     metadata?: Readonly<Record<string, unknown>>,
   ): Promise<TelegramResponse> {
     this.require(actor, Permission.CREATE_CONTENT);
+    const flowBefore = await this.repository.findFlowById(flowId);
+    const prevHistory = extractStepHistory(flowBefore?.metadata, 2);
+    const nextHistory = [...prevHistory, 3];
     const value = contentLanguageSchema.parse(metadata?.value);
     const flow = await this.repository.updateFlowSelection(flowId, 'language', value);
-    await this.repository.setFlowMetadata?.(flowId, { step: 4 });
+    await this.repository.setFlowMetadata?.(flowId, {
+      step: 4,
+      stepHistory: nextHistory,
+      history: nextHistory,
+    });
     return this.renderStep4(actor, flow, 'EDIT_TEXT');
   }
 
@@ -792,7 +865,19 @@ export class TelegramCommandCenter {
     });
 
     return {
-      messages: [{ text, buttons, action }],
+      messages: [
+        {
+          text,
+          buttons,
+          action,
+          resourceKey: flow.id,
+          flowId: flow.id,
+          messageType: 'WIZARD_PROMPT',
+        },
+      ],
+      resourceKey: flow.id,
+      flowId: flow.id,
+      messageType: 'WIZARD_PROMPT',
     };
   }
 
@@ -802,10 +887,18 @@ export class TelegramCommandCenter {
     metadata?: Readonly<Record<string, unknown>>,
   ): Promise<TelegramResponse> {
     this.require(actor, Permission.CREATE_CONTENT);
+    const flowBefore = await this.repository.findFlowById(flowId);
+    const prevHistory = extractStepHistory(flowBefore?.metadata, 3);
+    const nextHistory = [...prevHistory, 4];
     const value = contentPlatformSchema.parse(metadata?.value);
     const format = typeof metadata?.format === 'string' ? metadata.format : 'FEED_SQUARE';
     const flow = await this.repository.updateFlowSelection(flowId, 'platform', value);
-    await this.repository.setFlowMetadata?.(flowId, { format, step: 5 });
+    await this.repository.setFlowMetadata?.(flowId, {
+      format,
+      step: 5,
+      stepHistory: nextHistory,
+      history: nextHistory,
+    });
     return this.renderStep5(actor, flow, 'EDIT_TEXT');
   }
 
@@ -843,7 +936,19 @@ export class TelegramCommandCenter {
     });
 
     return {
-      messages: [{ text, buttons, action }],
+      messages: [
+        {
+          text,
+          buttons,
+          action,
+          resourceKey: flow.id,
+          flowId: flow.id,
+          messageType: 'WIZARD_PROMPT',
+        },
+      ],
+      resourceKey: flow.id,
+      flowId: flow.id,
+      messageType: 'WIZARD_PROMPT',
     };
   }
 
@@ -857,8 +962,15 @@ export class TelegramCommandCenter {
     if (flow === null || flow.expiresAt <= new Date()) {
       return one(ACTION_EXPIRED);
     }
+    const prevHistory = extractStepHistory(flow.metadata, 4);
+    const nextHistory = [...prevHistory, 5];
     const stylePreset = typeof metadata?.value === 'string' ? metadata.value : 'NOCTURNE_ROYALE';
-    await this.repository.setFlowMetadata?.(flowId, { stylePreset, step: 6 });
+    await this.repository.setFlowMetadata?.(flowId, {
+      stylePreset,
+      step: 6,
+      stepHistory: nextHistory,
+      history: nextHistory,
+    });
     return this.renderStep6(actor, flow, stylePreset, 'EDIT_TEXT');
   }
 
@@ -909,7 +1021,19 @@ export class TelegramCommandCenter {
     });
 
     return {
-      messages: [{ text, buttons, action }],
+      messages: [
+        {
+          text,
+          buttons,
+          action,
+          resourceKey: flow.id,
+          flowId: flow.id,
+          messageType: 'WIZARD_PROMPT',
+        },
+      ],
+      resourceKey: flow.id,
+      flowId: flow.id,
+      messageType: 'WIZARD_PROMPT',
     };
   }
 
@@ -991,16 +1115,34 @@ export class TelegramCommandCenter {
     flowId: string,
     metadata?: Readonly<Record<string, unknown>>,
   ): Promise<TelegramResponse> {
-    const toStep = typeof metadata?.toStep === 'number' ? metadata.toStep : 1;
-    if (toStep === 1) {
-      return this.renderProductSelection(actor, '', 0, 'EDIT_TEXT');
-    }
     const flow = await this.repository.findFlowById(flowId);
     if (flow === null || flow.expiresAt <= new Date()) {
       return one(ACTION_EXPIRED);
     }
-    await this.repository.setFlowMetadata?.(flow.id, { step: toStep });
-    switch (toStep) {
+
+    const rawHistory = flow.metadata?.stepHistory ?? flow.metadata?.history;
+    const historyStack: number[] = Array.isArray(rawHistory)
+      ? rawHistory.map((v) => Number(v)).filter((v) => !Number.isNaN(v))
+      : [];
+
+    let targetStep: number;
+    if (historyStack.length > 0) {
+      targetStep = historyStack.pop()!;
+    } else {
+      targetStep =
+        typeof metadata?.toStep === 'number' ? metadata.toStep : Math.max(1, (flow.step ?? 2) - 1);
+    }
+
+    await this.repository.setFlowMetadata?.(flow.id, {
+      step: targetStep,
+      stepHistory: historyStack,
+      history: historyStack,
+    });
+
+    if (targetStep === 1) {
+      return this.renderProductSelection(actor, '', 0, 'EDIT_TEXT');
+    }
+    switch (targetStep) {
       case 2:
         return this.renderStep2(actor, flow, 'EDIT_TEXT');
       case 3:
@@ -1019,9 +1161,10 @@ export class TelegramCommandCenter {
     flowId: string,
   ): Promise<TelegramResponse> {
     try {
-      await this.repository.completeFlow(flowId);
+      await this.repository.cancelFlow(flowId);
+      await this.repository.clearActiveWorkflowMessage(flowId);
     } catch {
-      // Ignore if already completed
+      // Ignore if already cancelled or completed
     }
     return {
       messages: [
@@ -1033,6 +1176,124 @@ export class TelegramCommandCenter {
       ],
       callbackNotice: 'Cancelled.',
     };
+  }
+
+  private async handleResumeCommand(
+    actor: TelegramActor,
+    action: TelegramMessageAction = 'SEND',
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.CREATE_CONTENT);
+    const activeFlow = await this.repository.findActiveFlowByIdentity(actor.identityId);
+    if (activeFlow === null) {
+      return one('No active draft in progress. Start one with /create.', action);
+    }
+    return this.renderResumePrompt(actor, activeFlow, action);
+  }
+
+  private async renderResumePrompt(
+    actor: TelegramActor,
+    flow: TelegramCreateFlow,
+    action: TelegramMessageAction = 'SEND',
+  ): Promise<TelegramResponse> {
+    const expiresAt = flow.expiresAt > new Date() ? flow.expiresAt : this.expiry();
+    const [resumeToken, startNewToken, discardToken] = await this.tokens.create(
+      actor.identityId,
+      [
+        {
+          action: TelegramAction.WIZARD_RESUME,
+          resourceId: flow.id,
+          singleUse: true,
+        },
+        {
+          action: TelegramAction.WIZARD_START_NEW,
+          resourceId: flow.id,
+          singleUse: true,
+        },
+        {
+          action: TelegramAction.WIZARD_CANCEL,
+          resourceId: flow.id,
+          singleUse: true,
+        },
+      ],
+      expiresAt,
+    );
+
+    const buttons: TelegramButton[][] = [
+      [{ text: '▶️ Resume Draft', callbackData: callbackData(required(resumeToken)) }],
+      [
+        { text: '➕ Start New Draft', callbackData: callbackData(required(startNewToken)) },
+        { text: '❌ Discard', callbackData: callbackData(required(discardToken)) },
+      ],
+    ];
+
+    const text = formatResumePrompt({
+      productName: flow.product.product.product_name,
+      sku: flow.product.product.sku,
+      step: flow.step ?? 2,
+      totalSteps: 6,
+      options: this.formatOptions,
+    });
+
+    return {
+      messages: [
+        {
+          text,
+          buttons,
+          action,
+          resourceKey: flow.id,
+          flowId: flow.id,
+          messageType: 'WIZARD_PROMPT',
+        },
+      ],
+      resourceKey: flow.id,
+      flowId: flow.id,
+      messageType: 'WIZARD_PROMPT',
+    };
+  }
+
+  private async handleWizardResume(
+    actor: TelegramActor,
+    flowId: string,
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.CREATE_CONTENT);
+    const flow = await this.repository.findFlowById(flowId);
+    if (flow === null || flow.expiresAt <= new Date()) {
+      return one(ACTION_EXPIRED);
+    }
+    const currentStep = flow.step ?? 2;
+    switch (currentStep) {
+      case 2:
+        return this.renderStep2(actor, flow, 'EDIT_TEXT');
+      case 3:
+        return this.renderStep3(actor, flow, 'EDIT_TEXT');
+      case 4:
+        return this.renderStep4(actor, flow, 'EDIT_TEXT');
+      case 5:
+        return this.renderStep5(actor, flow, 'EDIT_TEXT');
+      case 6:
+        return this.renderStep6(
+          actor,
+          flow,
+          flow.metadata?.stylePreset ?? 'NOCTURNE_OBSIDIAN',
+          'EDIT_TEXT',
+        );
+      default:
+        return this.renderStep2(actor, flow, 'EDIT_TEXT');
+    }
+  }
+
+  private async handleWizardStartNew(
+    actor: TelegramActor,
+    flowId: string,
+  ): Promise<TelegramResponse> {
+    this.require(actor, Permission.CREATE_CONTENT);
+    try {
+      await this.repository.cancelFlow(flowId);
+      await this.repository.clearActiveWorkflowMessage(flowId);
+    } catch {
+      // Ignore if already cancelled
+    }
+    return this.renderProductSelection(actor, '', 0, 'EDIT_TEXT');
   }
 
   private async handleWizardRetry(
@@ -1867,7 +2128,7 @@ function welcomeText(actor: TelegramActor): string {
   ].join('\n');
 }
 function helpText(actor: TelegramActor, permissions: PermissionService): string {
-  const commands = ['/search <keyword>', '/status', '/history <SKU>'];
+  const commands = ['/search <keyword>', '/status', '/history <SKU>', '/resume', '/cancel'];
   if (permissions.hasAnyRolePermission(actor.roles, Permission.CREATE_CONTENT)) {
     commands.unshift('/create <SKU> (or /create to browse catalogue)');
   }
@@ -1879,6 +2140,17 @@ function helpText(actor: TelegramActor, permissions: PermissionService): string 
     '🛡️ *Human Governance Policy:*',
     'AI-assisted drafts require human review. Factual validation reduces risk but is not a guarantee.',
   ].join('\n');
+}
+
+function extractStepHistory(
+  metadata: TelegramWorkflowMetadata | undefined,
+  fallbackLastStep: number,
+): number[] {
+  const raw = metadata?.stepHistory ?? metadata?.history;
+  if (Array.isArray(raw) && raw.length > 0) {
+    return raw.map((v) => Number(v)).filter((v) => !Number.isNaN(v));
+  }
+  return fallbackLastStep > 1 ? Array.from({ length: fallbackLastStep }, (_, i) => i + 1) : [1];
 }
 function applicableContentTypes(
   product: Awaited<ReturnType<GetProductBySkuUseCase['execute']>>,

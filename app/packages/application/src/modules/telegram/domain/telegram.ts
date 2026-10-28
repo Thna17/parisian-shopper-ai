@@ -29,6 +29,8 @@ export const TelegramAction = {
   WIZARD_BACK: 'WIZARD_BACK',
   WIZARD_CANCEL: 'WIZARD_CANCEL',
   WIZARD_RETRY: 'WIZARD_RETRY',
+  WIZARD_RESUME: 'WIZARD_RESUME',
+  WIZARD_START_NEW: 'WIZARD_START_NEW',
   EDIT_CONTENT_FIELD: 'EDIT_CONTENT_FIELD',
   CHANGE_CONTENT_LANGUAGE: 'CHANGE_CONTENT_LANGUAGE',
   RESTORE_CONTENT_VERSION: 'RESTORE_CONTENT_VERSION',
@@ -43,6 +45,9 @@ export type TelegramAction = (typeof TelegramAction)[keyof typeof TelegramAction
 
 export type TelegramMessageAction =
   'SEND' | 'EDIT_TEXT' | 'EDIT_CAPTION' | 'EDIT_MEDIA' | 'EDIT_KEYBOARD' | 'DELETE';
+
+export type TelegramWorkflowMessageType =
+  'WIZARD_PROMPT' | 'REVIEW_CARD' | 'INPUT_PROMPT' | 'VISUAL_REVIEW_CARD' | 'INTERACTION_PROMPT';
 
 export interface TelegramActor {
   identityId: string;
@@ -72,16 +77,23 @@ export interface TelegramMessage {
   action?: TelegramMessageAction;
   messageId?: number;
   chatId?: string;
+  resourceKey?: string;
+  messageType?: TelegramWorkflowMessageType;
+  flowId?: string;
 }
 
 export interface TelegramResponse {
   messages: readonly TelegramMessage[];
   callbackNotice?: string;
   action?: TelegramMessageAction;
+  resourceKey?: string;
+  messageType?: TelegramWorkflowMessageType;
+  flowId?: string;
 }
 
 export interface ParsedTelegramCommand {
-  name: 'start' | 'help' | 'create' | 'search' | 'status' | 'history' | 'cancel' | 'unknown';
+  name:
+    'start' | 'help' | 'create' | 'search' | 'status' | 'history' | 'cancel' | 'resume' | 'unknown';
   argument: string;
 }
 
@@ -92,7 +104,9 @@ export function parseTelegramCommand(text: string): ParsedTelegramCommand {
   const command = match[1]?.toLowerCase() ?? '';
   const argument = match[2]?.trim() ?? '';
   return {
-    name: ['start', 'help', 'create', 'search', 'status', 'history', 'cancel'].includes(command)
+    name: ['start', 'help', 'create', 'search', 'status', 'history', 'cancel', 'resume'].includes(
+      command,
+    )
       ? (command as ParsedTelegramCommand['name'])
       : 'unknown',
     argument,

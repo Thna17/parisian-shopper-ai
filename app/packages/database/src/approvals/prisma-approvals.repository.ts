@@ -5,6 +5,7 @@ import {
   ContentAlreadyRejectedError,
   ContentNotApprovalEligibleError,
   InvalidReviewStateError,
+  SelfApprovalProhibitedError,
   StaleContentVersionError,
   assertContentJobTransition,
   type ApprovalEventRecord,
@@ -177,6 +178,23 @@ export class PrismaApprovalsRepository implements ApprovalsRepository {
         }
 
         if (input.decision === 'APPROVED') {
+          if (job.requesterUserId === input.approverUserId) {
+            throw new SelfApprovalProhibitedError(
+              'Four-eyes policy violation: Content job requester cannot approve their own content.',
+            );
+          }
+
+          if (targetVersion.revisionRequestId !== null) {
+            const revision = await tx.revisionRequest.findUnique({
+              where: { id: targetVersion.revisionRequestId },
+            });
+            if (revision !== null && revision.requestedByUserId === input.approverUserId) {
+              throw new SelfApprovalProhibitedError(
+                'Four-eyes policy violation: Version author cannot approve their own content revision.',
+              );
+            }
+          }
+
           const maxVersion = await tx.contentVersion.aggregate({
             where: { contentJobId: job.id },
             _max: { versionNumber: true },
@@ -318,6 +336,7 @@ export class PrismaApprovalsRepository implements ApprovalsRepository {
           orderBy: { versionNumber: 'asc' },
           include: {
             validationResults: { orderBy: { createdAt: 'desc' }, take: 1 },
+            revisionRequest: true,
           },
         },
         revisionRequests: {
@@ -344,6 +363,7 @@ export class PrismaApprovalsRepository implements ApprovalsRepository {
       productSnapshotId: job.productSnapshotId,
       sku: job.productSnapshot.sku,
       productName: job.productSnapshot.productName,
+      requesterUserId: job.requesterUserId,
       currentVersionNumber: currentVersion?.versionNumber ?? 0,
       versions: job.versions.map((ver) => {
         const val = ver.validationResults[0];
@@ -351,6 +371,7 @@ export class PrismaApprovalsRepository implements ApprovalsRepository {
         return {
           id: ver.id,
           versionNumber: ver.versionNumber,
+          authorUserId: ver.revisionRequest?.requestedByUserId ?? job.requesterUserId,
           createdAt: ver.createdAt,
           ...(val === undefined
             ? {}

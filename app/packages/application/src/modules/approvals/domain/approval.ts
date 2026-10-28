@@ -55,10 +55,12 @@ export interface ContentReviewState {
   productSnapshotId: string;
   sku: string;
   productName: string;
+  requesterUserId: string;
   currentVersionNumber: number;
   versions: readonly {
     id: string;
     versionNumber: number;
+    authorUserId?: string;
     createdAt: Date;
     validationStatus?: string;
     blockingCount?: number;

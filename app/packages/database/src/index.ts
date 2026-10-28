@@ -13,5 +13,7 @@ export * from './product-asset/prisma-product-asset-registration.unit-of-work.js
 export * from './validation/prisma-validation.repository.js';
 export * from './telegram/prisma-telegram-workflow.repository.js';
 export * from './approvals/prisma-approvals.repository.js';
+export * from './auth/prisma-password-credential.repository.js';
+export * from './auth/prisma-user-session.repository.js';
 export * from './creative/index.js';
 export * from './outbox/prisma-outbox-relay.repository.js';

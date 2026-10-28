@@ -267,6 +267,64 @@ export function formatProductCardCompact(
   ].join('\n');
 }
 
+export interface ProductSelectionSummaryDetails {
+  items: readonly NormalizedProductEnvelope[];
+  offset: number;
+  totalCount: number;
+  page: number;
+  totalPages: number;
+  query?: string;
+  options?: TelegramFormatOptions;
+}
+
+export function formatProductSelectionSummary(details: ProductSelectionSummaryDetails): string {
+  const prefix = details.options?.demoMode ? '[DEMO] ' : '';
+  const pageIndicator =
+    details.totalPages > 1 ? ` (Page ${details.page + 1}/${details.totalPages})` : '';
+  const querySuffix = details.query ? ` matching "${details.query}"` : '';
+
+  const lines: string[] = [
+    `${prefix}🛍️ *Content Creation Wizard* · Step 1 of 6${pageIndicator}`,
+    '*Select a Product*',
+    '',
+    `Choose a verified catalogue product to begin${querySuffix}:`,
+    '',
+  ];
+
+  for (let i = 0; i < details.items.length; i++) {
+    const item = details.items[i]!;
+    const p = item.product;
+    const priceStr = p.promo_price
+      ? `$${p.promo_price} USD (Regular: $${p.price} USD)`
+      : `$${p.price} USD`;
+    lines.push(`${details.offset + i + 1}. *${p.product_name}* (\`${p.sku}\`) — ${priceStr}`);
+  }
+
+  lines.push('');
+  lines.push('Choose a product below or type `/create <SKU>` to begin:');
+  return lines.join('\n');
+}
+
+export interface ResumePromptDetails {
+  productName: string;
+  sku: string;
+  step: number;
+  totalSteps?: number;
+  options?: TelegramFormatOptions;
+}
+
+export function formatResumePrompt(details: ResumePromptDetails): string {
+  const prefix = details.options?.demoMode ? '[DEMO] ' : '';
+  const total = details.totalSteps ?? 6;
+  return [
+    `${prefix}📋 *Draft in Progress Found*`,
+    '',
+    `You have an active, unfinished draft for *${details.productName}* (\`${details.sku}\`) at *Step ${details.step} of ${total}*.`,
+    '',
+    'Would you like to resume where you left off, start fresh with another product, or discard it?',
+  ].join('\n');
+}
+
 export interface WizardStepDetails {
   step: number;
   totalSteps?: number | undefined;

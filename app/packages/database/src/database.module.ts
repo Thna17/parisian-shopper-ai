@@ -9,12 +9,14 @@ import {
   CREATIVE_SCENE_REPOSITORY,
   FRESHNESS_POLICY_REPOSITORY,
   OUTBOX_RELAY_REPOSITORY,
+  PASSWORD_CREDENTIAL_REPOSITORY,
   PRODUCT_ASSET_REGISTRATION_UNIT_OF_WORK,
   PRODUCT_ASSET_REPOSITORY,
   PRODUCT_FRESHNESS_ASSESSMENT_REPOSITORY,
   PRODUCT_REVALIDATION_UNIT_OF_WORK,
   PRODUCT_SNAPSHOT_REPOSITORY,
   TELEGRAM_WORKFLOW_REPOSITORY,
+  USER_SESSION_REPOSITORY,
   VALIDATION_REPOSITORY,
   VISUAL_ASSET_REPOSITORY,
   VISUAL_VALIDATION_REPOSITORY,
@@ -39,6 +41,8 @@ import { PrismaProductAssetRegistrationUnitOfWork } from './product-asset/prisma
 import { PrismaValidationRepository } from './validation/prisma-validation.repository.js';
 import { PrismaTelegramWorkflowRepository } from './telegram/prisma-telegram-workflow.repository.js';
 import { PrismaApprovalsRepository } from './approvals/prisma-approvals.repository.js';
+import { PrismaPasswordCredentialRepository } from './auth/prisma-password-credential.repository.js';
+import { PrismaUserSessionRepository } from './auth/prisma-user-session.repository.js';
 import {
   PrismaCreativeApprovalRepository,
   PrismaCreativeJobRepository,
@@ -60,6 +64,8 @@ import {
     PrismaValidationRepository,
     PrismaTelegramWorkflowRepository,
     PrismaApprovalsRepository,
+    PrismaPasswordCredentialRepository,
+    PrismaUserSessionRepository,
     PrismaCreativeJobRepository,
     PrismaVisualAssetRepository,
     PrismaVisualValidationRepository,
@@ -101,6 +107,8 @@ import {
     { provide: VALIDATION_REPOSITORY, useExisting: PrismaValidationRepository },
     { provide: TELEGRAM_WORKFLOW_REPOSITORY, useExisting: PrismaTelegramWorkflowRepository },
     { provide: APPROVALS_REPOSITORY, useExisting: PrismaApprovalsRepository },
+    { provide: PASSWORD_CREDENTIAL_REPOSITORY, useExisting: PrismaPasswordCredentialRepository },
+    { provide: USER_SESSION_REPOSITORY, useExisting: PrismaUserSessionRepository },
     { provide: CREATIVE_JOB_REPOSITORY, useExisting: PrismaCreativeJobRepository },
     { provide: VISUAL_ASSET_REPOSITORY, useExisting: PrismaVisualAssetRepository },
     { provide: VISUAL_VALIDATION_REPOSITORY, useExisting: PrismaVisualValidationRepository },
@@ -125,6 +133,8 @@ import {
     PrismaValidationRepository,
     PrismaTelegramWorkflowRepository,
     PrismaApprovalsRepository,
+    PrismaPasswordCredentialRepository,
+    PrismaUserSessionRepository,
     PrismaCreativeJobRepository,
     PrismaVisualAssetRepository,
     PrismaVisualValidationRepository,
@@ -145,6 +155,8 @@ import {
     VALIDATION_REPOSITORY,
     TELEGRAM_WORKFLOW_REPOSITORY,
     APPROVALS_REPOSITORY,
+    PASSWORD_CREDENTIAL_REPOSITORY,
+    USER_SESSION_REPOSITORY,
     CREATIVE_JOB_REPOSITORY,
     VISUAL_ASSET_REPOSITORY,
     VISUAL_VALIDATION_REPOSITORY,
