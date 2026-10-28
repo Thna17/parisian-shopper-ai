@@ -9,9 +9,17 @@ import {
   type TelegramAction,
   type TelegramActor,
   type TelegramUserProfile,
+  type TelegramWorkflowMessageType,
 } from '../domain/telegram.js';
 
 export const TELEGRAM_WORKFLOW_REPOSITORY = Symbol('TELEGRAM_WORKFLOW_REPOSITORY');
+
+export interface SetActiveWorkflowMessageInput {
+  messageId: number;
+  chatId?: string | undefined;
+  messageType?: TelegramWorkflowMessageType | undefined;
+  payloadMetadata?: Readonly<Record<string, unknown>> | undefined;
+}
 
 export interface TelegramWorkflowMetadata {
   wizardMessageId?: number;
@@ -19,7 +27,8 @@ export interface TelegramWorkflowMetadata {
   step?: number;
   stylePreset?: string;
   format?: string;
-  history?: readonly string[];
+  history?: readonly number[];
+  stepHistory?: readonly number[];
   [key: string]: unknown;
 }
 
@@ -31,7 +40,10 @@ export interface TelegramCreateFlow {
     | 'SELECTING_CONTENT_TYPE'
     | 'SELECTING_LANGUAGE'
     | 'SELECTING_PLATFORM'
+    | 'SELECTING_TEMPLATE'
+    | 'CONFIRMING_GENERATION'
     | 'COMPLETED'
+    | 'CANCELLED'
     | 'EXPIRED';
   contentType?: ContentType;
   language?: ContentLanguage;
@@ -154,26 +166,42 @@ export interface TelegramWorkflowRepository {
     id: string,
     metadata: Partial<TelegramWorkflowMetadata>,
   ): Promise<TelegramCreateFlow>;
-  setActiveWorkflowMessage?(
-    flowIdOrJobId: string,
+  setActiveWorkflowMessage(
+    resourceKey: string,
+    input: SetActiveWorkflowMessageInput,
+  ): Promise<void>;
+  setActiveWorkflowMessage(
+    resourceKey: string,
     messageId: number,
     chatId?: string,
+    options?: { messageType?: string; payloadMetadata?: Readonly<Record<string, unknown>> },
   ): Promise<void>;
-  getActiveWorkflowMessage?(
-    flowIdOrJobId: string,
-  ): Promise<{ messageId: number; chatId?: string } | null>;
-  clearActiveWorkflowMessage?(flowIdOrJobId: string): Promise<void>;
-  recordChannelPublication?(
+  setActiveWorkflowMessage(
+    resourceKey: string,
+    messageIdOrInput: number | SetActiveWorkflowMessageInput,
+    chatId?: string,
+    options?: { messageType?: string; payloadMetadata?: Readonly<Record<string, unknown>> },
+  ): Promise<void>;
+  getActiveWorkflowMessage(flowIdOrJobId: string): Promise<{
+    messageId: number;
+    chatId?: string;
+    messageType?: string;
+    payloadMetadata?: Readonly<Record<string, unknown>>;
+  } | null>;
+  clearActiveWorkflowMessage(flowIdOrJobId: string): Promise<void>;
+  recordChannelPublication(
     creativeJobId: string,
     visualAssetId: string,
     channelId: string,
     messageId: number,
     publishedAt?: Date,
   ): Promise<void>;
-  getChannelPublication?(
+  getChannelPublication(
     creativeJobId: string,
   ): Promise<{ channelId: string; messageId: number; publishedAt: Date } | null>;
   completeFlow(id: string): Promise<void>;
+  cancelFlow(id: string): Promise<void>;
+  findActiveFlowByIdentity(identityId: string): Promise<TelegramCreateFlow | null>;
   storeActionTokens(inputs: readonly StoreActionTokenInput[]): Promise<void>;
   consumeActionToken(
     tokenHash: string,

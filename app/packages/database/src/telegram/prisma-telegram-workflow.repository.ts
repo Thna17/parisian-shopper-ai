@@ -19,10 +19,16 @@ import {
   type TelegramUserProfile,
   type TelegramWorkflowMetadata,
   type TelegramWorkflowRepository,
+  type SetActiveWorkflowMessageInput,
   Permission,
   ValidationStatus,
 } from '@parisian-shopper/application';
-import { Prisma, type ValidationFinding, type ValidationResult } from '@prisma/client';
+import {
+  Prisma,
+  type TelegramWorkflowMessageType,
+  type ValidationFinding,
+  type ValidationResult,
+} from '@prisma/client';
 
 import { PrismaService } from '../prisma.service.js';
 
@@ -30,53 +36,105 @@ const OUTBOX_LEASE_MS = 5 * 60 * 1_000;
 
 @Injectable()
 export class PrismaTelegramWorkflowRepository implements TelegramWorkflowRepository {
-  private readonly activeMessages = new Map<string, { messageId: number; chatId?: string }>();
-
   public constructor(private readonly prisma: PrismaService) {}
 
-  public setActiveWorkflowMessage(
-    flowIdOrJobId: string,
-    messageId: number,
-    chatId?: string,
+  public async setActiveWorkflowMessage(
+    resourceKey: string,
+    messageIdOrInput: number | SetActiveWorkflowMessageInput,
+    chatIdParam?: string,
+    optionsParam?: { messageType?: string; payloadMetadata?: Readonly<Record<string, unknown>> },
   ): Promise<void> {
-    this.activeMessages.set(flowIdOrJobId, {
-      messageId,
-      ...(chatId !== undefined ? { chatId } : {}),
+    const isObject = typeof messageIdOrInput === 'object';
+    const messageId = isObject ? messageIdOrInput.messageId : messageIdOrInput;
+    const chatId = isObject ? messageIdOrInput.chatId : chatIdParam;
+    const rawType = isObject ? messageIdOrInput.messageType : optionsParam?.messageType;
+    const rawMeta = isObject ? messageIdOrInput.payloadMetadata : optionsParam?.payloadMetadata;
+
+    const messageType = normalizeWorkflowMessageType(rawType);
+    const payloadMetadata =
+      rawMeta !== undefined ? (rawMeta as Prisma.InputJsonValue) : Prisma.JsonNull;
+
+    await this.prisma.telegramActiveWorkflowMessage.upsert({
+      where: { resourceKey },
+      create: {
+        resourceKey,
+        messageId,
+        ...(chatId !== undefined ? { chatId } : {}),
+        messageType,
+        payloadMetadata,
+      },
+      update: {
+        messageId,
+        ...(chatId !== undefined ? { chatId } : {}),
+        messageType,
+        payloadMetadata,
+      },
     });
-    return Promise.resolve();
   }
 
-  public getActiveWorkflowMessage(
-    flowIdOrJobId: string,
-  ): Promise<{ messageId: number; chatId?: string } | null> {
-    return Promise.resolve(this.activeMessages.get(flowIdOrJobId) ?? null);
+  public async getActiveWorkflowMessage(flowIdOrJobId: string): Promise<{
+    messageId: number;
+    chatId?: string;
+    messageType?: string;
+    payloadMetadata?: Readonly<Record<string, unknown>>;
+  } | null> {
+    const record = await this.prisma.telegramActiveWorkflowMessage.findUnique({
+      where: { resourceKey: flowIdOrJobId },
+    });
+    if (record === null) return null;
+    return {
+      messageId: record.messageId,
+      ...(record.chatId !== null ? { chatId: record.chatId } : {}),
+      messageType: record.messageType,
+      ...(record.payloadMetadata !== null
+        ? { payloadMetadata: record.payloadMetadata as Readonly<Record<string, unknown>> }
+        : {}),
+    };
   }
 
-  public clearActiveWorkflowMessage(flowIdOrJobId: string): Promise<void> {
-    this.activeMessages.delete(flowIdOrJobId);
-    return Promise.resolve();
+  public async clearActiveWorkflowMessage(flowIdOrJobId: string): Promise<void> {
+    await this.prisma.telegramActiveWorkflowMessage.deleteMany({
+      where: { resourceKey: flowIdOrJobId },
+    });
   }
 
-  private readonly channelPublications = new Map<
-    string,
-    { channelId: string; messageId: number; publishedAt: Date }
-  >();
-
-  public recordChannelPublication(
+  public async recordChannelPublication(
     creativeJobId: string,
-    _visualAssetId: string,
+    visualAssetId: string,
     channelId: string,
     messageId: number,
     publishedAt = new Date(),
   ): Promise<void> {
-    this.channelPublications.set(creativeJobId, { channelId, messageId, publishedAt });
-    return Promise.resolve();
+    await this.prisma.telegramChannelPublicationRecord.upsert({
+      where: { creativeJobId },
+      create: {
+        creativeJobId,
+        visualAssetId,
+        channelId,
+        messageId,
+        publishedAt,
+      },
+      update: {
+        visualAssetId,
+        channelId,
+        messageId,
+        publishedAt,
+      },
+    });
   }
 
-  public getChannelPublication(
+  public async getChannelPublication(
     creativeJobId: string,
   ): Promise<{ channelId: string; messageId: number; publishedAt: Date } | null> {
-    return Promise.resolve(this.channelPublications.get(creativeJobId) ?? null);
+    const record = await this.prisma.telegramChannelPublicationRecord.findUnique({
+      where: { creativeJobId },
+    });
+    if (record === null) return null;
+    return {
+      channelId: record.channelId,
+      messageId: record.messageId,
+      publishedAt: record.publishedAt,
+    };
   }
 
   public async claimInboundUpdate(
@@ -260,6 +318,29 @@ export class PrismaTelegramWorkflowRepository implements TelegramWorkflowReposit
       where: { id },
       data: { status: 'COMPLETED', completedAt: new Date() },
     });
+  }
+
+  public async cancelFlow(id: string): Promise<void> {
+    await this.prisma.telegramCreateFlow.update({
+      where: { id },
+      data: { status: 'CANCELLED', completedAt: new Date() },
+    });
+  }
+
+  public async findActiveFlowByIdentity(identityId: string): Promise<TelegramCreateFlow | null> {
+    const record = await this.prisma.telegramCreateFlow.findFirst({
+      where: {
+        telegramIdentityId: identityId,
+        status: {
+          notIn: ['COMPLETED', 'CANCELLED', 'EXPIRED'],
+        },
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return record === null ? null : toFlow(record);
   }
 
   public async storeActionTokens(inputs: readonly StoreActionTokenInput[]): Promise<void> {
@@ -781,6 +862,14 @@ function expectedFlowStatus(
   if (field === 'contentType') return 'SELECTING_CONTENT_TYPE';
   if (field === 'language') return 'SELECTING_LANGUAGE';
   return 'SELECTING_PLATFORM';
+}
+
+function normalizeWorkflowMessageType(raw?: string): TelegramWorkflowMessageType {
+  if (raw === 'VISUAL_REVIEW_CARD') return 'VISUAL_REVIEW_CARD';
+  if (raw === 'INTERACTION_PROMPT') return 'INTERACTION_PROMPT';
+  if (raw === 'REVIEW_CARD') return 'REVIEW_CARD';
+  if (raw === 'INPUT_PROMPT') return 'INPUT_PROMPT';
+  return 'WIZARD_PROMPT';
 }
 
 function accessFilter(actor: TelegramActor): Prisma.ContentJobWhereInput {

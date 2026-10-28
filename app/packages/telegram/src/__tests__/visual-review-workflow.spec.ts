@@ -10,6 +10,7 @@ import {
   type TelegramActionTokenRecord,
   type TelegramActor,
   type TelegramChannelBroadcastDispatcher,
+  type TelegramDraftView,
   type TelegramWorkflowRepository,
   type VisualAssetRepository,
   TelegramAction,
@@ -20,6 +21,7 @@ import {
   ExportPosterUseCase,
   TelegramActionTokenService,
 } from '@parisian-shopper/application';
+import { FeatureFlag } from '@parisian-shopper/config';
 
 import { VisualReviewCardRenderer } from '../renderers/visual-review-card.renderer.js';
 import {
@@ -27,6 +29,8 @@ import {
   buildVisualReviewKeyboard,
 } from '../keyboards/visual-review.keyboard.js';
 import { VisualReviewCallbackHandler } from '../handlers/visual-review-callback.handler.js';
+import { TelegramOutboxDispatcher } from '../telegram-outbox.dispatcher.js';
+import { FakeTelegramGateway } from '../telegram-delivery.gateway.js';
 
 describe('Telegram Visual Review Workflow', () => {
   const mockLogger: ApplicationLogger = {
@@ -302,6 +306,25 @@ describe('Telegram Visual Review Workflow', () => {
         cancelPendingInteraction: jest.fn<TelegramWorkflowRepository['cancelPendingInteraction']>(),
         getPreviousVersions: jest.fn<TelegramWorkflowRepository['getPreviousVersions']>(),
         appendAudit: jest.fn<TelegramWorkflowRepository['appendAudit']>(() => Promise.resolve()),
+        setActiveWorkflowMessage: jest.fn<TelegramWorkflowRepository['setActiveWorkflowMessage']>(
+          () => Promise.resolve(),
+        ),
+        getActiveWorkflowMessage: jest.fn<TelegramWorkflowRepository['getActiveWorkflowMessage']>(
+          () => Promise.resolve(null),
+        ),
+        clearActiveWorkflowMessage: jest.fn<
+          TelegramWorkflowRepository['clearActiveWorkflowMessage']
+        >(() => Promise.resolve()),
+        recordChannelPublication: jest.fn<TelegramWorkflowRepository['recordChannelPublication']>(
+          () => Promise.resolve(),
+        ),
+        getChannelPublication: jest.fn<TelegramWorkflowRepository['getChannelPublication']>(() =>
+          Promise.resolve(null),
+        ),
+        cancelFlow: jest.fn<TelegramWorkflowRepository['cancelFlow']>(() => Promise.resolve()),
+        findActiveFlowByIdentity: jest.fn<TelegramWorkflowRepository['findActiveFlowByIdentity']>(
+          () => Promise.resolve(null),
+        ),
       };
 
       tokens = {
@@ -1170,6 +1193,290 @@ describe('Telegram Visual Review Workflow', () => {
           expect(revisionRepo.createRequest).not.toHaveBeenCalled();
         });
       });
+    });
+
+    describe('W30-D Edit-First Delivery & Classification', () => {
+      it('enriches APPROVE_VISUAL response with EDIT_TEXT action, resourceKey, and VISUAL_REVIEW_CARD messageType', async () => {
+        const token: TelegramActionTokenRecord = {
+          id: 'tok-approve-w30d',
+          telegramIdentityId: actor.identityId,
+          action: TelegramAction.APPROVE_VISUAL,
+          resourceId: sampleJob.id,
+          metadata: {
+            creativeJobId: sampleJob.id,
+            visualAssetId: 'asset-1',
+            productName: 'CHANEL Bag',
+          },
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        };
+
+        const response = await handler.handleAction(actor, token);
+
+        expect(response.resourceKey).toBe(sampleJob.id);
+        expect(response.messageType).toBe('VISUAL_REVIEW_CARD');
+        expect(response.messages[0]?.action).toBe('EDIT_TEXT');
+        expect(response.messages[0]?.resourceKey).toBe(sampleJob.id);
+        expect(response.messages[0]?.messageType).toBe('VISUAL_REVIEW_CARD');
+      });
+
+      it('enriches EDIT_VISUAL_LAYOUT layout options prompt with EDIT_TEXT and VISUAL_REVIEW_CARD', async () => {
+        const token: TelegramActionTokenRecord = {
+          id: 'tok-layout-w30d',
+          telegramIdentityId: actor.identityId,
+          action: TelegramAction.EDIT_VISUAL_LAYOUT,
+          resourceId: sampleJob.id,
+          metadata: {
+            creativeJobId: sampleJob.id,
+            visualAssetId: 'asset-1',
+            productName: 'CHANEL Bag',
+          },
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        };
+
+        const response = await handler.handleAction(actor, token);
+
+        expect(response.resourceKey).toBe(sampleJob.id);
+        expect(response.messageType).toBe('VISUAL_REVIEW_CARD');
+        expect(response.messages[0]?.action).toBe('EDIT_TEXT');
+        expect(response.messages[0]?.buttons).toBeDefined();
+      });
+
+      it('classifies REQUEST_VISUAL_EDIT prompt as INTERACTION_PROMPT', async () => {
+        const token: TelegramActionTokenRecord = {
+          id: 'tok-request-edit-w30d',
+          telegramIdentityId: actor.identityId,
+          action: TelegramAction.REQUEST_VISUAL_EDIT,
+          resourceId: sampleJob.id,
+          metadata: {
+            creativeJobId: sampleJob.id,
+            visualAssetId: 'asset-1',
+            productName: 'CHANEL Bag',
+          },
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        };
+
+        const response = await handler.handleAction(actor, token);
+
+        expect(response.resourceKey).toBe(sampleJob.id);
+        expect(response.messageType).toBe('INTERACTION_PROMPT');
+        expect(response.messages[0]?.messageType).toBe('INTERACTION_PROMPT');
+      });
+    });
+  });
+
+  describe('TelegramOutboxDispatcher Edit-First Integration (W30-F)', () => {
+    let fakeGateway: FakeTelegramGateway;
+    let dispatcher: TelegramOutboxDispatcher;
+    let mockTokens: TelegramActionTokenService;
+    let workflowRepo: jest.Mocked<TelegramWorkflowRepository>;
+    let jobRepo: jest.Mocked<CreativeJobRepository>;
+    let assetRepo: jest.Mocked<VisualAssetRepository>;
+    let assetStorage: jest.Mocked<AssetStoragePort>;
+
+    const sampleDraftView: TelegramDraftView = {
+      jobId: 'content-job-1',
+      sku: 'CHANEL-BAG-001',
+      productName: 'CHANEL Classic Flap Bag',
+      contentType: 'PRODUCT_SPOTLIGHT',
+      language: 'BILINGUAL',
+      platform: 'INSTAGRAM',
+      jobStatus: 'READY_FOR_REVIEW',
+      createdAt: new Date(),
+      requesterTelegramUserId: actor.telegramUserId,
+      telegramIdentityId: actor.identityId,
+      output: {
+        headline: 'Classic Elegance',
+        khmerCaption: 'ភាពឆើតឆាយ',
+        englishCaption: 'Timeless luxury.',
+        cta: 'Contact your concierge.',
+        hashtags: ['#Chanel'],
+      },
+      validation: {
+        id: 'val-1',
+        contentVersionId: sampleJob.contentVersionId,
+        status: 'PASSED',
+        validatorVersion: 'v1',
+        findingCount: 0,
+        blockingCount: 0,
+        warningCount: 0,
+        infoCount: 0,
+        findings: [],
+        createdAt: new Date(),
+      },
+    };
+
+    const sampleAsset = {
+      id: 'asset-1',
+      creativeJobId: sampleJob.id,
+      versionNumber: 1,
+      assetRole: 'COMPOSITED_CREATIVE' as const,
+      mimeType: 'image/png',
+      width: 1080,
+      height: 1080,
+      byteSize: 2048,
+      sha256: 'sha-test-1234',
+      storageKey: 'cas/asset-1.png',
+      sourceProductAssetDigest: 'digest-1',
+      createdAt: new Date(),
+    };
+
+    beforeEach(() => {
+      fakeGateway = new FakeTelegramGateway();
+      workflowRepo = {
+        claimOutboxEvents: jest.fn(() => Promise.resolve([])),
+        markOutboxProcessed: jest.fn(() => Promise.resolve()),
+        markNotificationFailed: jest.fn(() => Promise.resolve()),
+        markNotificationSent: jest.fn(() => Promise.resolve()),
+        beginNotificationDelivery: jest.fn(() => Promise.resolve('PROCEED')),
+        getDraftViewByVersionId: jest.fn(() => Promise.resolve(null)),
+        getFailureViewByJobId: jest.fn(() => Promise.resolve(null)),
+        getActiveWorkflowMessage: jest.fn(() => Promise.resolve(null)),
+        setActiveWorkflowMessage: jest.fn(() => Promise.resolve()),
+        storeActionTokens: jest.fn(() => Promise.resolve()),
+      } as unknown as jest.Mocked<TelegramWorkflowRepository>;
+
+      jobRepo = {
+        findById: jest.fn(() => Promise.resolve(null)),
+      } as unknown as jest.Mocked<CreativeJobRepository>;
+
+      assetRepo = {
+        findById: jest.fn(() => Promise.resolve(null)),
+      } as unknown as jest.Mocked<VisualAssetRepository>;
+
+      assetStorage = {
+        getAssetBuffer: jest.fn(() => Promise.resolve(null)),
+      } as unknown as jest.Mocked<AssetStoragePort>;
+
+      mockTokens = new TelegramActionTokenService(workflowRepo);
+      dispatcher = new TelegramOutboxDispatcher(
+        workflowRepo,
+        fakeGateway,
+        mockTokens,
+        { telegram: { mode: 'polling', actionTokenTtlSeconds: 900 }, demoMode: false },
+        { isEnabled: (flag: string): boolean => flag === FeatureFlag.TELEGRAM },
+        mockLogger,
+        jobRepo,
+        assetRepo,
+        undefined,
+        assetStorage,
+      );
+    });
+
+    it('dispatches CREATIVE_VALIDATED using edit-first delivery when active workflow message exists', async () => {
+      workflowRepo.getDraftViewByVersionId.mockResolvedValueOnce(sampleDraftView);
+      jobRepo.findById.mockResolvedValueOnce(sampleJob);
+      assetRepo.findById.mockResolvedValueOnce(sampleAsset);
+      assetStorage.getAssetBuffer.mockResolvedValueOnce(Buffer.from('fake-png-data'));
+      workflowRepo.getActiveWorkflowMessage.mockResolvedValueOnce({
+        chatId: actor.telegramUserId,
+        messageId: 3042,
+        messageType: 'VISUAL_REVIEW_CARD',
+        payloadMetadata: {},
+      });
+
+      const event = {
+        id: 'event-cv-1',
+        topic: 'CREATIVE_VALIDATED',
+        schemaVersion: 1,
+        idempotencyKey: 'key-1',
+        aggregateType: 'CreativeJob',
+        aggregateId: sampleJob.id,
+        payload: {
+          creativeJobId: sampleJob.id,
+          visualAssetId: 'asset-1',
+        },
+        attemptCount: 1,
+        occurredAt: new Date(),
+        availableAt: new Date(),
+      };
+
+      await dispatcher.dispatchVisualReview(event);
+
+      expect(fakeGateway.editedMedia).toHaveLength(1);
+      expect(fakeGateway.editedMedia[0]?.messageId).toBe(3042);
+      expect(fakeGateway.editedMedia[0]?.chatId).toBe(actor.telegramUserId);
+      expect(workflowRepo.setActiveWorkflowMessage).toHaveBeenCalledWith(
+        sampleJob.id,
+        expect.objectContaining({
+          messageId: 3042,
+          messageType: 'VISUAL_REVIEW_CARD',
+        }),
+      );
+      expect(workflowRepo.markNotificationSent).toHaveBeenCalledWith(
+        'event-cv-1',
+        expect.any(Date),
+      );
+    });
+
+    it('falls back to sendPhoto when no active message exists and persists new message ID', async () => {
+      workflowRepo.getDraftViewByVersionId.mockResolvedValueOnce(sampleDraftView);
+      jobRepo.findById.mockResolvedValueOnce(sampleJob);
+      assetRepo.findById.mockResolvedValueOnce(sampleAsset);
+      assetStorage.getAssetBuffer.mockResolvedValueOnce(Buffer.from('fake-png-data'));
+      workflowRepo.getActiveWorkflowMessage.mockResolvedValueOnce(null);
+
+      const event = {
+        id: 'event-cv-2',
+        topic: 'CREATIVE_VALIDATED',
+        schemaVersion: 1,
+        idempotencyKey: 'key-2',
+        aggregateType: 'CreativeJob',
+        aggregateId: sampleJob.id,
+        payload: {
+          creativeJobId: sampleJob.id,
+          visualAssetId: 'asset-1',
+        },
+        attemptCount: 1,
+        occurredAt: new Date(),
+        availableAt: new Date(),
+      };
+
+      await dispatcher.dispatchVisualReview(event);
+
+      expect(fakeGateway.sentPhotos).toHaveLength(1);
+      expect(fakeGateway.sentPhotos[0]?.chatId).toBe(actor.telegramUserId);
+      expect(workflowRepo.setActiveWorkflowMessage).toHaveBeenCalledWith(
+        sampleJob.id,
+        expect.objectContaining({
+          messageId: expect.any(Number),
+          chatId: actor.telegramUserId,
+          messageType: 'VISUAL_REVIEW_CARD',
+        }),
+      );
+    });
+
+    it('dispatches CREATIVE_VALIDATION_FAILED with remediation advice and persists active message', async () => {
+      workflowRepo.getDraftViewByVersionId.mockResolvedValueOnce(sampleDraftView);
+      jobRepo.findById.mockResolvedValueOnce(sampleJob);
+      workflowRepo.getActiveWorkflowMessage.mockResolvedValueOnce(null);
+      workflowRepo.claimOutboxEvents.mockResolvedValueOnce([
+        {
+          id: 'event-fail-1',
+          topic: 'CREATIVE_VALIDATION_FAILED',
+          payload: {
+            creativeJobId: sampleJob.id,
+            blockingCount: 1,
+            remediationActions: ['Reduce product scale by 10% to prevent border crop'],
+          },
+          attemptCount: 1,
+        },
+      ]);
+
+      await dispatcher.dispatchOnce();
+
+      expect(fakeGateway.sentMessages).toHaveLength(1);
+      expect(fakeGateway.sentMessages[0]?.text).toContain('Visual Creative Validation Failed');
+      expect(fakeGateway.sentMessages[0]?.text).toContain('Reduce product scale by 10%');
+      expect(workflowRepo.setActiveWorkflowMessage).toHaveBeenCalledWith(
+        sampleJob.id,
+        expect.objectContaining({
+          messageType: 'VISUAL_REVIEW_CARD',
+          payloadMetadata: expect.objectContaining({ status: 'FAILED' }),
+        }),
+      );
     });
   });
 });

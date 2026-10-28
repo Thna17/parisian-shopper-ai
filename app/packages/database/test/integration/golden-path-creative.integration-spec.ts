@@ -161,12 +161,19 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
   let approveCreativeUseCase: ApproveCreativeUseCase | undefined;
 
   let _editorUser: User;
+  let _approverUser: User;
   let updateSequence = 9_000;
 
   const editorProfile = {
     telegramUserId: '900000001',
     username: 'e2e_editor',
     displayName: 'Golden Editor',
+  };
+
+  const approverProfile = {
+    telegramUserId: '900000002',
+    username: 'e2e_approver',
+    displayName: 'Golden Approver',
   };
 
   const nextUpdateId = (): string => String(++updateSequence);
@@ -323,9 +330,16 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
 
     _editorUser = await createStaff(
       'Golden Editor',
-      'MARKETING_APPROVER',
+      'MARKETING_EDITOR',
       editorProfile.telegramUserId,
       editorProfile.username,
+    );
+
+    _approverUser = await createStaff(
+      'Golden Approver',
+      'MARKETING_APPROVER',
+      approverProfile.telegramUserId,
+      approverProfile.username,
     );
 
     // 5. Connect Valkey clients
@@ -670,12 +684,12 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
 
     // Operator clicks Approve on Text draft
     const approveButton = findButton({ messages: [draftMessage] }, 'Approve');
-    const confirmPrompt = await callback(editorProfile, approveButton);
+    const confirmPrompt = await callback(approverProfile, approveButton);
     expect(confirmPrompt.messages[0]?.text).toContain('Confirm Approval');
 
-    // Confirm text approval
+    // Confirm text approval by authorized independent approver
     const confirmApproveButton = findButton(confirmPrompt, 'Confirm Approve');
-    const approvedResponse = await callback(editorProfile, confirmApproveButton);
+    const approvedResponse = await callback(approverProfile, confirmApproveButton);
     expect(approvedResponse.messages[0]?.text).toContain('Approved');
 
     // Assert Database state after text approval
@@ -688,7 +702,7 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
       where: { contentJobId: contentJob.id, contentVersionId: contentVersion1.id },
     });
     expect(textApprovalEvent.decision).toBe('APPROVED');
-    expect(textApprovalEvent.approverUserId).toBe(_editorUser.id);
+    expect(textApprovalEvent.approverUserId).toBe(_approverUser.id);
 
     // -------------------------------------------------------------
     // STEP 3: Outbox Relay & BullMQ Creative Background Generation

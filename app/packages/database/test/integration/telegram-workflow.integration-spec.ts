@@ -14,10 +14,12 @@ import {
   NoopProductMetrics,
   PermissionService,
   SearchProductsUseCase,
+  TelegramAction,
   TelegramActionTokenService,
   TelegramCommandCenter,
   ValidateContentVersionUseCase,
   GenerateContentUseCase,
+  hashTelegramActionToken,
   type AITextProvider,
   type ContentGenerationEnqueuer,
   type ProductMetrics,
@@ -401,6 +403,134 @@ describe('Phase 1E durable Telegram workflow', () => {
     expect(await getPrisma().contentJob.count({ where: { telegramCreateFlowId: flow?.id } })).toBe(
       1,
     );
+  });
+
+  it('W30-B: persists active workflow messages and channel publications across distinct repository instances', async () => {
+    const repo1 = getWorkflow();
+    const repo2 = new PrismaTelegramWorkflowRepository(getPrisma());
+
+    const testResourceKey = 'flow-test-w30b-1';
+    await repo1.setActiveWorkflowMessage(testResourceKey, 1042, 'chat-789', {
+      messageType: 'WIZARD_PROMPT',
+      payloadMetadata: { step: 3 },
+    });
+
+    const retrieved = await repo2.getActiveWorkflowMessage(testResourceKey);
+    expect(retrieved).not.toBeNull();
+    expect(retrieved?.messageId).toBe(1042);
+    expect(retrieved?.chatId).toBe('chat-789');
+    expect(retrieved?.messageType).toBe('WIZARD_PROMPT');
+    expect(retrieved?.payloadMetadata).toEqual({ step: 3 });
+
+    await repo2.clearActiveWorkflowMessage(testResourceKey);
+    const cleared = await repo1.getActiveWorkflowMessage(testResourceKey);
+    expect(cleared).toBeNull();
+  });
+
+  it('W30-B: cancels an in-progress flow and retrieves active flow by identity', async () => {
+    const actor = await getWorkflow().resolveActor(editorProfile);
+    expect(actor).not.toBeNull();
+    const identityId = actor?.identityId;
+    if (identityId === undefined) throw new Error('Identity missing');
+
+    const product = FICTIONAL_PRODUCTS[0];
+    if (product === undefined) throw new Error('Product fixture missing');
+
+    const flow = await getWorkflow().createFlow(
+      identityId,
+      product,
+      new Date(Date.now() + 600_000),
+    );
+
+    const activeBefore = await getWorkflow().findActiveFlowByIdentity(identityId);
+    expect(activeBefore).not.toBeNull();
+    expect(activeBefore?.id).toBe(flow.id);
+    expect(activeBefore?.status).toBe('SELECTING_CONTENT_TYPE');
+
+    await getWorkflow().cancelFlow(flow.id);
+
+    const cancelledFlow = await getWorkflow().findFlowById(flow.id);
+    expect(cancelledFlow?.status).toBe('CANCELLED');
+
+    const activeAfter = await getWorkflow().findActiveFlowByIdentity(identityId);
+    expect(activeAfter).toBeNull();
+  });
+
+  it('W30-E: recovers wizard state upon simulated process restart and /resume', async () => {
+    // 1. User starts /create and advances to Step 3
+    const startRes = await command(editorProfile, '/create FIC-PERF-001');
+    expect(startRes.messages[0]?.text).toContain('Step 2 of 6');
+    const token = button(startRes, 'Product spotlight');
+    const step3Res = await callback(editorProfile, token);
+    expect(step3Res.messages[0]?.text).toContain('Step 3 of 6');
+
+    // 2. Simulate process exit & cold start: create fresh repository and fresh CommandCenter
+    const freshRepo = new PrismaTelegramWorkflowRepository(getPrisma());
+    const freshCommandCenter = new TelegramCommandCenter(
+      freshRepo,
+      new PermissionService(),
+      new GetProductBySkuUseCase(new MockProductSource(), productMetrics, logger),
+      new SearchProductsUseCase(new MockProductSource(), productMetrics, logger),
+      new CreateProductSnapshotUseCase(getSnapshots(), productMetrics, logger),
+      new CreateContentJobUseCase(getContent()),
+      getBrands(),
+      { enqueue: (): Promise<void> => Promise.resolve() },
+      new TelegramActionTokenService(freshRepo),
+      { actionTokenTtlSeconds: 900 },
+    );
+
+    // 3. User invokes /resume on fresh instance
+    const resumeRes = await freshCommandCenter.handleCommand({
+      updateId: nextUpdateId(),
+      profile: editorProfile,
+      text: '/resume',
+    });
+
+    expect(resumeRes.messages).toHaveLength(1);
+    expect(resumeRes.messages[0]?.text).toContain('Resumed Creation Wizard');
+    expect(resumeRes.messages[0]?.text).toContain('Step 3 of 6');
+  });
+
+  it('W30-E: handles concurrent action token race condition atomically in PostgreSQL', async () => {
+    const actor = await getWorkflow().resolveActor(editorProfile);
+    if (!actor) throw new Error('Actor missing');
+
+    const tokenService = new TelegramActionTokenService(getWorkflow());
+    const [rawToken] = await tokenService.create(actor.identityId, [
+      { action: TelegramAction.CONFIRM_APPROVE_VISUAL, resourceId: 'test-job-conc' },
+    ]);
+    if (!rawToken) throw new Error('Token creation failed');
+    const tokenHash = hashTelegramActionToken(rawToken);
+
+    // Simulate rapid concurrent button clicks (both trying to consume the token)
+    const [result1, result2] = await Promise.all([
+      getWorkflow().consumeActionToken(tokenHash, editorProfile.telegramUserId, new Date()),
+      getWorkflow().consumeActionToken(tokenHash, editorProfile.telegramUserId, new Date()),
+    ]);
+
+    const resolved = [result1, result2].filter((r) => r.disposition === 'RESOLVED');
+    const consumed = [result1, result2].filter((r) => r.disposition === 'CONSUMED');
+
+    expect(resolved).toHaveLength(1);
+    expect(consumed).toHaveLength(1);
+  });
+
+  it('W30-E: enforces webhook update deduplication atomically via claimInboundUpdate in PostgreSQL', async () => {
+    const updateId = `inbound-race-${Date.now()}`;
+    const [res1, res2] = await Promise.all([
+      getWorkflow().claimInboundUpdate(updateId, editorProfile.telegramUserId, 'message'),
+      getWorkflow().claimInboundUpdate(updateId, editorProfile.telegramUserId, 'message'),
+    ]);
+
+    expect([res1, res2].filter(Boolean)).toHaveLength(1);
+
+    // Sequential replay also rejected
+    const replayRes = await getWorkflow().claimInboundUpdate(
+      updateId,
+      editorProfile.telegramUserId,
+      'message',
+    );
+    expect(replayRes).toBe(false);
   });
 
   function createCommandCenter(enqueuer: ContentGenerationEnqueuer): TelegramCommandCenter {

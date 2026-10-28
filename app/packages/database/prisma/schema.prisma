@@ -141,7 +141,10 @@ enum TelegramCreateFlowStatus {
   SELECTING_CONTENT_TYPE
   SELECTING_LANGUAGE
   SELECTING_PLATFORM
+  SELECTING_TEMPLATE
+  CONFIRMING_GENERATION
   COMPLETED
+  CANCELLED
   EXPIRED
 }
 
@@ -214,6 +217,8 @@ model User {
   productAssetRightsEvents    ProductAssetRightsEvent[]    @relation("UserProductAssetRightsEvents")
   requestedSceneVersions      CreativeSceneVersion[]       @relation("UserRequestedSceneVersions")
   recordedSceneInvalidations  SceneInvalidationEvent[]     @relation("UserRecordedSceneInvalidations")
+  passwordCredential          PasswordCredential?
+  sessions                    UserSession[]
 
   @@index([status], map: "users_status_idx")
   @@map("users")
@@ -247,6 +252,39 @@ model UserRole {
   @@index([roleId], map: "user_roles_role_id_idx")
   @@index([assignedById], map: "user_roles_assigned_by_id_idx")
   @@map("user_roles")
+}
+
+model PasswordCredential {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @unique(map: "password_credentials_user_id_key") @map("user_id") @db.Uuid
+  passwordHash  String    @map("password_hash") @db.VarChar(255)
+  hashAlgorithm String    @default("argon2id") @map("hash_algorithm") @db.VarChar(32)
+  failedLogins  Int       @default(0) @map("failed_logins")
+  lockedUntil   DateTime? @map("locked_until") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "password_credentials_user_id_fkey")
+
+  @@map("password_credentials")
+}
+
+model UserSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  sessionTokenHash String    @unique(map: "user_sessions_session_token_hash_key") @map("session_token_hash") @db.Char(64)
+  ipAddress        String?   @map("ip_address") @db.VarChar(45)
+  userAgent        String?   @map("user_agent") @db.VarChar(500)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastActiveAt     DateTime  @default(now()) @map("last_active_at") @db.Timestamptz(3)
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "user_sessions_user_id_fkey")
+
+  @@index([sessionTokenHash, expiresAt, revokedAt], map: "user_sessions_token_active_idx")
+  @@index([userId, revokedAt], map: "user_sessions_user_active_idx")
+  @@map("user_sessions")
 }
 
 model OutboxEvent {
@@ -456,6 +494,7 @@ model TelegramIdentity {
   rateLimitBuckets          TelegramRateLimitBucket[]
   pendingReviewInteractions TelegramPendingReviewInteraction[]
   auditEvents               AuditEvent[]
+  activeWorkflowMessages    TelegramActiveWorkflowMessage[]
 
   @@index([userId], map: "telegram_identities_user_id_idx")
   @@map("telegram_identities")
@@ -538,6 +577,46 @@ model TelegramRateLimitBucket {
 
   @@id([telegramIdentityId, action, windowStart], map: "telegram_rate_limit_buckets_pkey")
   @@map("telegram_rate_limit_buckets")
+}
+
+enum TelegramWorkflowMessageType {
+  WIZARD_PROMPT
+  REVIEW_CARD
+  INPUT_PROMPT
+  VISUAL_REVIEW_CARD
+  INTERACTION_PROMPT
+}
+
+model TelegramActiveWorkflowMessage {
+  id                 String                      @id @default(uuid()) @db.Uuid
+  resourceKey        String                      @unique(map: "telegram_active_workflow_messages_resource_key") @map("resource_key") @db.VarChar(120)
+  telegramIdentityId String?                     @map("telegram_identity_id") @db.Uuid
+  chatId             String?                     @map("chat_id") @db.VarChar(80)
+  messageId          Int                         @map("message_id")
+  messageType        TelegramWorkflowMessageType @default(WIZARD_PROMPT) @map("message_type")
+  payloadMetadata    Json?                       @map("payload_metadata") @db.JsonB
+  updatedAt          DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  createdAt          DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  telegramIdentity TelegramIdentity? @relation(fields: [telegramIdentityId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "telegram_active_workflow_messages_identity_id_fkey")
+
+  @@index([telegramIdentityId, updatedAt], map: "telegram_active_workflow_messages_identity_updated_idx")
+  @@map("telegram_active_workflow_messages")
+}
+
+model TelegramChannelPublicationRecord {
+  id            String   @id @default(uuid()) @db.Uuid
+  creativeJobId String   @unique(map: "telegram_channel_publications_job_id_key") @map("creative_job_id") @db.Uuid
+  visualAssetId String   @map("visual_asset_id") @db.Uuid
+  channelId     String   @map("channel_id") @db.VarChar(80)
+  messageId     Int      @map("message_id")
+  publishedAt   DateTime @default(now()) @map("published_at") @db.Timestamptz(3)
+
+  creativeJob CreativeJob @relation(fields: [creativeJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_channel_publications_job_id_fkey")
+  visualAsset VisualAsset @relation(fields: [visualAssetId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_channel_publications_asset_id_fkey")
+
+  @@index([channelId, publishedAt], map: "telegram_channel_publications_channel_published_idx")
+  @@map("telegram_channel_publications")
 }
 
 model AuditEvent {
@@ -733,14 +812,15 @@ model CreativeJob {
   createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  contentVersion   ContentVersion            @relation(fields: [contentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_jobs_content_version_id_fkey")
-  productSnapshot  ProductSnapshot           @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_jobs_product_snapshot_id_fkey")
-  brandRuleVersion BrandRuleVersion          @relation(fields: [brandRuleVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_jobs_brand_rule_version_id_fkey")
-  requestedByUser  User?                     @relation("UserCreativeJobs", fields: [requestedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_jobs_requested_by_user_id_fkey")
-  visualAssets     VisualAsset[]
-  revisionRequests CreativeRevisionRequest[]
-  approvalEvents   CreativeApprovalEvent[]
-  scenes           CreativeScene[]
+  contentVersion     ContentVersion                    @relation(fields: [contentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_jobs_content_version_id_fkey")
+  productSnapshot    ProductSnapshot                   @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_jobs_product_snapshot_id_fkey")
+  brandRuleVersion   BrandRuleVersion                  @relation(fields: [brandRuleVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_jobs_brand_rule_version_id_fkey")
+  requestedByUser    User?                             @relation("UserCreativeJobs", fields: [requestedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_jobs_requested_by_user_id_fkey")
+  visualAssets       VisualAsset[]
+  revisionRequests   CreativeRevisionRequest[]
+  approvalEvents     CreativeApprovalEvent[]
+  scenes             CreativeScene[]
+  channelPublication TelegramChannelPublicationRecord?
 
   @@index([contentVersionId, createdAt], map: "creative_jobs_content_version_created_at_idx")
   @@index([status, createdAt], map: "creative_jobs_status_created_at_idx")
@@ -768,11 +848,12 @@ model VisualAsset {
   backgroundAssetDigest    String?         @map("background_asset_digest") @db.Char(64)
   createdAt                DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  creativeJob               CreativeJob               @relation(fields: [creativeJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "visual_assets_creative_job_id_fkey")
+  creativeJob               CreativeJob                        @relation(fields: [creativeJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "visual_assets_creative_job_id_fkey")
   validationResults         VisualValidationResult[]
-  sourceRevisionRequests    CreativeRevisionRequest[] @relation("SourceVisualAssetRevisions")
-  resultingRevisionRequests CreativeRevisionRequest[] @relation("ResultingVisualAssetRevision")
+  sourceRevisionRequests    CreativeRevisionRequest[]          @relation("SourceVisualAssetRevisions")
+  resultingRevisionRequests CreativeRevisionRequest[]          @relation("ResultingVisualAssetRevision")
   approvalEvents            CreativeApprovalEvent[]
+  channelPublications       TelegramChannelPublicationRecord[]
 
   @@unique([creativeJobId, versionNumber], map: "visual_assets_job_version_key")
   @@index([creativeJobId, createdAt], map: "visual_assets_job_created_at_idx")

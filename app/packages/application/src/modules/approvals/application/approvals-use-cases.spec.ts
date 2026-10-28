@@ -9,6 +9,7 @@ import {
   type PendingReviewInteractionRecord,
   type RevisionRequestRecord,
 } from '../domain/approval.js';
+import { SelfApprovalProhibitedError } from '../domain/approval-errors.js';
 import { type ApprovalsRepository } from './approvals.repository.js';
 import { ApproveContentVersionUseCase } from './approve-content-version.use-case.js';
 import { RejectContentVersionUseCase } from './reject-content-version.use-case.js';
@@ -57,8 +58,37 @@ describe('Approvals Use Cases', () => {
   const findApprovalEventByJobId = jest.fn((_jobId: string): Promise<ApprovalEventRecord | null> =>
     Promise.resolve(null),
   );
+
+  const mockReviewState: ContentReviewState = {
+    jobId: 'job-1',
+    jobStatus: 'UNDER_REVIEW',
+    productSnapshotId: 'snap-1',
+    sku: 'SKU-1',
+    productName: 'Sample Product',
+    requesterUserId: 'requester-1',
+    currentVersionNumber: 2,
+    versions: [
+      {
+        id: 'ver-1',
+        versionNumber: 1,
+        authorUserId: 'requester-1',
+        createdAt: new Date(),
+        approvalEligible: true,
+        headline: 'V1 Headline',
+      },
+      {
+        id: 'ver-2',
+        versionNumber: 2,
+        authorUserId: 'editor-2',
+        createdAt: new Date(),
+        approvalEligible: true,
+        headline: 'V2 Headline',
+      },
+    ],
+  };
+
   const getReviewState = jest.fn((_jobId: string): Promise<ContentReviewState | null> =>
-    Promise.resolve(null),
+    Promise.resolve(mockReviewState),
   );
   const getApprovalStatus = jest.fn((_jobId: string): Promise<ApprovalStatusView | null> =>
     Promise.resolve(null),
@@ -209,7 +239,7 @@ describe('Approvals Use Cases', () => {
   describe('ApproveContentVersionUseCase', () => {
     const useCase = new ApproveContentVersionUseCase(mockRepository, permissions);
 
-    it('approves content version when actor is MARKETING_APPROVER', async () => {
+    it('SEC-APP-01: independent approval succeeds when approver differs from requester and author', async () => {
       const result = await useCase.execute({
         contentJobId: 'job-1',
         contentVersionId: 'ver-1',
@@ -226,15 +256,72 @@ describe('Approvals Use Cases', () => {
       });
     });
 
-    it('rejects approval if actor is only MARKETING_EDITOR', async () => {
+    it('SEC-APP-02: requester self-approval fails even if requester possesses MARKETING_APPROVER role', async () => {
       await expect(
         useCase.execute({
           contentJobId: 'job-1',
           contentVersionId: 'ver-1',
-          approverUserId: 'user-1',
+          approverUserId: 'requester-1',
+          approverRoles: [RoleCode.MARKETING_APPROVER],
+        }),
+      ).rejects.toThrow(SelfApprovalProhibitedError);
+
+      expect(createApproval).not.toHaveBeenCalled();
+    });
+
+    it('SEC-APP-02: requester self-approval fails even if requester possesses ADMIN role', async () => {
+      await expect(
+        useCase.execute({
+          contentJobId: 'job-1',
+          contentVersionId: 'ver-1',
+          approverUserId: 'requester-1',
+          approverRoles: [RoleCode.ADMIN],
+        }),
+      ).rejects.toThrow(SelfApprovalProhibitedError);
+
+      expect(createApproval).not.toHaveBeenCalled();
+    });
+
+    it('SEC-APP-03: version author self-approval fails when approver authored that revision', async () => {
+      // editor-2 authored ver-2, and possesses MARKETING_APPROVER
+      await expect(
+        useCase.execute({
+          contentJobId: 'job-1',
+          contentVersionId: 'ver-2',
+          approverUserId: 'editor-2',
+          approverRoles: [RoleCode.MARKETING_APPROVER],
+        }),
+      ).rejects.toThrow(SelfApprovalProhibitedError);
+
+      expect(createApproval).not.toHaveBeenCalled();
+    });
+
+    it('SEC-APP-04: rejects approval if actor lacks APPROVE_CONTENT permission (e.g. MARKETING_EDITOR)', async () => {
+      await expect(
+        useCase.execute({
+          contentJobId: 'job-1',
+          contentVersionId: 'ver-1',
+          approverUserId: 'independent-editor-1',
           approverRoles: [RoleCode.MARKETING_EDITOR],
         }),
       ).rejects.toThrow(ForbiddenError);
+
+      expect(createApproval).not.toHaveBeenCalled();
+    });
+
+    it('SEC-APP-08: no side effects after denial: createApproval is never invoked on self-approval failure', async () => {
+      try {
+        await useCase.execute({
+          contentJobId: 'job-1',
+          contentVersionId: 'ver-1',
+          approverUserId: 'requester-1',
+          approverRoles: [RoleCode.MARKETING_APPROVER],
+        });
+      } catch (err) {
+        expect(err).toBeInstanceOf(SelfApprovalProhibitedError);
+      }
+
+      expect(createApproval).not.toHaveBeenCalled();
     });
   });
 
@@ -269,6 +356,25 @@ describe('Approvals Use Cases', () => {
           approverRoles: [RoleCode.MARKETING_EDITOR],
         }),
       ).rejects.toThrow(ForbiddenError);
+    });
+
+    it('SEC-APP-10: rejection behavior is preserved: requester can reject content with rejection reason', async () => {
+      const result = await useCase.execute({
+        contentJobId: 'job-1',
+        contentVersionId: 'ver-1',
+        approverUserId: 'requester-1',
+        approverRoles: [RoleCode.ADMIN],
+        comment: 'Requester rejecting own draft for major rework',
+      });
+
+      expect(result.decision).toBe('REJECTED');
+      expect(createApproval).toHaveBeenCalledWith({
+        contentJobId: 'job-1',
+        contentVersionId: 'ver-1',
+        approverUserId: 'requester-1',
+        decision: 'REJECTED',
+        comment: 'Requester rejecting own draft for major rework',
+      });
     });
   });
 });

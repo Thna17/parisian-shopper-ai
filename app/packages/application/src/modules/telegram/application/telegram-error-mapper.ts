@@ -11,6 +11,8 @@ export function telegramSafeError(error: unknown): string {
     AI_PROVIDER_UNAVAILABLE: 'Content generation is temporarily unavailable.',
     PRODUCT_SOURCE_UNAVAILABLE: 'The product catalogue is temporarily unavailable.',
     PRODUCT_SOURCE_TIMEOUT: 'The product catalogue timed out. Please try again later.',
+    SELF_APPROVAL_PROHIBITED:
+      'Four-eyes policy violation: You cannot approve content you requested or authored.',
   };
   return messages[error.code] ?? error.publicMessage;
 }

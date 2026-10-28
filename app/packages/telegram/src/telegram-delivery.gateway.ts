@@ -168,6 +168,14 @@ export class FakeTelegramGateway implements TelegramDeliveryGateway {
     },
   ): Promise<{ messageId: number }> {
     this.editedMessages.push({ chatId, messageId, text, options });
+    this.sent.push({
+      telegramUserId: chatId,
+      message: {
+        text,
+        ...(options?.buttons !== undefined ? { buttons: options.buttons } : {}),
+        ...(options?.parseMode !== undefined ? { parseMode: options.parseMode } : {}),
+      },
+    });
     return Promise.resolve({ messageId });
   }
 
@@ -181,6 +189,14 @@ export class FakeTelegramGateway implements TelegramDeliveryGateway {
     },
   ): Promise<{ messageId: number }> {
     this.editedCaptions.push({ chatId, messageId, caption, options });
+    this.sent.push({
+      telegramUserId: chatId,
+      message: {
+        text: caption,
+        ...(options?.buttons !== undefined ? { buttons: options.buttons } : {}),
+        ...(options?.parseMode !== undefined ? { parseMode: options.parseMode } : {}),
+      },
+    });
     return Promise.resolve({ messageId });
   }
 
@@ -195,6 +211,15 @@ export class FakeTelegramGateway implements TelegramDeliveryGateway {
     },
   ): Promise<{ messageId: number }> {
     this.editedMedia.push({ chatId, messageId, photoBuffer, options });
+    this.sent.push({
+      telegramUserId: chatId,
+      message: {
+        text: options?.caption ?? '',
+        photoBuffer,
+        ...(options?.buttons !== undefined ? { buttons: options.buttons } : {}),
+        ...(options?.parseMode !== undefined ? { parseMode: options.parseMode } : {}),
+      },
+    });
     return Promise.resolve({ messageId });
   }
 

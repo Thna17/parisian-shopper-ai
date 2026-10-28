@@ -55,3 +55,14 @@ export class InvalidReviewStateError extends ApplicationError {
     });
   }
 }
+
+export class SelfApprovalProhibitedError extends ApplicationError {
+  public constructor(
+    message = 'Four-eyes policy violation: An employee cannot approve content they requested or authored.',
+  ) {
+    super({
+      code: 'SELF_APPROVAL_PROHIBITED',
+      publicMessage: message,
+    });
+  }
+}

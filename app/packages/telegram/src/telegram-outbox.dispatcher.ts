@@ -43,6 +43,7 @@ const TOPICS = [
   'CONTENT_GENERATION_FAILED',
   'CONTENT_REJECTED',
   'CREATIVE_VALIDATED',
+  'CREATIVE_VALIDATION_FAILED',
 ] as const;
 
 @Injectable()
@@ -109,6 +110,8 @@ export class TelegramOutboxDispatcher
   }): Promise<void> {
     try {
       if (event.topic === 'CREATIVE_VALIDATED') await this.sendVisualReview(event);
+      else if (event.topic === 'CREATIVE_VALIDATION_FAILED')
+        await this.sendCreativeValidationFailed(event);
       else if (event.topic === 'CONTENT_VALIDATION_COMPLETED') await this.sendDraft(event);
       else if (event.topic === 'CONTENT_REJECTED') await this.sendRejection(event);
       else await this.sendFailure(event);
@@ -454,13 +457,145 @@ export class TelegramOutboxDispatcher
       }
     }
 
-    const message: TelegramMessage = {
-      text: caption,
-      buttons: buttonRows,
-      ...(photoBuffer !== undefined ? { photoBuffer } : {}),
-    };
+    const active = await this.repository.getActiveWorkflowMessage(creativeJobId);
+    let deliveredMessageId: number | undefined;
+    let isEditSuccess = false;
 
-    await this.gateway.sendMessages(view.requesterTelegramUserId, [message]);
+    if (active !== null) {
+      const targetChatId = active.chatId || view.requesterTelegramUserId;
+      try {
+        if (photoBuffer !== undefined) {
+          const editResult = await this.gateway.editMessageMedia(
+            targetChatId,
+            active.messageId,
+            photoBuffer,
+            {
+              caption,
+              buttons: buttonRows,
+            },
+          );
+          deliveredMessageId = editResult.messageId;
+          isEditSuccess = true;
+        } else {
+          const editResult = await this.gateway.editMessageText(
+            targetChatId,
+            active.messageId,
+            caption,
+            {
+              buttons: buttonRows,
+            },
+          );
+          deliveredMessageId = editResult.messageId;
+          isEditSuccess = true;
+        }
+      } catch (err: unknown) {
+        const errorMsg = (err as Error)?.message ?? '';
+        if (errorMsg.includes('message is not modified')) {
+          deliveredMessageId = active.messageId;
+          isEditSuccess = true;
+        } else {
+          this.logger.warn(
+            `Edit-first delivery failed for creative visual review ${creativeJobId} on message ${active.messageId}, falling back to fresh delivery: ${errorMsg}`,
+          );
+        }
+      }
+    }
+
+    if (!isEditSuccess) {
+      if (photoBuffer !== undefined) {
+        const sent = await this.gateway.sendPhoto(view.requesterTelegramUserId, photoBuffer, {
+          caption,
+          buttons: buttonRows,
+        });
+        deliveredMessageId = sent.messageId;
+      } else {
+        const sent = await this.gateway.sendMessage(view.requesterTelegramUserId, caption, {
+          buttons: buttonRows,
+        });
+        deliveredMessageId = sent.messageId;
+      }
+    }
+
+    if (deliveredMessageId !== undefined) {
+      await this.repository.setActiveWorkflowMessage(creativeJobId, {
+        messageId: deliveredMessageId,
+        chatId: view.requesterTelegramUserId,
+        messageType: 'VISUAL_REVIEW_CARD',
+        payloadMetadata: {
+          creativeJobId,
+          visualAssetId,
+        },
+      });
+    }
+
+    await this.repository.markNotificationSent(event.id, new Date());
+  }
+
+  private async sendCreativeValidationFailed(event: {
+    id: string;
+    payload: Readonly<Record<string, unknown>>;
+  }): Promise<void> {
+    const creativeJobId = stringPayload(event.payload, 'creativeJobId');
+    const job = this.creativeJobs ? await this.creativeJobs.findById(creativeJobId) : null;
+    const view = job ? await this.repository.getDraftViewByVersionId(job.contentVersionId) : null;
+    if (view === null)
+      throw new PermanentTelegramDeliveryError('CREATIVE_VALIDATION_FAILED_RECIPIENT_NOT_FOUND');
+    if (
+      (await this.repository.beginNotificationDelivery(event.id, view.telegramIdentityId)) ===
+      'ALREADY_SENT'
+    )
+      return;
+
+    const blockingCount = Number(event.payload.blockingCount ?? 0);
+    const remediationActions = Array.isArray(event.payload.remediationActions)
+      ? (event.payload.remediationActions as string[])
+      : [];
+    const remediationText =
+      remediationActions.length > 0
+        ? `\n\n*Recommended Actions:*\n• ${remediationActions.join('\n• ')}`
+        : '';
+    const text = `❌ *Visual Creative Validation Failed*\n\nJob #${short(creativeJobId)} for ${view.productName} encountered ${blockingCount} blocking visual gate issue(s).${remediationText}`;
+
+    const active = await this.repository.getActiveWorkflowMessage(creativeJobId);
+    let deliveredMessageId: number | undefined;
+    let isEditSuccess = false;
+
+    if (active !== null) {
+      const targetChatId = active.chatId || view.requesterTelegramUserId;
+      try {
+        const editResult = await this.gateway.editMessageText(targetChatId, active.messageId, text);
+        deliveredMessageId = editResult.messageId;
+        isEditSuccess = true;
+      } catch (err: unknown) {
+        const errorMsg = (err as Error)?.message ?? '';
+        if (errorMsg.includes('message is not modified')) {
+          deliveredMessageId = active.messageId;
+          isEditSuccess = true;
+        } else {
+          this.logger.warn(
+            `Edit message failed for failed visual validation ${creativeJobId}, falling back to fresh delivery: ${errorMsg}`,
+          );
+        }
+      }
+    }
+
+    if (!isEditSuccess) {
+      const sent = await this.gateway.sendMessage(view.requesterTelegramUserId, text);
+      deliveredMessageId = sent.messageId;
+    }
+
+    if (deliveredMessageId !== undefined) {
+      await this.repository.setActiveWorkflowMessage(creativeJobId, {
+        messageId: deliveredMessageId,
+        chatId: view.requesterTelegramUserId,
+        messageType: 'VISUAL_REVIEW_CARD',
+        payloadMetadata: {
+          creativeJobId,
+          status: 'FAILED',
+        },
+      });
+    }
+
     await this.repository.markNotificationSent(event.id, new Date());
   }
 }

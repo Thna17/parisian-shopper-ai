@@ -264,37 +264,69 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
       }
     }
 
+    const creativeJobId = (token.metadata?.creativeJobId as string | undefined) ?? token.resourceId;
+    let res: TelegramResponse;
+
     switch (token.action) {
       case TelegramAction.APPROVE_VISUAL:
-        return this.handleApproveVisual(actor, token);
+        res = await this.handleApproveVisual(actor, token);
+        break;
       case TelegramAction.CONFIRM_APPROVE_VISUAL:
-        return this.handleConfirmApproveVisual(actor, token);
+        res = await this.handleConfirmApproveVisual(actor, token);
+        break;
       case TelegramAction.REQUEST_VISUAL_EDIT:
-        return this.handleRequestVisualEdit(actor, token);
+        res = await this.handleRequestVisualEdit(actor, token);
+        break;
       case TelegramAction.EDIT_VISUAL_LAYOUT:
-        return this.handleEditVisualLayout(actor, token);
+        res = await this.handleEditVisualLayout(actor, token);
+        break;
       case TelegramAction.CHANGE_VISUAL_STYLE:
-        return this.handleChangeVisualStyle(actor, token);
+        res = await this.handleChangeVisualStyle(actor, token);
+        break;
       case TelegramAction.CONFIRM_CHANGE_STYLE:
-        return this.handleConfirmChangeStyle(actor, token);
+        res = await this.handleConfirmChangeStyle(actor, token);
+        break;
       case TelegramAction.VIEW_VISUAL_DETAILS:
-        return this.handleViewVisualDetails(actor, token);
+        res = await this.handleViewVisualDetails(actor, token);
+        break;
       case TelegramAction.REGENERATE_VISUAL:
-        return this.handleRegenerateVisual(actor, token);
+        res = await this.handleRegenerateVisual(actor, token);
+        break;
       case TelegramAction.EXPORT_POSTER:
-        return this.handleExportPosterMenu(actor, token);
+        res = await this.handleExportPosterMenu(actor, token);
+        break;
       case TelegramAction.SELECT_EXPORT_FORMAT:
-        return this.handleSelectExportFormat(actor, token);
+        res = await this.handleSelectExportFormat(actor, token);
+        break;
       case TelegramAction.REJECT_VISUAL:
-        return this.handleRejectVisual(actor, token);
+        res = await this.handleRejectVisual(actor, token);
+        break;
       case TelegramAction.CANCEL_VISUAL_ACTION:
-        return this.handleCancelVisualAction();
+        res = await this.handleCancelVisualAction();
+        break;
       default:
-        return {
+        res = {
           messages: [{ text: 'Unsupported action.' }],
           callbackNotice: 'Unsupported action.',
         };
     }
+
+    const messageType =
+      token.action === TelegramAction.REQUEST_VISUAL_EDIT ||
+      token.action === TelegramAction.REJECT_VISUAL
+        ? 'INTERACTION_PROMPT'
+        : 'VISUAL_REVIEW_CARD';
+
+    return {
+      ...res,
+      resourceKey: res.resourceKey ?? creativeJobId,
+      messageType: res.messageType ?? messageType,
+      messages: res.messages.map((m) => ({
+        ...m,
+        resourceKey: m.resourceKey ?? res.resourceKey ?? creativeJobId,
+        messageType: m.messageType ?? res.messageType ?? messageType,
+      })),
+    };
   }
 
   // 1. APPROVE VISUAL (Two-step confirmation)
@@ -363,6 +395,7 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
         {
           text: `⚠️ *Confirm Approval for ${productName}?* (v${versionNumber})\n\nAre you sure you want to approve this visual design for commercial use?\n\n_Note: Approval marks the creative approved in the database and unlocks commercial exports._`,
           buttons: buildConfirmVisualApprovalKeyboard(confirmToken ?? '', cancelToken ?? ''),
+          action: 'EDIT_TEXT',
         },
       ],
       callbackNotice: 'Confirmation required.',
@@ -549,6 +582,7 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
           {
             text: `📐 *Select Poster Template for ${productName}*\n\nChoose an architectural layout design below:\n• *Editorial Split*: Left-aligned hero with structured right editorial text\n• *Centered Hero*: Majestic center placement with bottom luxury typography\n• *Scent Story*: Top/Heart/Base fragrance pyramid showcase\n• *Khmer Seasonal*: Festive gold lotus framing with bilingual Khmer hierarchy\n\n_Re-layouts execute with zero AI calls or latency._`,
             buttons: layoutKeyboard,
+            action: 'EDIT_TEXT',
           },
         ],
         callbackNotice: 'Select layout template.',
@@ -710,6 +744,7 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
           {
             text: `🎨 *Select Art Direction Style for ${productName}*\n\nChoose an art direction preset below:\n\n_Note: Switching style generates a new AI photographic background._`,
             buttons: styleKeyboard,
+            action: 'EDIT_TEXT',
           },
         ],
         callbackNotice: 'Select art direction.',
@@ -941,6 +976,7 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
         {
           text: `📥 *Download High-Resolution Poster for ${productName}*\n\nSelect your target dimensions and format:\n• *Square (1080×1080)*: Instagram / Facebook 1:1, Telegram\n• *Portrait (1080×1350)*: Instagram 4:5 Feed Post\n• *Story (1080×1920)*: Instagram Story, Reels, TikTok Cover\n\n_Every format is re-rendered deterministically to fit exact safe margins._`,
           buttons: exportKeyboard,
+          action: 'EDIT_TEXT',
         },
       ],
       callbackNotice: 'Select export format.',
@@ -1059,7 +1095,7 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
 
   private handleCancelVisualAction(): Promise<TelegramResponse> {
     return Promise.resolve({
-      messages: [{ text: 'Action cancelled. Visual remains pending review.' }],
+      messages: [{ text: 'Action cancelled. Visual remains pending review.', action: 'EDIT_TEXT' }],
       callbackNotice: 'Cancelled.',
     });
   }
@@ -1091,7 +1127,7 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
     });
 
     return {
-      messages: [{ text: details }],
+      messages: [{ text: details, action: 'EDIT_TEXT' }],
       callbackNotice: 'Details loaded.',
     };
   }

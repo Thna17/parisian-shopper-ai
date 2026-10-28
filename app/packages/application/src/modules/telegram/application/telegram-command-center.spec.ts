@@ -36,6 +36,9 @@ import {
   type ContentReviewState,
   type RevisionRequestRecord,
 } from '../../approvals/domain/approval.js';
+import { SelfApprovalProhibitedError } from '../../approvals/domain/approval-errors.js';
+import { type SearchProductsUseCase } from '../../products/application/search-products.use-case.js';
+import { FICTIONAL_PRODUCTS } from '../../products/testing/fictional-products.js';
 
 describe('TelegramCommandCenter Phase 1F Review Workflow', () => {
   const approverActor: TelegramActor = {
@@ -223,11 +226,13 @@ describe('TelegramCommandCenter Phase 1F Review Workflow', () => {
       productSnapshotId: 'snap-1',
       sku: 'FIC-001',
       productName: 'Rose Perfume',
+      requesterUserId: 'user-requester',
       currentVersionNumber: 1,
       versions: [
         {
           id: 'ver-1',
           versionNumber: 1,
+          authorUserId: 'user-requester',
           createdAt: new Date(),
           validationStatus: 'PASSED',
           approvalEligible: true,
@@ -246,6 +251,11 @@ describe('TelegramCommandCenter Phase 1F Review Workflow', () => {
     findFlowById: jest.fn(),
     updateFlowSelection: jest.fn(),
     completeFlow: jest.fn(),
+    cancelFlow: jest.fn(),
+    findActiveFlowByIdentity: jest.fn(() => Promise.resolve(null)),
+    setActiveWorkflowMessage: jest.fn(),
+    getActiveWorkflowMessage: jest.fn(),
+    clearActiveWorkflowMessage: jest.fn(),
     storeActionTokens,
     consumeActionToken,
     listRecentJobs: jest.fn(),
@@ -269,6 +279,9 @@ describe('TelegramCommandCenter Phase 1F Review Workflow', () => {
   } as unknown as TelegramWorkflowRepository;
 
   const mockTokens = { create: createTokens } as unknown as TelegramActionTokenService;
+  const mockSearchProducts = {
+    execute: jest.fn(() => Promise.resolve({ items: [FICTIONAL_PRODUCTS[0]], total: 1 })),
+  } as unknown as SearchProductsUseCase;
   const mockRequestEdit = { execute: executeEdit } as unknown as RequestContentEditUseCase;
   const mockRequestRegenerate = {
     execute: executeRegenerate,
@@ -284,7 +297,7 @@ describe('TelegramCommandCenter Phase 1F Review Workflow', () => {
     mockRepository,
     new PermissionService(),
     {} as never,
-    {} as never,
+    mockSearchProducts,
     {} as never,
     {} as never,
     {} as never,
@@ -487,11 +500,13 @@ describe('TelegramCommandCenter Phase 1F Review Workflow', () => {
         productSnapshotId: 'snap-1',
         sku: 'FIC-001',
         productName: 'Rose Perfume',
+        requesterUserId: 'user-requester',
         currentVersionNumber: 1,
         versions: [
           {
             id: 'ver-1',
             versionNumber: 1,
+            authorUserId: 'user-requester',
             createdAt: new Date(),
             validationStatus: 'BLOCKED',
             approvalEligible: false,
@@ -550,6 +565,36 @@ describe('TelegramCommandCenter Phase 1F Review Workflow', () => {
       });
       expect(response.messages[0]?.text).toContain('Version V1 Approved');
       expect(response.callbackNotice).toBe('Draft approved!');
+    });
+
+    it('SEC-APP-09: handles self-approval denial cleanly in Telegram callback', async () => {
+      consumeActionToken.mockResolvedValueOnce({
+        disposition: 'VALID',
+        token: {
+          id: 'tok-sa-1',
+          telegramIdentityId: 'ident-approver',
+          action: TelegramAction.CONFIRM_APPROVE,
+          resourceId: 'ver-1',
+          metadata: { contentJobId: 'job-1', versionNumber: 1 },
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+
+      executeApprove.mockRejectedValueOnce(
+        new SelfApprovalProhibitedError(
+          'Four-eyes policy violation: Content job requester cannot approve their own content.',
+        ),
+      );
+
+      const response = await commandCenter.handleCallback({
+        updateId: 'up-13-sa',
+        profile: approverProfile,
+        callbackData: 'ps:mocktokenstring123456789012345',
+      });
+
+      expect(response.messages[0]?.text).toContain('Four-eyes policy violation');
+      expect(response.callbackNotice).toContain('Four-eyes policy violation');
     });
 
     it('displays previous versions on VIEW_PREVIOUS', async () => {
@@ -858,9 +903,15 @@ describe('TelegramCommandCenter Phase 1F Review Workflow', () => {
           expiresAt: new Date(Date.now() + 60_000),
         },
       });
-      (mockRepository as unknown as Record<string, unknown>).completeFlow = jest.fn(() =>
+      const cancelFlowMock = jest.fn<TelegramWorkflowRepository['cancelFlow']>(() =>
         Promise.resolve(),
       );
+      const clearActiveWorkflowMessageMock = jest.fn<
+        TelegramWorkflowRepository['clearActiveWorkflowMessage']
+      >(() => Promise.resolve());
+      (mockRepository as unknown as Record<string, unknown>).cancelFlow = cancelFlowMock;
+      (mockRepository as unknown as Record<string, unknown>).clearActiveWorkflowMessage =
+        clearActiveWorkflowMessageMock;
 
       const response = await commandCenter.handleCallback({
         updateId: 'up-cancel-1',
@@ -871,6 +922,188 @@ describe('TelegramCommandCenter Phase 1F Review Workflow', () => {
       expect(response.callbackNotice).toBe('Creation cancelled.');
       expect(response.messages[0]?.text).toContain('Creation Cancelled');
       expect(response.messages[0]?.action).toBe('EDIT_TEXT');
+      expect(cancelFlowMock).toHaveBeenCalledWith('flow-123');
+      expect(clearActiveWorkflowMessageMock).toHaveBeenCalledWith('flow-123');
+    });
+
+    it('renders concise Step 1 product selection card with pagination and cancel', async () => {
+      resolveActor.mockResolvedValueOnce(creatorActor);
+      (mockRepository as unknown as Record<string, unknown>).findActiveFlowByIdentity = jest.fn(
+        () => Promise.resolve(null),
+      );
+
+      const response = await commandCenter.handleCommand({
+        updateId: 'up-create-1',
+        profile: creatorProfile,
+        text: '/create',
+      });
+
+      expect(response.messages[0]?.text).toContain('Creation Wizard');
+      expect(response.messages[0]?.text).toContain('Step 1 of 6');
+      expect(response.messages[0]?.text).toContain('Select a Product');
+      expect(response.messages[0]?.text).toContain('Choose a verified catalogue product');
+      expect(response.messages[0]?.buttons).toBeDefined();
+      const lastRow = response.messages[0]?.buttons?.[response.messages[0]?.buttons.length - 1];
+      expect(lastRow?.some((b) => b.text.includes('Cancel'))).toBe(true);
+    });
+
+    it('navigates back unwinding step history stack correctly', async () => {
+      resolveActor.mockResolvedValueOnce(creatorActor);
+      consumeActionToken.mockResolvedValueOnce({
+        disposition: 'VALID',
+        token: {
+          id: 'tok-back-stack',
+          telegramIdentityId: creatorActor.identityId,
+          action: TelegramAction.WIZARD_BACK,
+          resourceId: 'flow-123',
+          metadata: { toStep: 4 },
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+      const setFlowMetadataMock = jest.fn(() => Promise.resolve());
+      (mockRepository as unknown as Record<string, unknown>).setFlowMetadata = setFlowMetadataMock;
+      (mockRepository as unknown as Record<string, unknown>).findFlowById = jest.fn(() =>
+        Promise.resolve({
+          ...sampleFlow,
+          step: 5,
+          metadata: {
+            stepHistory: [1, 2, 3, 4],
+          },
+        }),
+      );
+
+      const response = await commandCenter.handleCallback({
+        updateId: 'up-back-stack-1',
+        profile: creatorProfile,
+        callbackData: 'ps:mocktokenbackstack12345',
+      });
+
+      expect(response.callbackNotice).toBe('Previous step.');
+      expect(response.messages[0]?.text).toContain('Step 4 of 6');
+      expect(setFlowMetadataMock).toHaveBeenCalledWith('flow-123', {
+        step: 4,
+        stepHistory: [1, 2, 3],
+        history: [1, 2, 3],
+      });
+    });
+
+    it('cancels active wizard flow when /cancel command is typed', async () => {
+      resolveActor.mockResolvedValueOnce(creatorActor);
+      const cancelFlowMock = jest.fn<TelegramWorkflowRepository['cancelFlow']>(() =>
+        Promise.resolve(),
+      );
+      const clearActiveWorkflowMessageMock = jest.fn<
+        TelegramWorkflowRepository['clearActiveWorkflowMessage']
+      >(() => Promise.resolve());
+      (mockRepository as unknown as Record<string, unknown>).cancelFlow = cancelFlowMock;
+      (mockRepository as unknown as Record<string, unknown>).clearActiveWorkflowMessage =
+        clearActiveWorkflowMessageMock;
+      (mockRepository as unknown as Record<string, unknown>).findActiveFlowByIdentity = jest.fn(
+        () => Promise.resolve(sampleFlow),
+      );
+
+      const response = await commandCenter.handleCommand({
+        updateId: 'up-cmd-cancel',
+        profile: creatorProfile,
+        text: '/cancel',
+      });
+
+      expect(cancelFlowMock).toHaveBeenCalledWith('flow-123');
+      expect(clearActiveWorkflowMessageMock).toHaveBeenCalledWith('flow-123');
+      expect(response.messages[0]?.text).toContain('Creation cancelled.');
+    });
+
+    it('returns resume prompt when /resume is sent and active flow exists', async () => {
+      resolveActor.mockResolvedValueOnce(creatorActor);
+      (mockRepository as unknown as Record<string, unknown>).findActiveFlowByIdentity = jest.fn(
+        () =>
+          Promise.resolve({
+            ...sampleFlow,
+            step: 3,
+          }),
+      );
+
+      const response = await commandCenter.handleCommand({
+        updateId: 'up-cmd-resume',
+        profile: creatorProfile,
+        text: '/resume',
+      });
+
+      expect(response.messages[0]?.text).toContain('Draft in Progress Found');
+      expect(response.messages[0]?.text).toContain('Step 3 of 6');
+      expect(response.messages[0]?.buttons).toBeDefined();
+      expect(response.messages[0]?.buttons?.[0]?.[0]?.text).toContain('Resume Draft');
+      expect(response.messages[0]?.buttons?.[1]?.[0]?.text).toContain('Start New Draft');
+      expect(response.messages[0]?.buttons?.[1]?.[1]?.text).toContain('Discard');
+    });
+
+    it('prompts to resume when /create is called without args and active flow exists', async () => {
+      resolveActor.mockResolvedValueOnce(creatorActor);
+      (mockRepository as unknown as Record<string, unknown>).findActiveFlowByIdentity = jest.fn(
+        () =>
+          Promise.resolve({
+            ...sampleFlow,
+            step: 4,
+          }),
+      );
+
+      const response = await commandCenter.handleCommand({
+        updateId: 'up-cmd-create-resume',
+        profile: creatorProfile,
+        text: '/create',
+      });
+
+      expect(response.messages[0]?.text).toContain('Draft in Progress Found');
+      expect(response.messages[0]?.text).toContain('Step 4 of 6');
+    });
+
+    it('re-renders the exact in-progress step when WIZARD_RESUME is clicked', async () => {
+      resolveActor.mockResolvedValueOnce(creatorActor);
+      consumeActionToken.mockResolvedValueOnce({
+        disposition: 'VALID',
+        token: {
+          id: 'tok-resume',
+          telegramIdentityId: creatorActor.identityId,
+          action: TelegramAction.WIZARD_RESUME,
+          resourceId: 'flow-123',
+          metadata: {},
+          singleUse: true,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+      (mockRepository as unknown as Record<string, unknown>).findFlowById = jest.fn(() =>
+        Promise.resolve({
+          ...sampleFlow,
+          step: 3,
+        }),
+      );
+
+      const response = await commandCenter.handleCallback({
+        updateId: 'up-resume-1',
+        profile: creatorProfile,
+        callbackData: 'ps:mocktokenresume12345678',
+      });
+
+      expect(response.callbackNotice).toBe('Resuming draft...');
+      expect(response.messages[0]?.text).toContain('Step 3 of 6');
+      expect(response.messages[0]?.action).toBe('EDIT_TEXT');
+    });
+
+    it('returns friendly message when /resume is sent with no active flow', async () => {
+      resolveActor.mockResolvedValueOnce(creatorActor);
+      (mockRepository as unknown as Record<string, unknown>).findActiveFlowByIdentity = jest.fn(
+        () => Promise.resolve(null),
+      );
+
+      const response = await commandCenter.handleCommand({
+        updateId: 'up-cmd-resume-empty',
+        profile: creatorProfile,
+        text: '/resume',
+      });
+
+      expect(response.messages[0]?.text).toContain('No active draft in progress');
+      expect(response.messages[0]?.text).toContain('Start one with /create');
     });
   });
 });
