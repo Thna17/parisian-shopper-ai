@@ -24,15 +24,9 @@ import { type TemplateSemVer } from '../domain/templates/template-registry.types
 import { CompositorRenderCache, validateCompositorInput } from './compositor-render-cache.js';
 import { CompositorMetricsTracker } from './compositor-metrics.tracker.js';
 import { configureSharpResourceLimits } from './sharp-hero-compositor.adapter.js';
+import { boxesIntersect } from '../domain/services/hard-visual-gates.port.js';
 
-export function boxesIntersect(boxA: BoundingBox, boxB: BoundingBox, tolerance = 0): boolean {
-  return !(
-    boxA.x + boxA.width - tolerance <= boxB.x ||
-    boxB.x + boxB.width - tolerance <= boxA.x ||
-    boxA.y + boxA.height - tolerance <= boxB.y ||
-    boxB.y + boxB.height - tolerance <= boxA.y
-  );
-}
+export { boxesIntersect };
 
 export interface SharpHybridCompositorOptions {
   readonly renderCache?: CompositorRenderCache | undefined;

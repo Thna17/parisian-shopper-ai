@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   type ApplicationLogger,
   APPLICATION_LOGGER,
@@ -21,6 +21,10 @@ import {
   VisualSafetyScanner,
 } from '../domain/services/visual-safety-scanner.js';
 import {
+  SOFT_AESTHETIC_SCORER,
+  type ISoftAestheticScorer,
+} from '../domain/services/soft-aesthetic-scorer.port.js';
+import {
   CreativeJobNotFoundError,
   VisualAssetNotFoundError,
   AssetNotFoundError,
@@ -39,6 +43,8 @@ export interface ValidateCreativeInput {
 export interface ValidateCreativeResult {
   readonly validationResult: VisualValidationResultRecord;
   readonly isPassed: boolean;
+  readonly aestheticScore?: number | undefined;
+  readonly aestheticGrade?: string | undefined;
 }
 
 @Injectable()
@@ -58,6 +64,9 @@ export class ValidateCreativeUseCase {
     private readonly safetyScanner: VisualSafetyScanner,
     @Inject(APPLICATION_LOGGER)
     private readonly logger: ApplicationLogger,
+    @Optional()
+    @Inject(SOFT_AESTHETIC_SCORER)
+    private readonly aestheticScorer?: ISoftAestheticScorer,
   ) {}
 
   public async execute(input: ValidateCreativeInput): Promise<ValidateCreativeResult> {
@@ -127,9 +136,30 @@ export class ValidateCreativeUseCase {
     });
 
     // 6. Update CreativeJob status based on validation outcome
+    let aestheticScore: number | undefined;
+    let aestheticGrade: string | undefined;
+
     if (isPassed) {
       // Transition VALIDATING -> READY_FOR_REVIEW
       await this.jobRepo.transitionStatus(creativeJobId, 'VALIDATING', 'READY_FOR_REVIEW');
+
+      // Track 2: Decoupled Soft Aesthetic Scoring (Advisory)
+      if (this.aestheticScorer) {
+        try {
+          const aestheticOutcome = await this.aestheticScorer.scoreComposition({
+            assetBuffer,
+            aspectRatio: (job.aspectRatio as '1:1' | '4:5' | '9:16') || '1:1',
+            width: asset.width,
+            height: asset.height,
+          });
+          aestheticScore = aestheticOutcome.overallScore;
+          aestheticGrade = aestheticOutcome.grade;
+        } catch (err: unknown) {
+          this.logger.warn(
+            `Track 2 advisory aesthetic scoring skipped: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
 
       if (input.outboxWriter) {
         await input.outboxWriter.append({
@@ -144,6 +174,7 @@ export class ValidateCreativeUseCase {
             validationResultId: persistedResult.id,
             status: persistedResult.status,
             warningCount,
+            ...(aestheticScore !== undefined ? { aestheticScore, aestheticGrade } : {}),
           },
           occurredAt: new Date(),
           availableAt: new Date(),
@@ -154,6 +185,19 @@ export class ValidateCreativeUseCase {
     } else {
       // Transition VALIDATING -> FAILED
       await this.jobRepo.transitionStatus(creativeJobId, 'VALIDATING', 'FAILED');
+
+      // Extract operator remediation actions from blocking findings metadata
+      const remediationActions = Array.from(
+        new Set(
+          combinedFindings
+            .filter(
+              (f) =>
+                f.severity === 'BLOCKING' && typeof f.metadata?.['remediationAction'] === 'string',
+            )
+            .map((f) => f.metadata!['remediationAction'] as string)
+            .filter(Boolean),
+        ),
+      );
 
       if (input.outboxWriter) {
         await input.outboxWriter.append({
@@ -168,6 +212,7 @@ export class ValidateCreativeUseCase {
             validationResultId: persistedResult.id,
             blockingCount,
             findings: combinedFindings.map((f) => ({ code: f.code, message: f.message })),
+            remediationActions,
           },
           occurredAt: new Date(),
           availableAt: new Date(),
@@ -182,6 +227,7 @@ export class ValidateCreativeUseCase {
     return {
       validationResult: persistedResult,
       isPassed,
+      ...(aestheticScore !== undefined ? { aestheticScore, aestheticGrade } : {}),
     };
   }
 }

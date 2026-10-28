@@ -24,6 +24,12 @@ import {
   BACKGROUND_QUALITY_VALIDATOR,
   BackgroundQualityValidator,
 } from './domain/services/background-quality-validator.js';
+import {
+  HARD_VISUAL_GATES_ENGINE,
+  HardVisualGatesEngine,
+} from './domain/services/hard-visual-gates.engine.js';
+import { SOFT_AESTHETIC_SCORER } from './domain/services/soft-aesthetic-scorer.port.js';
+import { SoftAestheticScorer } from './domain/services/soft-aesthetic-scorer.engine.js';
 import { GenerateCreativeUseCase } from './application/generate-creative.use-case.js';
 import { ValidateCreativeUseCase } from './application/validate-creative.use-case.js';
 import { ApproveCreativeUseCase } from './application/approve-creative.use-case.js';
@@ -97,6 +103,20 @@ import { ProductsModule } from '../products/products.module.js';
     DeterministicVisualValidator,
     VisualSafetyScanner,
     {
+      provide: HARD_VISUAL_GATES_ENGINE,
+      useFactory: (): HardVisualGatesEngine => {
+        return new HardVisualGatesEngine();
+      },
+    },
+    HardVisualGatesEngine,
+    {
+      provide: SOFT_AESTHETIC_SCORER,
+      useFactory: (): SoftAestheticScorer => {
+        return new SoftAestheticScorer();
+      },
+    },
+    SoftAestheticScorer,
+    {
       provide: 'ALLOW_LEGACY_PRODUCT_ASSET_FALLBACK',
       inject: [AppConfigService],
       useFactory: (config: AppConfigService): boolean =>
@@ -132,6 +152,10 @@ import { ProductsModule } from '../products/products.module.js';
     BackgroundQualityValidator,
     DeterministicVisualValidator,
     VisualSafetyScanner,
+    HARD_VISUAL_GATES_ENGINE,
+    HardVisualGatesEngine,
+    SOFT_AESTHETIC_SCORER,
+    SoftAestheticScorer,
     GenerateCreativeUseCase,
     ValidateCreativeUseCase,
     ApproveCreativeUseCase,

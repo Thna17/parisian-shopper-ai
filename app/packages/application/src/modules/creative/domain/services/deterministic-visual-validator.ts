@@ -8,6 +8,16 @@ import {
   VisualValidationSeverity,
 } from '../visual-validation.js';
 import { type HeroBoundingBox } from '../../application/hero-compositor.port.js';
+import {
+  type HardGateEvaluationInput,
+  type HardGateFailure,
+  type HardGateOutcome,
+  type TypographyBlockInput,
+  HardGateCode,
+} from './hard-visual-gates.port.js';
+import { HardVisualGatesEngine } from './hard-visual-gates.engine.js';
+import { type ProductSnapshot } from '../../../products/application/product-snapshot.repository.js';
+import { type CompositorLayerInput } from '../../application/hybrid-compositor.port.js';
 
 export const DETERMINISTIC_VISUAL_VALIDATOR = Symbol('DETERMINISTIC_VISUAL_VALIDATOR');
 
@@ -20,6 +30,14 @@ export interface ValidateVisualAssetInput {
   readonly heroBoundingBox?: HeroBoundingBox;
   readonly marginPercent?: number; // default: 0.05 (5%)
   readonly maxFileSizeBytes?: number; // default: 15MB
+  readonly productAssetBuffer?: Buffer;
+  readonly productSha256?: string;
+  readonly ctaBoundingBox?: HeroBoundingBox;
+  readonly typographyBlocks?: readonly TypographyBlockInput[];
+  readonly productSnapshot?: ProductSnapshot;
+  readonly renderedSnapshotHash?: string;
+  readonly sceneSku?: string;
+  readonly layers?: readonly CompositorLayerInput[];
 }
 
 export interface DeterministicVisualValidatorOptions {
@@ -39,6 +57,66 @@ const DEFAULT_OPTIONS: Required<DeterministicVisualValidatorOptions> = {
 const SUPPORTED_FORMATS: ReadonlySet<string> = new Set(['png', 'jpeg', 'webp']);
 
 /**
+ * Maps a HardGateFailure to the legacy VisualValidationFindingDraft structure
+ * preserving BLOCKING severity and adding operator remediation metadata.
+ */
+export function mapHardGateFailureToVisualFinding(
+  failure: HardGateFailure,
+): VisualValidationFindingDraft {
+  let code: VisualFindingCode;
+  switch (failure.code) {
+    case HardGateCode.GATE_CAS_HASH_MISMATCH:
+      code = VisualFindingCode.CAS_HASH_MISMATCH;
+      break;
+    case HardGateCode.GATE_FILE_SIZE_EXCEEDED:
+      code = VisualFindingCode.FILE_SIZE_EXCEEDED;
+      break;
+    case HardGateCode.GATE_CONTAINER_INVALID:
+      code = VisualFindingCode.CONTAINER_UNSUPPORTED;
+      break;
+    case HardGateCode.GATE_DIMENSIONS_MISMATCH:
+      code = VisualFindingCode.DIMENSIONS_INVALID;
+      break;
+    case HardGateCode.GATE_SAFE_MARGIN_VIOLATION:
+    case HardGateCode.GATE_CTA_HERO_COLLISION:
+    case HardGateCode.GATE_PRODUCT_ALPHA_CLIPPED:
+      code = VisualFindingCode.BOUNDING_BOX_OUT_OF_BOUNDS;
+      break;
+    case HardGateCode.GATE_PRODUCT_VISIBILITY_LOW:
+    case HardGateCode.GATE_PLACEHOLDER_REJECTED:
+      code = VisualFindingCode.SYNTHETIC_PRODUCT_DETECTED;
+      break;
+    case HardGateCode.GATE_TEXT_CONTRAST_LOW:
+      code = VisualFindingCode.TEXT_CONTRAST_INSUFFICIENT;
+      break;
+    case HardGateCode.GATE_SNAPSHOT_STALE:
+      code = VisualFindingCode.HERO_HASH_MISMATCH;
+      break;
+    case HardGateCode.GATE_UNSAFE_UNICODE:
+    case HardGateCode.GATE_MISSING_GLYPHS:
+    case HardGateCode.GATE_FACTUAL_PRICE_MISMATCH:
+    case HardGateCode.GATE_FACTUAL_PROMO_MISMATCH:
+    case HardGateCode.GATE_FACTUAL_SKU_MISMATCH:
+      code = VisualFindingCode.UNEXPECTED_TEXT_DETECTED;
+      break;
+    default:
+      code = VisualFindingCode.VALIDATOR_INTERNAL_ERROR;
+  }
+
+  return {
+    field: failure.field,
+    severity: VisualValidationSeverity.BLOCKING,
+    code,
+    message: failure.message,
+    metadata: {
+      ...failure.metadata,
+      hardGateCode: failure.code,
+      remediationAction: failure.remediationAction,
+    },
+  };
+}
+
+/**
  * Aspect ratio target tolerances:
  * 1:1 -> ratio 1.0 (e.g. 1080x1080, 2048x2048)
  * 4:5 -> ratio 0.8 (e.g. 1080x1350)
@@ -56,9 +134,11 @@ function parseExpectedRatio(aspectRatioStr: string): number | null {
 
 export class DeterministicVisualValidator {
   private readonly options: Required<DeterministicVisualValidatorOptions>;
+  public readonly hardGatesEngine: HardVisualGatesEngine;
 
   public constructor(options?: DeterministicVisualValidatorOptions) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
+    this.hardGatesEngine = new HardVisualGatesEngine();
   }
 
   public async validate(input: ValidateVisualAssetInput): Promise<VisualValidationOutcome> {
@@ -250,6 +330,97 @@ export class DeterministicVisualValidator {
       });
     }
 
+    // 5. Extended Hard Visual Gates Evaluation (if domain hard gate inputs are supplied)
+    if (
+      input.typographyBlocks !== undefined ||
+      input.productAssetBuffer !== undefined ||
+      input.productSha256 !== undefined ||
+      input.ctaBoundingBox !== undefined ||
+      input.productSnapshot !== undefined
+    ) {
+      try {
+        const hardGateOutcome = await this.hardGatesEngine.evaluate({
+          assetBuffer: input.assetBuffer,
+          expectedSha256: input.expectedSha256,
+          aspectRatio: (input.targetAspectRatio as '1:1' | '4:5' | '9:16') || '1:1',
+          width: input.targetWidth ?? 1080,
+          height: input.targetHeight ?? 1080,
+          heroBoundingBox: input.heroBoundingBox,
+          ctaBoundingBox: input.ctaBoundingBox,
+          typographyBlocks: input.typographyBlocks,
+          productAssetBuffer: input.productAssetBuffer,
+          productSha256: input.productSha256,
+          productSnapshot: input.productSnapshot,
+          renderedSnapshotHash: input.renderedSnapshotHash,
+          sceneSku: input.sceneSku,
+          layers: input.layers,
+        });
+
+        // Filter out duplicates for checks already performed deterministically above
+        for (const failure of hardGateOutcome.failures) {
+          if (
+            failure.code !== HardGateCode.GATE_CAS_HASH_MISMATCH &&
+            failure.code !== HardGateCode.GATE_FILE_SIZE_EXCEEDED &&
+            failure.code !== HardGateCode.GATE_CONTAINER_INVALID &&
+            failure.code !== HardGateCode.GATE_DIMENSIONS_MISMATCH
+          ) {
+            findings.push(mapHardGateFailureToVisualFinding(failure));
+          }
+        }
+      } catch (err: unknown) {
+        findings.push({
+          field: 'hardVisualGates',
+          severity: VisualValidationSeverity.BLOCKING,
+          code: VisualFindingCode.VALIDATOR_INTERNAL_ERROR,
+          message: `Hard visual gates evaluation encountered an internal error: ${err instanceof Error ? err.message : String(err)}`,
+          metadata: { error: String(err) },
+        });
+      }
+    }
+
+    const blockingCount = findings.filter(
+      (f) => f.severity === VisualValidationSeverity.BLOCKING,
+    ).length;
+    const warningCount = findings.filter(
+      (f) => f.severity === VisualValidationSeverity.WARNING,
+    ).length;
+    const infoCount = findings.filter((f) => f.severity === VisualValidationSeverity.INFO).length;
+
+    let status: 'PASSED' | 'PASSED_WITH_WARNINGS' | 'BLOCKED' | 'FAILED' = 'PASSED';
+    if (blockingCount > 0) {
+      status = 'FAILED';
+    } else if (warningCount > 0) {
+      status = 'PASSED_WITH_WARNINGS';
+    }
+
+    return {
+      validatorVersion: VISUAL_VALIDATOR_VERSION,
+      status,
+      findings,
+      findingCount: findings.length,
+      blockingCount,
+      warningCount,
+      infoCount,
+    };
+  }
+
+  /**
+   * Directly evaluates the W24 Hard Visual Gates against input parameters.
+   */
+  public async evaluateHardGates(input: HardGateEvaluationInput): Promise<HardGateOutcome> {
+    return this.hardGatesEngine.evaluate(input);
+  }
+
+  /**
+   * Evaluates Hard Visual Gates and converts the result into legacy VisualValidationOutcome format.
+   */
+  public async validateWithHardGates(
+    input: HardGateEvaluationInput,
+  ): Promise<VisualValidationOutcome> {
+    const outcome = await this.hardGatesEngine.evaluate(input);
+    const findings: VisualValidationFindingDraft[] = outcome.failures.map(
+      mapHardGateFailureToVisualFinding,
+    );
     const blockingCount = findings.filter(
       (f) => f.severity === VisualValidationSeverity.BLOCKING,
     ).length;
