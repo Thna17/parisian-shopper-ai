@@ -108,4 +108,52 @@ describe('DeterministicVisualValidator', () => {
     expect(outcome.status).toBe('FAILED');
     expect(outcome.blockingCount).toBeGreaterThanOrEqual(1);
   });
+
+  it('reconciles HardVisualGatesEngine failures into VisualValidationFindingDraft with BLOCKING severity', async () => {
+    const outcome = await validator.validateWithHardGates({
+      assetBuffer: validBuffer,
+      expectedSha256: validSha256,
+      aspectRatio: '1:1',
+      width: 1080,
+      height: 1080,
+      heroBoundingBox: { x: 300, y: 300, width: 400, height: 400 },
+      ctaBoundingBox: { x: 350, y: 350, width: 200, height: 50 }, // Overlaps hero -> GATE_CTA_HERO_COLLISION
+    });
+
+    expect(outcome.status).toBe('FAILED');
+    expect(outcome.blockingCount).toBeGreaterThanOrEqual(1);
+    const finding = outcome.findings.find(
+      (f: VisualValidationFindingDraft) => f.code === VisualFindingCode.BOUNDING_BOX_OUT_OF_BOUNDS,
+    );
+    expect(finding).toBeDefined();
+    expect(finding?.severity).toBe('BLOCKING');
+    expect(finding?.metadata?.['hardGateCode']).toBe('GATE_CTA_HERO_COLLISION');
+    expect(finding?.metadata?.['remediationAction']).toBeDefined();
+  });
+
+  it('evaluates extended hard visual gates directly in validate() when typography blocks are provided', async () => {
+    const outcome = await validator.validate({
+      assetBuffer: validBuffer,
+      expectedSha256: validSha256,
+      targetAspectRatio: '1:1',
+      targetWidth: 1080,
+      targetHeight: 1080,
+      heroBoundingBox: { x: 200, y: 200, width: 680, height: 680 },
+      typographyBlocks: [
+        {
+          role: 'headline',
+          text: 'Title with unsafe bidi \u202E override',
+          box: { x: 100, y: 100, width: 400, height: 50 },
+        },
+      ],
+    });
+
+    expect(outcome.status).toBe('FAILED');
+    const finding = outcome.findings.find(
+      (f: VisualValidationFindingDraft) => f.code === VisualFindingCode.UNEXPECTED_TEXT_DETECTED,
+    );
+    expect(finding).toBeDefined();
+    expect(finding?.severity).toBe('BLOCKING');
+    expect(finding?.metadata?.['hardGateCode']).toBe('GATE_UNSAFE_UNICODE');
+  });
 });

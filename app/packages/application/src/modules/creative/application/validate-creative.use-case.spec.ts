@@ -46,6 +46,13 @@ import {
 } from '../domain/creative-errors.js';
 import { type CreativeJobStatus } from '../domain/creative.js';
 import { type VisualValidationOutcome } from '../domain/visual-validation.js';
+import {
+  type ISoftAestheticScorer,
+  type AestheticEvaluationInput,
+  type AestheticEvaluationOutcome,
+  type AestheticDimension,
+  type AestheticDimensionBreakdown,
+} from '../domain/services/soft-aesthetic-scorer.port.js';
 
 describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
   const mockJob: CreativeJobRecord = {
@@ -360,6 +367,380 @@ describe('ValidateCreativeUseCase and ApproveCreativeUseCase', () => {
       expect(appendMock).toHaveBeenCalledWith(
         expect.objectContaining({
           topic: 'CREATIVE_VALIDATION_FAILED',
+        }),
+      );
+    });
+
+    it('enriches CREATIVE_VALIDATED outbox event with aestheticScore and aestheticGrade when Track 2 scorer is provided', async () => {
+      const jobRepo: CreativeJobRepository = {
+        createJob: jest.fn(),
+        findById: jest.fn((_id: string) => Promise.resolve(mockJob)),
+        findByContentVersionId: jest.fn(() => Promise.resolve([])),
+        transitionStatus: jest.fn((_id: string, _from: CreativeJobStatus, to: CreativeJobStatus) =>
+          Promise.resolve({ ...mockJob, status: to }),
+        ),
+      } as unknown as CreativeJobRepository;
+
+      const assetRepo: VisualAssetRepository = {
+        createAsset: jest.fn(),
+        findById: jest.fn(() => Promise.resolve(mockAsset)),
+        findByJobAndVersion: jest.fn(() => Promise.resolve(mockAsset)),
+        listByJobId: jest.fn(() => Promise.resolve([])),
+        findLatestByJobId: jest.fn(() => Promise.resolve(mockAsset)),
+      } as unknown as VisualAssetRepository;
+
+      const validationRepo: VisualValidationRepository = {
+        persistResult: jest.fn((_input: PersistVisualValidationInput) =>
+          Promise.resolve({
+            id: 'val-res-enriched',
+            visualAssetId: 'asset-val-1',
+            validatorVersion: 'ps-visual-v1',
+            status: 'PASSED',
+            findingCount: 0,
+            blockingCount: 0,
+            warningCount: 0,
+            infoCount: 0,
+            findings: [],
+            createdAt: new Date(),
+          }),
+        ),
+        findByAssetId: jest.fn(() => Promise.resolve([])),
+        findLatestByAssetId: jest.fn(() => Promise.resolve(null)),
+      } as unknown as VisualValidationRepository;
+
+      const storage: AssetStoragePort = {
+        getAssetBuffer: jest.fn(() => Promise.resolve(Buffer.from('sample-asset-bytes'))),
+        getMetadata: jest.fn(() => Promise.resolve(null)),
+        saveAsset: jest.fn(),
+        assetExists: jest.fn(() => Promise.resolve(true)),
+      } as unknown as AssetStoragePort;
+
+      const mockDeterministicValidator = {
+        validate: jest.fn(() =>
+          Promise.resolve({
+            validatorVersion: 'ps-visual-v1',
+            status: 'PASSED',
+            findings: [],
+            findingCount: 0,
+            blockingCount: 0,
+            warningCount: 0,
+            infoCount: 0,
+          }),
+        ),
+      } as unknown as DeterministicVisualValidator;
+
+      const mockSafetyScanner = {
+        scan: jest.fn(() => ({
+          validatorVersion: 'ps-visual-v1',
+          status: 'PASSED',
+          findings: [],
+          findingCount: 0,
+          blockingCount: 0,
+          warningCount: 0,
+          infoCount: 0,
+        })),
+      } as unknown as VisualSafetyScanner;
+
+      const scoreCompositionMock = jest.fn(
+        (_input: AestheticEvaluationInput): Promise<AestheticEvaluationOutcome> =>
+          Promise.resolve({
+            overallScore: 0.92,
+            grade: 'EXEMPLARY' as const,
+            scorerVersion: 'ps-aesthetic-v1',
+            evaluatedAt: new Date().toISOString(),
+            dimensions: {} as Record<AestheticDimension, AestheticDimensionBreakdown>,
+            recommendations: [],
+          }),
+      );
+
+      const mockAestheticScorer: ISoftAestheticScorer = {
+        scoreComposition: scoreCompositionMock,
+      };
+
+      const logger: ApplicationLogger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+      const appendMock = jest.fn((_event: OutboxEventDraft) => Promise.resolve('outbox-enriched'));
+      const outboxWriter = { append: appendMock };
+
+      const useCase = new ValidateCreativeUseCase(
+        jobRepo,
+        assetRepo,
+        validationRepo,
+        storage,
+        mockDeterministicValidator,
+        mockSafetyScanner,
+        logger,
+        mockAestheticScorer,
+      );
+
+      const result = await useCase.execute({
+        creativeJobId: 'job-val-1',
+        visualAssetId: 'asset-val-1',
+        outboxWriter,
+      });
+
+      expect(result.isPassed).toBe(true);
+      expect(result.aestheticScore).toBe(0.92);
+      expect(result.aestheticGrade).toBe('EXEMPLARY');
+      expect(scoreCompositionMock).toHaveBeenCalled();
+      expect(appendMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          topic: 'CREATIVE_VALIDATED',
+          payload: expect.objectContaining({
+            aestheticScore: 0.92,
+            aestheticGrade: 'EXEMPLARY',
+          }),
+        }),
+      );
+    });
+
+    it('enriches CREATIVE_VALIDATION_FAILED outbox event with operator remediationActions from blocking findings metadata', async () => {
+      const jobRepo: CreativeJobRepository = {
+        createJob: jest.fn(),
+        findById: jest.fn((_id: string) => Promise.resolve(mockJob)),
+        findByContentVersionId: jest.fn(() => Promise.resolve([])),
+        transitionStatus: jest.fn((_id: string, _from: CreativeJobStatus, to: CreativeJobStatus) =>
+          Promise.resolve({ ...mockJob, status: to }),
+        ),
+      } as unknown as CreativeJobRepository;
+
+      const assetRepo: VisualAssetRepository = {
+        createAsset: jest.fn(),
+        findById: jest.fn(() => Promise.resolve(mockAsset)),
+        findByJobAndVersion: jest.fn(() => Promise.resolve(mockAsset)),
+        listByJobId: jest.fn(() => Promise.resolve([])),
+        findLatestByJobId: jest.fn(() => Promise.resolve(mockAsset)),
+      } as unknown as VisualAssetRepository;
+
+      const validationRepo: VisualValidationRepository = {
+        persistResult: jest.fn((_input: PersistVisualValidationInput) =>
+          Promise.resolve({
+            id: 'val-res-failed-remediation',
+            visualAssetId: 'asset-val-1',
+            validatorVersion: 'ps-visual-v1',
+            status: 'FAILED',
+            findingCount: 2,
+            blockingCount: 2,
+            warningCount: 0,
+            infoCount: 0,
+            findings: [],
+            createdAt: new Date(),
+          }),
+        ),
+        findByAssetId: jest.fn(() => Promise.resolve([])),
+        findLatestByAssetId: jest.fn(() => Promise.resolve(null)),
+      } as unknown as VisualValidationRepository;
+
+      const storage: AssetStoragePort = {
+        getAssetBuffer: jest.fn(() => Promise.resolve(Buffer.from('sample-asset-bytes'))),
+        getMetadata: jest.fn(() => Promise.resolve(null)),
+        saveAsset: jest.fn(),
+        assetExists: jest.fn(() => Promise.resolve(true)),
+      } as unknown as AssetStoragePort;
+
+      const mockDeterministicValidator = {
+        validate: jest.fn(() =>
+          Promise.resolve({
+            validatorVersion: 'ps-visual-v1',
+            status: 'FAILED',
+            findings: [
+              {
+                field: 'heroBoundingBox',
+                severity: 'BLOCKING',
+                code: 'BOUNDING_BOX_OUT_OF_BOUNDS',
+                message: 'Product nozzle clipped',
+                metadata: {
+                  remediationAction:
+                    'Reposition product flacon to ensure all packaging pixels remain strictly within canvas bounds.',
+                },
+              },
+              {
+                field: 'typographyBlocks[headline]',
+                severity: 'BLOCKING',
+                code: 'TEXT_CONTRAST_INSUFFICIENT',
+                message: 'Contrast ratio 1.15 is below 3.0',
+                metadata: {
+                  remediationAction:
+                    'Darken underlying background contrast panel or invert text color for legible luxury presentation.',
+                },
+              },
+            ],
+            findingCount: 2,
+            blockingCount: 2,
+            warningCount: 0,
+            infoCount: 0,
+          }),
+        ),
+      } as unknown as DeterministicVisualValidator;
+
+      const mockSafetyScanner = {
+        scan: jest.fn(() => ({
+          validatorVersion: 'ps-visual-v1',
+          status: 'PASSED',
+          findings: [],
+          findingCount: 0,
+          blockingCount: 0,
+          warningCount: 0,
+          infoCount: 0,
+        })),
+      } as unknown as VisualSafetyScanner;
+
+      const scoreCompositionMock = jest.fn(
+        (_input: AestheticEvaluationInput): Promise<AestheticEvaluationOutcome> =>
+          Promise.reject(new Error('Should not be called')),
+      );
+
+      const mockAestheticScorer: ISoftAestheticScorer = {
+        scoreComposition: scoreCompositionMock,
+      };
+
+      const logger: ApplicationLogger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+      const appendMock = jest.fn((_event: OutboxEventDraft) => Promise.resolve('outbox-failed'));
+      const outboxWriter = { append: appendMock };
+
+      const useCase = new ValidateCreativeUseCase(
+        jobRepo,
+        assetRepo,
+        validationRepo,
+        storage,
+        mockDeterministicValidator,
+        mockSafetyScanner,
+        logger,
+        mockAestheticScorer,
+      );
+
+      const result = await useCase.execute({
+        creativeJobId: 'job-val-1',
+        visualAssetId: 'asset-val-1',
+        outboxWriter,
+      });
+
+      expect(result.isPassed).toBe(false);
+      // Verify Track 2 aesthetic scorer was NOT called on Track 1 failure
+      expect(scoreCompositionMock).not.toHaveBeenCalled();
+      expect(appendMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          topic: 'CREATIVE_VALIDATION_FAILED',
+          payload: expect.objectContaining({
+            remediationActions: [
+              'Reposition product flacon to ensure all packaging pixels remain strictly within canvas bounds.',
+              'Darken underlying background contrast panel or invert text color for legible luxury presentation.',
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('handles Track 2 aesthetic scoring failure gracefully without blocking validation passage', async () => {
+      const jobRepo: CreativeJobRepository = {
+        createJob: jest.fn(),
+        findById: jest.fn((_id: string) => Promise.resolve(mockJob)),
+        findByContentVersionId: jest.fn(() => Promise.resolve([])),
+        transitionStatus: jest.fn((_id: string, _from: CreativeJobStatus, to: CreativeJobStatus) =>
+          Promise.resolve({ ...mockJob, status: to }),
+        ),
+      } as unknown as CreativeJobRepository;
+
+      const assetRepo: VisualAssetRepository = {
+        createAsset: jest.fn(),
+        findById: jest.fn(() => Promise.resolve(mockAsset)),
+        findByJobAndVersion: jest.fn(() => Promise.resolve(mockAsset)),
+        listByJobId: jest.fn(() => Promise.resolve([])),
+        findLatestByJobId: jest.fn(() => Promise.resolve(mockAsset)),
+      } as unknown as VisualAssetRepository;
+
+      const validationRepo: VisualValidationRepository = {
+        persistResult: jest.fn((_input: PersistVisualValidationInput) =>
+          Promise.resolve({
+            id: 'val-res-graceful',
+            visualAssetId: 'asset-val-1',
+            validatorVersion: 'ps-visual-v1',
+            status: 'PASSED',
+            findingCount: 0,
+            blockingCount: 0,
+            warningCount: 0,
+            infoCount: 0,
+            findings: [],
+            createdAt: new Date(),
+          }),
+        ),
+        findByAssetId: jest.fn(() => Promise.resolve([])),
+        findLatestByAssetId: jest.fn(() => Promise.resolve(null)),
+      } as unknown as VisualValidationRepository;
+
+      const storage: AssetStoragePort = {
+        getAssetBuffer: jest.fn(() => Promise.resolve(Buffer.from('sample-asset-bytes'))),
+        getMetadata: jest.fn(() => Promise.resolve(null)),
+        saveAsset: jest.fn(),
+        assetExists: jest.fn(() => Promise.resolve(true)),
+      } as unknown as AssetStoragePort;
+
+      const mockDeterministicValidator = {
+        validate: jest.fn(() =>
+          Promise.resolve({
+            validatorVersion: 'ps-visual-v1',
+            status: 'PASSED',
+            findings: [],
+            findingCount: 0,
+            blockingCount: 0,
+            warningCount: 0,
+            infoCount: 0,
+          }),
+        ),
+      } as unknown as DeterministicVisualValidator;
+
+      const mockSafetyScanner = {
+        scan: jest.fn(() => ({
+          validatorVersion: 'ps-visual-v1',
+          status: 'PASSED',
+          findings: [],
+          findingCount: 0,
+          blockingCount: 0,
+          warningCount: 0,
+          infoCount: 0,
+        })),
+      } as unknown as VisualSafetyScanner;
+
+      // Scorer throws unexpectedly
+      const scoreCompositionMock = jest.fn(
+        (_input: AestheticEvaluationInput): Promise<AestheticEvaluationOutcome> =>
+          Promise.reject(new Error('Sharp processing internal error')),
+      );
+
+      const mockAestheticScorer: ISoftAestheticScorer = {
+        scoreComposition: scoreCompositionMock,
+      };
+
+      const warnMock = jest.fn();
+      const logger: ApplicationLogger = { log: jest.fn(), warn: warnMock, error: jest.fn() };
+      const appendMock = jest.fn((_event: OutboxEventDraft) => Promise.resolve('outbox-graceful'));
+      const outboxWriter = { append: appendMock };
+
+      const useCase = new ValidateCreativeUseCase(
+        jobRepo,
+        assetRepo,
+        validationRepo,
+        storage,
+        mockDeterministicValidator,
+        mockSafetyScanner,
+        logger,
+        mockAestheticScorer,
+      );
+
+      const result = await useCase.execute({
+        creativeJobId: 'job-val-1',
+        visualAssetId: 'asset-val-1',
+        outboxWriter,
+      });
+
+      // Crucial: Track 1 Hard Gate passage MUST NOT be blocked by Track 2 advisory exception
+      expect(result.isPassed).toBe(true);
+      expect(result.validationResult.status).toBe('PASSED');
+      expect(warnMock).toHaveBeenCalledWith(
+        expect.stringContaining('Track 2 advisory aesthetic scoring skipped'),
+      );
+      expect(appendMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          topic: 'CREATIVE_VALIDATED',
         }),
       );
     });
