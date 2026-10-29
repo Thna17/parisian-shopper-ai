@@ -13,6 +13,7 @@ export interface ContentJob {
   productSnapshotId: string;
   brandRuleVersionId: string;
   requesterUserId: string;
+  campaignId?: string;
   telegramCreateFlowId?: string;
   contentType: ContentType;
   language: ContentLanguage;
@@ -55,11 +56,29 @@ export interface CreateContentJobInput {
   productSnapshotId: string;
   brandRuleVersionId: string;
   requesterUserId: string;
+  campaignId?: string;
   telegramCreateFlowId?: string;
   contentType: ContentType;
   language: ContentLanguage;
   platform: ContentPlatform;
   campaignContext?: string;
+}
+
+export interface ListContentJobsQuery {
+  readonly page?: number;
+  readonly limit?: number;
+  readonly status?: ContentJobStatus;
+  readonly productSnapshotId?: string;
+  readonly campaignId?: string;
+  readonly requesterUserId?: string;
+}
+
+export interface PaginatedContentJobs {
+  readonly items: readonly ContentJob[];
+  readonly total: number;
+  readonly page: number;
+  readonly limit: number;
+  readonly totalPages: number;
 }
 
 export interface BeginGenerationInput {
@@ -122,6 +141,8 @@ export interface CreateDirectVersionInput {
 export interface ContentGenerationRepository {
   createJob(input: CreateContentJobInput): Promise<ContentJob>;
   findJobById(id: string): Promise<ContentJob | null>;
+  findPaginatedJobs?(query: ListContentJobsQuery): Promise<PaginatedContentJobs>;
+  updateJobStatus?(id: string, status: ContentJobStatus): Promise<ContentJob>;
   findVersionById(id: string): Promise<ContentVersion | null>;
   beginGeneration(input: BeginGenerationInput): Promise<BeginGenerationResult>;
   completeGeneration(input: CompleteGenerationInput): Promise<ContentVersion>;

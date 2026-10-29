@@ -8,11 +8,14 @@ import {
   type ContentGenerationRepository,
   ContentGenerationError,
   type ContentJob,
+  type ContentJobStatus,
   type ContentVersion,
   type CreateContentJobInput,
   type CreateDirectVersionInput,
   type FailGenerationInput,
   type GenerationAttempt,
+  type ListContentJobsQuery,
+  type PaginatedContentJobs,
 } from '@parisian-shopper/application';
 import {
   Prisma,
@@ -49,6 +52,45 @@ export class PrismaContentGenerationRepository implements ContentGenerationRepos
   public async findJobById(id: string): Promise<ContentJob | null> {
     const record = await this.prisma.contentJob.findUnique({ where: { id } });
     return record === null ? null : toJob(record);
+  }
+
+  public async findPaginatedJobs(query: ListContentJobsQuery): Promise<PaginatedContentJobs> {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.min(100, Math.max(1, query.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.ContentJobWhereInput = {
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.productSnapshotId ? { productSnapshotId: query.productSnapshotId } : {}),
+      ...(query.campaignId ? { campaignId: query.campaignId } : {}),
+      ...(query.requesterUserId ? { requesterUserId: query.requesterUserId } : {}),
+    };
+
+    const [total, records] = await Promise.all([
+      this.prisma.contentJob.count({ where }),
+      this.prisma.contentJob.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return {
+      items: records.map(toJob),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    };
+  }
+
+  public async updateJobStatus(id: string, status: ContentJobStatus): Promise<ContentJob> {
+    const updated = await this.prisma.contentJob.update({
+      where: { id },
+      data: { status },
+    });
+    return toJob(updated);
   }
 
   public async findVersionById(id: string): Promise<ContentVersion | null> {
@@ -372,6 +414,7 @@ function toJob(record: PrismaContentJob): ContentJob {
     productSnapshotId: record.productSnapshotId,
     brandRuleVersionId: record.brandRuleVersionId,
     requesterUserId: record.requesterUserId,
+    ...(record.campaignId === null ? {} : { campaignId: record.campaignId }),
     ...(record.telegramCreateFlowId === null
       ? {}
       : { telegramCreateFlowId: record.telegramCreateFlowId }),

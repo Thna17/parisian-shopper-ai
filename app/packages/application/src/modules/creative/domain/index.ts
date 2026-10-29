@@ -27,3 +27,4 @@ export * from './services/soft-aesthetic-scorer.port.js';
 export * from './services/soft-aesthetic-scorer.engine.js';
 export * from './scene/index.js';
 export * from './templates/index.js';
+export * from './revision/index.js';

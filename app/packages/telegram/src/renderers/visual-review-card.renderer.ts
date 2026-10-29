@@ -1,3 +1,5 @@
+import { type RevisionPlan } from '@parisian-shopper/application';
+
 export interface VisualReviewCardDetails {
   readonly productName: string;
   readonly brand: string;
@@ -63,6 +65,60 @@ export class VisualReviewCardRenderer {
       '',
       `🔐 *Storage CAS Fingerprint:* \`#${shortCas}\``,
       ...(details.layoutIntent ? ['', `📐 *Layout Guidance:* ${details.layoutIntent}`] : []),
+    ].join('\n');
+  }
+
+  public static renderRevisionPlanPreview(params: {
+    readonly plan: RevisionPlan;
+    readonly productName: string;
+    readonly currentVersion: number;
+    readonly nextVersion: number;
+  }): string {
+    const shortJobId = params.plan.creativeJobId.slice(0, 8);
+    const targetSummary = params.plan.mutations
+      .map((m) => `${m.target}: "${String(m.requestedValue)}"`)
+      .join(', ');
+
+    const strategySummary =
+      params.plan.executionStrategy === 'AI_BACKGROUND_REGEN'
+        ? 'AI Background Generation (~4s, 1 GPU credit)'
+        : params.plan.executionStrategy === 'CANVAS_REFORMAT'
+          ? 'Canvas Reformat & Re-layout (<200ms)'
+          : 'Sharp Targeted Re-layout (<100ms, 0 GPU credits)';
+
+    const heroDigest = params.plan.preservedLayerDigests['PRODUCT_HERO']
+      ? `#${params.plan.preservedLayerDigests['PRODUCT_HERO'].slice(0, 8)}`
+      : 'Authentic Flacon';
+
+    const bgDigest = params.plan.preservedLayerDigests['BACKGROUND']
+      ? `#${params.plan.preservedLayerDigests['BACKGROUND'].slice(0, 8)}`
+      : 'Preserved CAS Asset';
+
+    const preservedList: string[] = [];
+    if (!params.plan.affectedLayerGroups.includes('PRODUCT_HERO')) {
+      preservedList.push(`• Hero Cutout: Authentic Flacon (${heroDigest})`);
+    }
+    if (!params.plan.affectedLayerGroups.includes('TYPOGRAPHY')) {
+      preservedList.push('• Copy & Pricing: Safe & Validated');
+    }
+    if (!params.plan.affectedLayerGroups.includes('BACKGROUND')) {
+      preservedList.push(`• Background: Zero Drift (${bgDigest})`);
+    }
+    if (preservedList.length === 0) {
+      preservedList.push('• Non-targeted layer parameters');
+    }
+
+    return [
+      `✏️ *Proposed Revision Plan* (Job #${shortJobId} · V${params.currentVersion} ➔ V${params.nextVersion})`,
+      '',
+      `🎯 *Target:* ${targetSummary}`,
+      `✨ *Strategy:* ${strategySummary}`,
+      ...(params.plan.confirmationReason
+        ? ['', `💡 *Reason:* ${params.plan.confirmationReason}`]
+        : []),
+      '',
+      '🔒 *Preserved Layers (Zero Drift Guaranteed):*',
+      ...preservedList,
     ].join('\n');
   }
 }

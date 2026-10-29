@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   type ApplicationLogger,
   APPLICATION_LOGGER,
+  type OutboxWriter,
   ForbiddenError,
   ValidationError,
 } from '@parisian-shopper/common';
@@ -46,10 +47,21 @@ import {
 } from '../domain/services/poster-copy-builder.js';
 import { type PosterTemplateId, type PosterSpec } from '../domain/poster-spec.js';
 import { resolveStylePreset } from '../domain/style-presets.js';
+import { isTerminalCreativeStatus } from '../domain/creative.js';
 import {
+  type InvalidationAssessment,
+  type RevisionPlan,
+  RevisionTargetType,
+} from '../domain/revision/revision-plan.types.js';
+import { SelectiveInvalidationEngine } from '../domain/revision/selective-invalidation.engine.js';
+import {
+  AmbiguousRevisionError,
   CreativeJobNotFoundError,
-  VisualAssetNotFoundError,
+  CreativeStaleVersionError,
+  CreativeTerminalStateError,
+  LayerDriftViolationError,
   ProductAssetValidationError,
+  VisualAssetNotFoundError,
 } from '../domain/creative-errors.js';
 
 export interface EditTextPosterInput {
@@ -67,6 +79,7 @@ export interface EditTextPosterInput {
   };
   readonly actorUserId: string;
   readonly actorRoles: readonly string[];
+  readonly outboxWriter?: OutboxWriter;
 }
 
 export interface EditLayoutPosterInput {
@@ -79,6 +92,7 @@ export interface EditLayoutPosterInput {
   readonly showPriceBadge?: boolean;
   readonly actorUserId: string;
   readonly actorRoles: readonly string[];
+  readonly outboxWriter?: OutboxWriter;
 }
 
 export interface ChangeStylePosterInput {
@@ -87,6 +101,7 @@ export interface ChangeStylePosterInput {
   readonly stylePreset: string;
   readonly actorUserId: string;
   readonly actorRoles: readonly string[];
+  readonly outboxWriter?: OutboxWriter;
 }
 
 export interface NewBackgroundPosterInput {
@@ -94,6 +109,7 @@ export interface NewBackgroundPosterInput {
   readonly sourceVisualAssetId?: string;
   readonly actorUserId: string;
   readonly actorRoles: readonly string[];
+  readonly outboxWriter?: OutboxWriter;
 }
 
 export interface ReplaceProductAssetInput {
@@ -103,12 +119,27 @@ export interface ReplaceProductAssetInput {
   readonly mimeType: string;
   readonly actorUserId: string;
   readonly actorRoles: readonly string[];
+  readonly outboxWriter?: OutboxWriter;
+}
+
+export interface ExecuteRevisionPlanInput {
+  readonly creativeJobId: string;
+  readonly plan: RevisionPlan;
+  readonly actorUserId: string;
+  readonly actorRoles: readonly string[];
+  readonly sourceVisualAssetId?: string;
+  readonly confirmed?: boolean;
+  readonly productAssetBuffer?: Buffer;
+  readonly productAssetMimeType?: string;
+  readonly expectedSku?: string;
+  readonly outboxWriter?: OutboxWriter;
 }
 
 export interface RevisePosterResult {
   readonly visualAsset: VisualAssetRecord;
   readonly isPassed: boolean;
   readonly posterBuffer: Buffer;
+  readonly invalidationAssessment?: InvalidationAssessment;
 }
 
 interface LoadedPosterContext {
@@ -139,6 +170,7 @@ interface LoadedPosterContext {
 export class RevisePosterUseCase {
   private readonly posterCompositor: PosterCompositor;
   private readonly assetValidator: ProductAssetValidator;
+  private readonly invalidationEngine: SelectiveInvalidationEngine;
 
   public constructor(
     @Inject(CREATIVE_JOB_REPOSITORY)
@@ -166,6 +198,7 @@ export class RevisePosterUseCase {
   ) {
     this.posterCompositor = posterCompositor ?? new SharpPosterCompositor();
     this.assetValidator = new ProductAssetValidator();
+    this.invalidationEngine = new SelectiveInvalidationEngine();
   }
 
   // 1. EDIT TEXT (Zero AI calls)
@@ -205,6 +238,7 @@ export class RevisePosterUseCase {
       revisionType: 'EDIT_BACKGROUND',
       instruction: 'EDIT_TEXT: Typography adjustment',
       actorUserId: input.actorUserId,
+      ...(input.outboxWriter !== undefined ? { outboxWriter: input.outboxWriter } : {}),
     });
   }
 
@@ -242,6 +276,7 @@ export class RevisePosterUseCase {
       revisionType: 'EDIT_BACKGROUND',
       instruction: `EDIT_LAYOUT: Switched template to ${targetTemplate}`,
       actorUserId: input.actorUserId,
+      ...(input.outboxWriter !== undefined ? { outboxWriter: input.outboxWriter } : {}),
     });
   }
 
@@ -299,6 +334,7 @@ export class RevisePosterUseCase {
       backgroundAssetDigest: bgStored.sha256Digest,
       provider: backgroundAsset.providerId,
       model: backgroundAsset.model,
+      ...(input.outboxWriter !== undefined ? { outboxWriter: input.outboxWriter } : {}),
     });
   }
 
@@ -354,6 +390,7 @@ export class RevisePosterUseCase {
       backgroundAssetDigest: bgStored.sha256Digest,
       provider: backgroundAsset.providerId,
       model: backgroundAsset.model,
+      ...(input.outboxWriter !== undefined ? { outboxWriter: input.outboxWriter } : {}),
     });
   }
 
@@ -403,6 +440,299 @@ export class RevisePosterUseCase {
       instruction: `REPLACE_PRODUCT_ASSET: Verified PNG asset uploaded (hash: #${newProductStorage.sha256Digest.slice(0, 8)})`,
       actorUserId: input.actorUserId,
       sourceProductAssetDigest: newProductStorage.sha256Digest,
+      ...(input.outboxWriter !== undefined ? { outboxWriter: input.outboxWriter } : {}),
+    });
+  }
+
+  // 6. EXECUTE STRUCTURED REVISION PLAN (W31-D: Targeted Layer Compositing & Hash Preservation)
+  public async executePlan(input: ExecuteRevisionPlanInput): Promise<RevisePosterResult> {
+    const { plan, actorRoles, actorUserId, creativeJobId } = input;
+
+    // 1. Authorization: check permissions based on execution strategy
+    if (plan.executionStrategy === 'AI_BACKGROUND_REGEN') {
+      if (!this.permissions.hasAnyRolePermission(actorRoles, Permission.REGENERATE_CREATIVE)) {
+        throw new ForbiddenError({
+          publicMessage: 'Permission denied: Cannot regenerate creative.',
+        });
+      }
+    } else if (plan.executionStrategy === 'PRODUCT_ASSET_SWAP') {
+      if (!this.permissions.hasAnyRolePermission(actorRoles, Permission.CREATE_CONTENT)) {
+        throw new ForbiddenError({
+          publicMessage: 'Permission denied: Cannot upload product assets.',
+        });
+      }
+    } else {
+      if (!this.permissions.hasAnyRolePermission(actorRoles, Permission.EDIT_CREATIVE)) {
+        throw new ForbiddenError({ publicMessage: 'Permission denied: Cannot edit creative.' });
+      }
+    }
+
+    // 2. Ambiguity & Confirmation invariant
+    if (plan.requiresConfirmation && input.confirmed !== true) {
+      throw new AmbiguousRevisionError(
+        plan.confirmationReason ?? 'Proposed revision plan requires confirmation before execution',
+        { planId: plan.id },
+      );
+    }
+
+    this.logger.log(
+      `Executing structured revision plan [${plan.id}] for job ${creativeJobId} (strategy: ${plan.executionStrategy})`,
+    );
+
+    // 3. Load Context
+    const { job, sourceAsset, snapshot, productBuffer, backgroundBuffer, baseSpec, category } =
+      await this.loadContext(creativeJobId, input.sourceVisualAssetId);
+
+    // 4. Optimistic concurrency & base version verification
+    const latestAsset = await this.assetRepo.findLatestByJobId(creativeJobId);
+    const activeVersion = latestAsset?.versionNumber ?? sourceAsset.versionNumber;
+    if (
+      plan.baseVersionNumber !== undefined &&
+      (plan.baseVersionNumber !== sourceAsset.versionNumber ||
+        plan.baseVersionNumber !== activeVersion)
+    ) {
+      throw new CreativeStaleVersionError(
+        `Target visual asset version (${activeVersion}) does not match expected revision base version (${plan.baseVersionNumber})`,
+      );
+    }
+
+    // 5. Gather current cryptographic digests
+    const previousDigests: Record<string, string> = {};
+    if (sourceAsset.sourceProductAssetDigest) {
+      previousDigests['PRODUCT_HERO'] = sourceAsset.sourceProductAssetDigest;
+      previousDigests['HERO_CUTOUT'] = sourceAsset.sourceProductAssetDigest;
+    }
+    if (sourceAsset.backgroundAssetDigest) {
+      previousDigests['BACKGROUND'] = sourceAsset.backgroundAssetDigest;
+      previousDigests['GENERATED_BACKGROUND'] = sourceAsset.backgroundAssetDigest;
+    }
+
+    // 6. Compute selective invalidation assessment
+    const invalidationAssessment = this.invalidationEngine.assessInvalidation({
+      mutations: plan.mutations,
+      currentDigests: previousDigests,
+    });
+
+    // 7. Apply targeted mutations to PosterSpec
+    let updatedSpec: PosterSpec = { ...baseSpec };
+    for (const mutation of plan.mutations) {
+      switch (mutation.target) {
+        case RevisionTargetType.HEADLINE:
+          updatedSpec = { ...updatedSpec, headline: String(mutation.requestedValue) };
+          break;
+        case RevisionTargetType.SUBHEAD:
+          updatedSpec = { ...updatedSpec, secondaryHeadline: String(mutation.requestedValue) };
+          break;
+        case RevisionTargetType.PRICE:
+          updatedSpec = { ...updatedSpec, price: String(mutation.requestedValue) };
+          break;
+        case RevisionTargetType.PROMOTIONAL_PRICE:
+          updatedSpec = { ...updatedSpec, promotionalPrice: String(mutation.requestedValue) };
+          break;
+        case RevisionTargetType.CTA:
+          updatedSpec = { ...updatedSpec, cta: String(mutation.requestedValue) };
+          break;
+        case RevisionTargetType.PRODUCT_PLACEMENT:
+          updatedSpec = {
+            ...updatedSpec,
+            productPlacement: mutation.requestedValue as 'LEFT' | 'CENTER' | 'RIGHT',
+          };
+          break;
+        case RevisionTargetType.PRODUCT_SCALE: {
+          const prevIntent =
+            typeof updatedSpec.layoutIntent === 'object' && updatedSpec.layoutIntent !== null
+              ? updatedSpec.layoutIntent
+              : {};
+          updatedSpec = {
+            ...updatedSpec,
+            layoutIntent: {
+              ...prevIntent,
+              productScale: Number(mutation.requestedValue),
+            },
+          };
+          break;
+        }
+        case RevisionTargetType.TEMPLATE:
+          updatedSpec = {
+            ...updatedSpec,
+            templateId: mutation.requestedValue as PosterTemplateId,
+          };
+          break;
+        case RevisionTargetType.ASPECT_RATIO: {
+          const ratio = mutation.requestedValue === '9:16' ? '9:16' : '1:1';
+          updatedSpec = {
+            ...updatedSpec,
+            outputFormat: {
+              ...updatedSpec.outputFormat,
+              aspectRatio: ratio,
+            },
+          };
+          break;
+        }
+        default:
+          break;
+      }
+    }
+
+    // 8. Resolve assets & digests per execution strategy
+    let effectiveProductBuffer: Buffer;
+    let effectiveProductSha: string;
+    let effectiveBgBuffer: Buffer;
+    let effectiveBgSha: string;
+    let provider: string | undefined;
+    let model: string | undefined;
+
+    if (plan.executionStrategy === 'AI_BACKGROUND_REGEN') {
+      if (!this.creativeProvider) {
+        throw new ValidationError({ publicMessage: 'Creative image provider is not configured.' });
+      }
+
+      const styleMutation = plan.mutations.find(
+        (m) => m.target === RevisionTargetType.STYLE_PRESET,
+      );
+      const preset = styleMutation
+        ? resolveStylePreset(String(styleMutation.requestedValue), category)
+        : resolveStylePreset(job.creativeProfile, category);
+
+      const briefText = preset.buildPrompt({ category });
+      const negativePrompt = preset.negativePrompt;
+
+      const backgroundAsset = await this.creativeProvider.generateBackground({
+        creativeJobId: job.id,
+        contentVersionId: job.contentVersionId,
+        briefText,
+        stylePrompt: preset.id,
+        negativePrompt,
+        targetWidth: updatedSpec.outputFormat.width,
+        targetHeight: updatedSpec.outputFormat.height,
+        aspectRatio: updatedSpec.outputFormat.aspectRatio,
+        creativeProfile: preset.id,
+      });
+
+      const bgStored = await this.storage.saveAsset({
+        buffer: backgroundAsset.imageBuffer,
+        mimeType: backgroundAsset.mimeType,
+        assetRole: 'GENERATED_BACKGROUND',
+        width: backgroundAsset.width,
+        height: backgroundAsset.height,
+      });
+
+      effectiveBgBuffer = backgroundAsset.imageBuffer;
+      effectiveBgSha = bgStored.sha256Digest;
+      provider = backgroundAsset.providerId;
+      model = backgroundAsset.model;
+
+      effectiveProductBuffer = productBuffer;
+      effectiveProductSha =
+        sourceAsset.sourceProductAssetDigest ??
+        createHash('sha256').update(productBuffer).digest('hex');
+    } else if (plan.executionStrategy === 'PRODUCT_ASSET_SWAP') {
+      if (!input.productAssetBuffer) {
+        throw new ValidationError({
+          publicMessage: 'Product asset buffer is required for PRODUCT_ASSET_SWAP.',
+        });
+      }
+
+      const validationResult = await this.assetValidator.validate({
+        assetBuffer: input.productAssetBuffer,
+        expectedSku: input.expectedSku ?? snapshot.product.product.sku,
+        mimeType: input.productAssetMimeType ?? 'image/png',
+      });
+
+      if (!validationResult.isValid) {
+        throw new ProductAssetValidationError(
+          `Uploaded product image failed validation: ${validationResult.findings.join('; ')}`,
+        );
+      }
+
+      const newProductStorage = await this.storage.saveAsset({
+        buffer: validationResult.trimmedBuffer,
+        mimeType: 'image/png',
+        assetRole: 'CANONICAL_PRODUCT',
+      });
+
+      effectiveProductBuffer = validationResult.trimmedBuffer;
+      effectiveProductSha = newProductStorage.sha256Digest;
+
+      effectiveBgBuffer = backgroundBuffer;
+      effectiveBgSha =
+        sourceAsset.backgroundAssetDigest ??
+        createHash('sha256').update(backgroundBuffer).digest('hex');
+    } else {
+      // ZERO_AI_COMPOSITE, CANVAS_REFORMAT, etc.
+      effectiveProductBuffer = productBuffer;
+      effectiveProductSha =
+        sourceAsset.sourceProductAssetDigest ??
+        createHash('sha256').update(productBuffer).digest('hex');
+
+      effectiveBgBuffer = backgroundBuffer;
+      effectiveBgSha =
+        sourceAsset.backgroundAssetDigest ??
+        createHash('sha256').update(backgroundBuffer).digest('hex');
+    }
+
+    // 9. Zero-drift hash continuity verification
+    const actualDigests: Record<string, string> = {
+      PRODUCT_HERO: effectiveProductSha,
+      HERO_CUTOUT: effectiveProductSha,
+      BACKGROUND: effectiveBgSha,
+      GENERATED_BACKGROUND: effectiveBgSha,
+    };
+
+    const driftCheck = this.invalidationEngine.verifyLayerDriftGuarantees({
+      plan,
+      previousDigests,
+      actualDigests,
+    });
+
+    if (!driftCheck.isIntact) {
+      throw new LayerDriftViolationError(driftCheck.violations.join('; '), {
+        violations: driftCheck.violations,
+      });
+    }
+
+    if (
+      !invalidationAssessment.affectedLayerGroups.includes('PRODUCT_HERO') &&
+      sourceAsset.sourceProductAssetDigest &&
+      effectiveProductSha !== sourceAsset.sourceProductAssetDigest
+    ) {
+      throw new LayerDriftViolationError(
+        `Product hero layer drift detected on non-targeted layer: expected ${sourceAsset.sourceProductAssetDigest}, got ${effectiveProductSha}`,
+      );
+    }
+
+    if (
+      !invalidationAssessment.affectedLayerGroups.includes('BACKGROUND') &&
+      sourceAsset.backgroundAssetDigest &&
+      effectiveBgSha !== sourceAsset.backgroundAssetDigest
+    ) {
+      throw new LayerDriftViolationError(
+        `Background layer drift detected on non-targeted layer: expected ${sourceAsset.backgroundAssetDigest}, got ${effectiveBgSha}`,
+      );
+    }
+
+    // 10. Re-composite & persist new immutable version
+    const revisionType =
+      plan.executionStrategy === 'AI_BACKGROUND_REGEN'
+        ? 'REGENERATE_BACKGROUND'
+        : 'EDIT_BACKGROUND';
+
+    return this.renderAndSaveVersion({
+      jobId: job.id,
+      sourceAsset,
+      spec: updatedSpec,
+      productBuffer: effectiveProductBuffer,
+      backgroundBuffer: effectiveBgBuffer,
+      revisionType,
+      instruction: `[${plan.id}] ${plan.rawInstruction}`,
+      actorUserId,
+      backgroundAssetDigest: effectiveBgSha,
+      sourceProductAssetDigest: effectiveProductSha,
+      provider,
+      model,
+      invalidationAssessment,
+      plan,
+      ...(input.outboxWriter !== undefined ? { outboxWriter: input.outboxWriter } : {}),
     });
   }
 
@@ -413,6 +743,10 @@ export class RevisePosterUseCase {
   ): Promise<LoadedPosterContext> {
     const job = await this.jobRepo.findById(creativeJobId);
     if (!job) throw new CreativeJobNotFoundError(creativeJobId);
+
+    if (isTerminalCreativeStatus(job.status)) {
+      throw new CreativeTerminalStateError(job.status);
+    }
 
     const sourceAsset = sourceVisualAssetId
       ? await this.assetRepo.findById(sourceVisualAssetId)
@@ -493,10 +827,13 @@ export class RevisePosterUseCase {
     revisionType: 'EDIT_BACKGROUND' | 'REGENERATE_BACKGROUND';
     instruction: string;
     actorUserId: string;
-    backgroundAssetDigest?: string;
-    sourceProductAssetDigest?: string;
-    provider?: string;
-    model?: string;
+    backgroundAssetDigest?: string | undefined;
+    sourceProductAssetDigest?: string | undefined;
+    provider?: string | undefined;
+    model?: string | undefined;
+    invalidationAssessment?: InvalidationAssessment | undefined;
+    plan?: RevisionPlan | undefined;
+    outboxWriter?: OutboxWriter | undefined;
   }): Promise<RevisePosterResult> {
     const productSha =
       params.sourceProductAssetDigest ??
@@ -552,6 +889,52 @@ export class RevisePosterUseCase {
     // Mark revision completed
     await this.revisionRepo.completeRequest(revision.id, newAsset.id);
 
+    // Emit enriched outbox event if outboxWriter is provided
+    if (params.outboxWriter) {
+      await params.outboxWriter.append({
+        topic: 'CREATIVE_REVISED',
+        schemaVersion: 1,
+        idempotencyKey: `creative-job:${params.jobId}:revised:${newAsset.id}`,
+        aggregateType: 'CreativeJob',
+        aggregateId: params.jobId,
+        payload: {
+          creativeJobId: params.jobId,
+          visualAssetId: newAsset.id,
+          previousVisualAssetId: params.sourceAsset.id,
+          versionNumber: newAsset.versionNumber,
+          baseVersionNumber: params.sourceAsset.versionNumber,
+          revisionType: params.revisionType,
+          instruction: params.instruction,
+          actorUserId: params.actorUserId,
+          sha256: newAsset.sha256,
+          storageKey: newAsset.storageKey,
+          ...(params.plan !== undefined
+            ? {
+                planId: params.plan.id,
+                rawInstruction: params.plan.rawInstruction,
+                executionStrategy: params.plan.executionStrategy,
+                mutations: params.plan.mutations,
+              }
+            : {}),
+          ...(params.invalidationAssessment !== undefined
+            ? {
+                invalidationAssessment: {
+                  invalidatedGateCodes: params.invalidationAssessment.invalidatedGateCodes,
+                  preservedGateCodes: params.invalidationAssessment.preservedGateCodes,
+                  invalidatedApprovalDomains:
+                    params.invalidationAssessment.invalidatedApprovalDomains,
+                  preservedApprovalDomains: params.invalidationAssessment.preservedApprovalDomains,
+                  affectedLayerGroups: params.invalidationAssessment.affectedLayerGroups,
+                  preservedLayerDigests: params.invalidationAssessment.preservedLayerDigests,
+                },
+              }
+            : {}),
+        },
+        occurredAt: new Date(),
+        availableAt: new Date(),
+      });
+    }
+
     // Run deterministic visual validation on the new asset
     const validation = await this.validateCreative.execute({
       creativeJobId: params.jobId,
@@ -562,6 +945,9 @@ export class RevisePosterUseCase {
       visualAsset: newAsset,
       isPassed: validation.isPassed,
       posterBuffer: renderResult.posterBuffer,
+      ...(params.invalidationAssessment
+        ? { invalidationAssessment: params.invalidationAssessment }
+        : {}),
     };
   }
 

@@ -219,6 +219,7 @@ model User {
   recordedSceneInvalidations  SceneInvalidationEvent[]     @relation("UserRecordedSceneInvalidations")
   passwordCredential          PasswordCredential?
   sessions                    UserSession[]
+  createdCampaigns            Campaign[]                   @relation("UserCreatedCampaigns")
 
   @@index([status], map: "users_status_idx")
   @@map("users")
@@ -354,6 +355,7 @@ model ProductSnapshot {
   comparedAssessments       ProductFreshnessAssessment[] @relation("ComparedSnapshotAssessments")
   productAssetRegistrations ProductAssetRegistration[]
   sceneVersions             CreativeSceneVersion[]
+  campaignProducts          CampaignProduct[]
 
   @@index([sku, createdAt], map: "product_snapshots_sku_created_at_idx")
   @@index([snapshotHash], map: "product_snapshots_snapshot_hash_idx")
@@ -452,6 +454,7 @@ model ContentJob {
   productSnapshotId    String           @map("product_snapshot_id") @db.Uuid
   brandRuleVersionId   String           @map("brand_rule_version_id") @db.Uuid
   requesterUserId      String           @map("requester_user_id") @db.Uuid
+  campaignId           String?          @map("campaign_id") @db.Uuid
   telegramCreateFlowId String?          @unique(map: "content_jobs_telegram_create_flow_id_key") @map("telegram_create_flow_id") @db.Uuid
   contentType          ContentType      @map("content_type")
   language             ContentLanguage
@@ -464,6 +467,7 @@ model ContentJob {
   productSnapshot           ProductSnapshot                    @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_product_snapshot_id_fkey")
   brandRuleVersion          BrandRuleVersion                   @relation(fields: [brandRuleVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_brand_rule_version_id_fkey")
   requester                 User                               @relation("ContentJobRequester", fields: [requesterUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_requester_user_id_fkey")
+  campaign                  Campaign?                          @relation(fields: [campaignId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "content_jobs_campaign_id_fkey")
   telegramCreateFlow        TelegramCreateFlow?                @relation(fields: [telegramCreateFlowId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_jobs_telegram_create_flow_id_fkey")
   versions                  ContentVersion[]
   attempts                  GenerationAttempt[]
@@ -474,6 +478,7 @@ model ContentJob {
   @@index([status, createdAt], map: "content_jobs_status_created_at_idx")
   @@index([productSnapshotId, createdAt], map: "content_jobs_product_snapshot_id_created_at_idx")
   @@index([requesterUserId, createdAt], map: "content_jobs_requester_user_id_created_at_idx")
+  @@index([campaignId], map: "content_jobs_campaign_id_idx")
   @@map("content_jobs")
 }
 
@@ -1278,3 +1283,53 @@ model ProductAssetTransform {
   @@index([derivedAssetId], map: "product_asset_transforms_derived_idx")
   @@map("product_asset_transforms")
 }
+
+enum CampaignStatus {
+  DRAFT
+  PLANNED
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+model Campaign {
+  id          String         @id @default(uuid()) @db.Uuid
+  code        String         @unique(map: "campaigns_code_key") @db.VarChar(64)
+  name        String         @db.VarChar(200)
+  objective   String         @db.VarChar(500)
+  description String?        @db.VarChar(2000)
+  status      CampaignStatus @default(DRAFT)
+  startDate   DateTime?      @map("start_date") @db.Timestamptz(3)
+  endDate     DateTime?      @map("end_date") @db.Timestamptz(3)
+  createdById String         @map("created_by_id") @db.Uuid
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy   User              @relation("UserCreatedCampaigns", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "campaigns_created_by_id_fkey")
+  products    CampaignProduct[]
+  contentJobs ContentJob[]
+
+  @@index([status, createdAt], map: "campaigns_status_created_at_idx")
+  @@index([createdById, createdAt], map: "campaigns_created_by_created_at_idx")
+  @@map("campaigns")
+}
+
+model CampaignProduct {
+  id                    String   @id @default(uuid()) @db.Uuid
+  campaignId            String   @map("campaign_id") @db.Uuid
+  productSnapshotId     String   @map("product_snapshot_id") @db.Uuid
+  sortOrder             Int      @default(0) @map("sort_order")
+  isHero                Boolean  @default(false) @map("is_hero")
+  notes                 String?  @db.VarChar(1000)
+  targetPromoPrice      Decimal? @map("target_promo_price") @db.Decimal(10, 2)
+  targetDiscountPercent Decimal? @map("target_discount_percent") @db.Decimal(5, 2)
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  campaign        Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "campaign_products_campaign_id_fkey")
+  productSnapshot ProductSnapshot @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "campaign_products_product_snapshot_id_fkey")
+
+  @@unique([campaignId, productSnapshotId], map: "campaign_products_campaign_id_product_snapshot_id_key")
+  @@index([campaignId, sortOrder], map: "campaign_products_campaign_id_sort_order_idx")
+  @@map("campaign_products")
+}
+

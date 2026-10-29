@@ -32,6 +32,17 @@
       "evidence": "Exact-version npm registry metadata at https://www.npmjs.com/package/@img/sharp-libvips-linux-x64/v/1.0.4 declares LGPL-3.0-or-later, identifies https://github.com/lovell/sharp-libvips as its source repository, and records package integrity sha512-MmWmQ3iPFZr0Iev+BAgVMb3ZyC4KeFc3jFxnNbEPas60e1cIfevbtuyf9nDGIzOaW9PdnDciJm+wFFaTlj5xYw==.",
       "obligations": "Preserve applicable license and copyright notices; retain the corresponding LGPL-3.0-or-later text with any distribution that includes the binary; assess and satisfy applicable library replacement, relinking, source, and installation-information requirements for the actual packaging and distribution model. This registry entry records an engineering exception and does not determine legal obligations.",
       "reReview": "Re-review before changing the package or version, changing how libvips is linked or packaged, distributing an artifact containing it, or changing the deployment/distribution model."
+    },
+    {
+      "package": "@csstools/color-helpers",
+      "versions": ["5.1.0"],
+      "license": "MIT-0",
+      "reviewer": "HONG THAN BRATHNA — TECHNICAL DEVELOPER",
+      "reviewDate": "2026-10-28",
+      "reason": "Permissive MIT No Attribution (MIT-0) public domain equivalent license for CSS Color module helper library used transitively by postcss.",
+      "evidence": "https://github.com/csstools/postcss-plugins/blob/main/packages/color-helpers/LICENSE.md",
+      "obligations": "None required under MIT-0, permissive use.",
+      "reReview": "Re-review whenever version changes."
     }
   ]
 }

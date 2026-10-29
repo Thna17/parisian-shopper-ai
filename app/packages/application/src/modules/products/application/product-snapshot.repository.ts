@@ -29,8 +29,26 @@ export interface CreateProductSnapshotRecord {
   normalizerVersion: string;
 }
 
+export interface ListProductSnapshotsQuery {
+  search?: string | undefined;
+  brand?: string | undefined;
+  category?: string | undefined;
+  stockStatus?: string | undefined;
+  page?: number | undefined;
+  limit?: number | undefined;
+}
+
+export interface PaginatedProductSnapshots {
+  items: readonly ProductSnapshot[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export interface ProductSnapshotRepository {
   create(input: CreateProductSnapshotRecord): Promise<ProductSnapshot>;
   findById(id: string): Promise<ProductSnapshot | null>;
   findLatestBySku?(sku: string): Promise<ProductSnapshot | null>;
+  findPaginated?(query?: ListProductSnapshotsQuery): Promise<PaginatedProductSnapshots>;
 }

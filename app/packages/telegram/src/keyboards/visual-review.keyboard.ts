@@ -85,6 +85,33 @@ export function buildConfirmVisualApprovalKeyboard(
   ];
 }
 
+export function buildStructuredRevisionConfirmationKeyboard(params: {
+  readonly confirmToken: string;
+  readonly cancelToken: string;
+  readonly changeStyleToken?: string | undefined;
+  readonly confirmLabel?: string | undefined;
+}): readonly (readonly TelegramButton[])[] {
+  const confirmText = params.confirmLabel ?? '✅ Confirm & Apply Revision';
+  const rows: TelegramButton[][] = [
+    [{ text: confirmText, callbackData: callbackData(params.confirmToken) }],
+  ];
+
+  const secondaryRow: TelegramButton[] = [];
+  if (params.changeStyleToken) {
+    secondaryRow.push({
+      text: '🎨 Choose Different Style',
+      callbackData: callbackData(params.changeStyleToken),
+    });
+  }
+  secondaryRow.push({
+    text: '❌ Cancel',
+    callbackData: callbackData(params.cancelToken),
+  });
+  rows.push(secondaryRow);
+
+  return rows;
+}
+
 export function buildApprovedPosterKeyboard(params: {
   exportToken: string;
   publishToken?: string;

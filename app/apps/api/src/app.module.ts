@@ -10,6 +10,9 @@ import { TelegramInfrastructureModule } from '@parisian-shopper/telegram';
 
 import { HealthModule } from './health/health.module.js';
 import { MetricsModule } from './metrics/metrics.module.js';
+import { AuthModule } from './auth/auth.module.js';
+import { ProductsApiModule } from './products/products.module.js';
+import { CampaignsApiModule } from './campaigns/campaigns.module.js';
 
 @Module({
   imports: [
@@ -23,6 +26,9 @@ import { MetricsModule } from './metrics/metrics.module.js';
     TelegramInfrastructureModule,
     HealthModule,
     MetricsModule,
+    AuthModule,
+    ProductsApiModule,
+    CampaignsApiModule,
   ],
 })
 export class AppModule {}

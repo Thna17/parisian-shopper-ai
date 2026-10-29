@@ -74,6 +74,10 @@ export class PermissionService {
   public hasAnyRolePermission(roles: readonly string[], permission: Permission): boolean {
     return hasAnyRolePermission(roles, permission);
   }
+
+  public resolvePermissions(roles: readonly string[]): readonly Permission[] {
+    return resolvePermissionsForRoles(roles);
+  }
 }
 
 export function hasAnyRolePermission(roles: readonly string[], permission: Permission): boolean {
@@ -81,6 +85,19 @@ export function hasAnyRolePermission(roles: readonly string[], permission: Permi
     const normalized = role.toUpperCase();
     return isRoleCode(normalized) ? ROLE_PERMISSIONS[normalized].includes(permission) : false;
   });
+}
+
+export function resolvePermissionsForRoles(roles: readonly string[]): readonly Permission[] {
+  const permissionsSet = new Set<Permission>();
+  for (const role of roles) {
+    const normalized = role.toUpperCase();
+    if (isRoleCode(normalized)) {
+      for (const permission of ROLE_PERMISSIONS[normalized]) {
+        permissionsSet.add(permission);
+      }
+    }
+  }
+  return Array.from(permissionsSet);
 }
 
 function isRoleCode(value: string): value is RoleCode {

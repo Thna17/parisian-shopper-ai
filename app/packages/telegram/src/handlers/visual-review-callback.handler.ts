@@ -13,6 +13,8 @@ import {
   Permission,
   resolveStylePreset,
   RevisePosterUseCase,
+  RevisionGrammarParser,
+  type RevisionPlan,
   TELEGRAM_CHANNEL_BROADCAST_DISPATCHER,
   TELEGRAM_WORKFLOW_REPOSITORY,
   TelegramAction,
@@ -48,6 +50,7 @@ import {
   buildConfirmVisualApprovalKeyboard,
   buildExportFormatKeyboard,
   buildLayoutSelectionKeyboard,
+  buildStructuredRevisionConfirmationKeyboard,
   buildStyleSelectionKeyboard,
   buildVisualReviewKeyboard,
 } from '../keyboards/visual-review.keyboard.js';
@@ -89,13 +92,17 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
     private readonly config?: Pick<AppConfigService, 'telegram'>,
     @Optional()
     rejectCreative?: RejectCreativeUseCase,
+    @Optional()
+    grammarParser?: RevisionGrammarParser,
   ) {
     this.rejectCreative =
       rejectCreative ??
       new RejectCreativeUseCase(this.jobRepo, this.assetRepo, this.approvalRepo, this.logger);
+    this.grammarParser = grammarParser ?? new RevisionGrammarParser();
   }
 
   private readonly rejectCreative: RejectCreativeUseCase;
+  private readonly grammarParser: RevisionGrammarParser;
 
   public async handleCallback(input: TelegramCallbackInput): Promise<TelegramResponse> {
     if (
@@ -194,6 +201,9 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
       [TelegramAction.REGENERATE_VISUAL]: Permission.REGENERATE_CREATIVE,
       [TelegramAction.EXPORT_POSTER]: Permission.EXPORT_CREATIVE,
       [TelegramAction.SELECT_EXPORT_FORMAT]: Permission.EXPORT_CREATIVE,
+      [TelegramAction.CONFIRM_STRUCTURED_REVISION]: Permission.EDIT_CREATIVE,
+      [TelegramAction.CANCEL_STRUCTURED_REVISION]: Permission.EDIT_CREATIVE,
+      [TelegramAction.CHOOSE_REVISION_STYLE]: Permission.REGENERATE_CREATIVE,
     };
 
     const requiredPermission = ACTION_PERMISSIONS[token.action];
@@ -303,6 +313,15 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
         break;
       case TelegramAction.CANCEL_VISUAL_ACTION:
         res = await this.handleCancelVisualAction();
+        break;
+      case TelegramAction.CONFIRM_STRUCTURED_REVISION:
+        res = await this.handleConfirmStructuredRevision(actor, token);
+        break;
+      case TelegramAction.CANCEL_STRUCTURED_REVISION:
+        res = await this.handleCancelStructuredRevision(actor, token);
+        break;
+      case TelegramAction.CHOOSE_REVISION_STYLE:
+        res = await this.handleChangeVisualStyle(actor, token);
         break;
       default:
         res = {
@@ -682,6 +701,18 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
       metadata: { creativeJobId, visualAssetId },
     });
 
+    await this.workflowRepo.setActiveWorkflowMessage(`awaiting_revision:${actor.identityId}`, {
+      messageId: 0,
+      chatId: actor.telegramUserId,
+      messageType: 'INTERACTION_PROMPT',
+      payloadMetadata: {
+        creativeJobId,
+        visualAssetId,
+        productName,
+        revisionRequestId: revision.id,
+      },
+    });
+
     return {
       messages: [
         {
@@ -690,6 +721,263 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
       ],
       callbackNotice: 'Awaiting edit instructions...',
     };
+  }
+
+  public async handleTextMessage(
+    actor: TelegramActor,
+    text: string,
+  ): Promise<TelegramResponse | null> {
+    const awaitingKey = `awaiting_revision:${actor.identityId}`;
+    const awaiting = await this.workflowRepo.getActiveWorkflowMessage(awaitingKey);
+    if (!awaiting || !awaiting.payloadMetadata) {
+      return null;
+    }
+
+    const creativeJobId = awaiting.payloadMetadata.creativeJobId as string;
+    const visualAssetId = (awaiting.payloadMetadata.visualAssetId as string) || '';
+    const productName = (awaiting.payloadMetadata.productName as string) || 'Product';
+
+    if (text === '/cancel' || text.toLowerCase() === 'cancel') {
+      await this.workflowRepo.clearActiveWorkflowMessage(awaitingKey);
+      const job = await this.jobRepo.findById(creativeJobId);
+      if (job && job.status === 'REVISION_REQUESTED') {
+        await this.jobRepo.transitionStatus(
+          creativeJobId,
+          'REVISION_REQUESTED',
+          'READY_FOR_REVIEW',
+        );
+      }
+      return {
+        messages: [{ text: 'Visual revision cancelled.' }],
+        callbackNotice: 'Cancelled.',
+      };
+    }
+
+    const currentAsset = visualAssetId ? await this.assetRepo.findById(visualAssetId) : null;
+    const baseVersionNumber = currentAsset?.versionNumber ?? 1;
+
+    const parseResult = this.grammarParser.parse({
+      rawInstruction: text,
+      creativeJobId,
+      baseVersionNumber,
+      requestedByUserId: actor.internalUserId,
+    });
+
+    if (parseResult.confidence === 'UNSUPPORTED' || !parseResult.proposedPlan) {
+      const suggestions =
+        parseResult.suggestedAlternatives?.map((s) => `• \`${s}\``).join('\n') ?? '';
+      return {
+        messages: [
+          {
+            text: `⚠️ *Could not interpret instruction:*\n"${text}"\n\n*Suggestions:*\n${suggestions}\n\nType /cancel to abort.`,
+          },
+        ],
+        callbackNotice: 'Unsupported instruction.',
+      };
+    }
+
+    const plan = parseResult.proposedPlan;
+
+    // Direct execution for confident, zero-AI spend edits
+    if (!plan.requiresConfirmation && plan.executionStrategy === 'ZERO_AI_COMPOSITE') {
+      await this.workflowRepo.clearActiveWorkflowMessage(awaitingKey);
+      return this.executeStructuredRevision(actor, creativeJobId, visualAssetId, productName, plan);
+    }
+
+    // Two-Phase Confirmation for ambiguous or AI-spend revisions
+    const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    const tokenDefs = [
+      {
+        action: TelegramAction.CONFIRM_STRUCTURED_REVISION,
+        resourceId: creativeJobId,
+        metadata: {
+          creativeJobId,
+          visualAssetId,
+          productName,
+          revisionPlan: plan as unknown as Record<string, unknown>,
+        },
+        singleUse: true,
+      },
+      {
+        action: TelegramAction.CANCEL_STRUCTURED_REVISION,
+        resourceId: creativeJobId,
+        metadata: { creativeJobId, visualAssetId, productName },
+        singleUse: true,
+      },
+      ...(plan.executionStrategy === 'AI_BACKGROUND_REGEN'
+        ? [
+            {
+              action: TelegramAction.CHOOSE_REVISION_STYLE,
+              resourceId: creativeJobId,
+              metadata: { creativeJobId, visualAssetId, productName },
+              singleUse: false,
+            },
+          ]
+        : []),
+    ];
+
+    const generatedTokens = await this.tokens.create(actor.identityId, tokenDefs, expiresAt);
+    const confirmToken = generatedTokens[0]!;
+    const cancelToken = generatedTokens[1]!;
+    const changeStyleToken = generatedTokens[2];
+
+    const confirmLabel =
+      plan.executionStrategy === 'AI_BACKGROUND_REGEN'
+        ? '✅ Confirm & Generate (1 Credit)'
+        : '✅ Confirm & Apply Revision';
+
+    const keyboard = buildStructuredRevisionConfirmationKeyboard({
+      confirmToken,
+      cancelToken,
+      changeStyleToken,
+      confirmLabel,
+    });
+
+    const previewText = VisualReviewCardRenderer.renderRevisionPlanPreview({
+      plan,
+      productName,
+      currentVersion: baseVersionNumber,
+      nextVersion: baseVersionNumber + 1,
+    });
+
+    return {
+      messages: [
+        {
+          text: previewText,
+          buttons: keyboard,
+        },
+      ],
+      callbackNotice: 'Proposed revision plan prepared.',
+    };
+  }
+
+  private async handleConfirmStructuredRevision(
+    actor: TelegramActor,
+    token: TelegramActionTokenRecord,
+  ): Promise<TelegramResponse> {
+    const creativeJobId = (token.metadata?.creativeJobId as string | undefined) ?? token.resourceId;
+    const visualAssetId = (token.metadata?.visualAssetId as string | undefined) ?? '';
+    const productName = (token.metadata?.productName as string | undefined) ?? 'Product';
+    const plan = token.metadata?.revisionPlan as RevisionPlan | undefined;
+
+    if (!plan) {
+      return {
+        messages: [{ text: 'Revision plan data is missing from action token.' }],
+        callbackNotice: 'Invalid action.',
+      };
+    }
+
+    await this.workflowRepo.clearActiveWorkflowMessage(`awaiting_revision:${actor.identityId}`);
+
+    return this.executeStructuredRevision(actor, creativeJobId, visualAssetId, productName, plan);
+  }
+
+  private async handleCancelStructuredRevision(
+    actor: TelegramActor,
+    token: TelegramActionTokenRecord,
+  ): Promise<TelegramResponse> {
+    const creativeJobId = (token.metadata?.creativeJobId as string | undefined) ?? token.resourceId;
+    const visualAssetId = (token.metadata?.visualAssetId as string | undefined) ?? '';
+    const productName = (token.metadata?.productName as string | undefined) ?? 'Product';
+
+    await this.workflowRepo.clearActiveWorkflowMessage(`awaiting_revision:${actor.identityId}`);
+
+    const job = await this.jobRepo.findById(creativeJobId);
+    if (job && job.status === 'REVISION_REQUESTED') {
+      await this.jobRepo.transitionStatus(creativeJobId, 'REVISION_REQUESTED', 'READY_FOR_REVIEW');
+    }
+
+    const keyboard = visualAssetId
+      ? await this.buildReviewKeyboardForAsset(
+          actor.identityId,
+          creativeJobId,
+          visualAssetId,
+          productName,
+        )
+      : undefined;
+
+    return {
+      messages: [
+        {
+          text: `❌ *Revision Cancelled*\n\nThe proposed revision has been cancelled. Poster remains at current version.`,
+          ...(keyboard ? { buttons: keyboard } : {}),
+        },
+      ],
+      callbackNotice: 'Revision cancelled.',
+    };
+  }
+
+  private async executeStructuredRevision(
+    actor: TelegramActor,
+    creativeJobId: string,
+    visualAssetId: string,
+    productName: string,
+    plan: RevisionPlan,
+  ): Promise<TelegramResponse> {
+    if (!this.revisePoster) {
+      return {
+        messages: [{ text: 'RevisePoster service is not configured.' }],
+        callbackNotice: 'Not configured.',
+      };
+    }
+
+    try {
+      const result = await this.revisePoster.executePlan({
+        creativeJobId,
+        plan,
+        actorUserId: actor.internalUserId,
+        actorRoles: actor.roles,
+        sourceVisualAssetId: visualAssetId,
+        confirmed: true,
+        ...(this.outboxWriter !== undefined ? { outboxWriter: this.outboxWriter } : {}),
+      });
+
+      const activeRevision = await this.revisionRepo.findActiveByJobId(creativeJobId);
+      if (activeRevision) {
+        await this.revisionRepo.completeRequest(activeRevision.id, result.visualAsset.id);
+      }
+
+      const currentJob = await this.jobRepo.findById(creativeJobId);
+      if (currentJob && currentJob.status === 'REVISION_REQUESTED') {
+        await this.jobRepo.transitionStatus(
+          creativeJobId,
+          'REVISION_REQUESTED',
+          'READY_FOR_REVIEW',
+        );
+      }
+
+      const keyboard = await this.buildReviewKeyboardForAsset(
+        actor.identityId,
+        creativeJobId,
+        result.visualAsset.id,
+        productName,
+      );
+
+      const targetDesc = plan.mutations
+        .map((m) => `${m.target}: ${String(m.requestedValue)}`)
+        .join(', ');
+
+      return {
+        messages: [
+          {
+            text: `📝 *Poster Revision Applied (v${result.visualAsset.versionNumber})*\n\nTarget: ${targetDesc}\nStrategy: \`${plan.executionStrategy}\`\nValidation: ${result.isPassed ? '✅ PASSED' : '⚠️ WARNINGS'}`,
+            photoBuffer: result.posterBuffer,
+            buttons: keyboard,
+          },
+        ],
+        callbackNotice: 'Revision applied!',
+      };
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error during revision';
+      return {
+        messages: [
+          {
+            text: `❌ *Revision Failed*\n\n${errorMessage}\n\nPlease try again or type /cancel to abort.`,
+          },
+        ],
+        callbackNotice: 'Revision failed.',
+      };
+    }
   }
 
   // 5. CHANGE VISUAL STYLE (Style selection & 2-step confirmation)

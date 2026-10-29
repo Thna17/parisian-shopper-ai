@@ -1,6 +1,11 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { createHash } from 'node:crypto';
-import { type ApplicationLogger, ForbiddenError } from '@parisian-shopper/common';
+import {
+  type ApplicationLogger,
+  ForbiddenError,
+  type OutboxEventDraft,
+  type OutboxWriter,
+} from '@parisian-shopper/common';
 import { PermissionService, RoleCode } from '../../auth/domain/permissions.js';
 import { RevisePosterUseCase } from './revise-poster.use-case.js';
 import {
@@ -53,7 +58,17 @@ import {
 } from './creative-provider.port.js';
 import { generateTransparentProductPng_TEST_ONLY } from '../infrastructure/fixtures/fake-product-fixtures.js';
 import { generateDeterministicBackgroundPng } from '../infrastructure/fixtures/fake-background-fixtures.js';
-import { ProductAssetValidationError } from '../domain/creative-errors.js';
+import {
+  AmbiguousRevisionError,
+  CreativeStaleVersionError,
+  LayerDriftViolationError,
+  ProductAssetValidationError,
+} from '../domain/creative-errors.js';
+import {
+  ApprovalDomain,
+  type RevisionPlan,
+  RevisionTargetType,
+} from '../domain/revision/revision-plan.types.js';
 import { type CreativeJobStatus } from '../domain/creative.js';
 
 describe('RevisePosterUseCase', () => {
@@ -791,6 +806,464 @@ describe('RevisePosterUseCase', () => {
         actorRoles: [RoleCode.ADMIN],
       });
       expect(result.isPassed).toBe(true);
+    });
+  });
+
+  describe('executePlan (W31-D: Targeted Layer Compositing & Hash Preservation)', () => {
+    it('executes targeted typography revision, preserves product cutout and background hashes with zero drift', async () => {
+      const { useCase, generateBackgroundMock, renderPosterMock } = setupMocks();
+
+      const plan: RevisionPlan = {
+        id: 'plan-typo-1',
+        creativeJobId: 'job-p1',
+        baseVersionNumber: 1,
+        requestedByUserId: 'user-editor',
+        rawInstruction: 'Headline: Parisian Midnight; Price: 185 EUR',
+        executionStrategy: 'ZERO_AI_COMPOSITE',
+        confidence: 'CONFIDENT',
+        confidenceScore: 1.0,
+        mutations: [
+          {
+            target: RevisionTargetType.HEADLINE,
+            fieldName: 'headline',
+            requestedValue: 'Parisian Midnight',
+          },
+          {
+            target: RevisionTargetType.PRICE,
+            fieldName: 'price',
+            requestedValue: '185 EUR',
+          },
+        ],
+        affectedLayerGroups: ['TYPOGRAPHY'],
+        preservedLayerDigests: {
+          PRODUCT_HERO: mockProductSha,
+          BACKGROUND: mockBgSha,
+        },
+        requiresConfirmation: false,
+        estimatedExecutionMs: 80,
+        createdAt: new Date(),
+      };
+
+      const result = await useCase.executePlan({
+        creativeJobId: 'job-p1',
+        plan,
+        actorUserId: 'user-editor',
+        actorRoles: [RoleCode.MARKETING_EDITOR],
+      });
+
+      expect(result.isPassed).toBe(true);
+      expect(result.visualAsset.versionNumber).toBe(2);
+      expect(result.posterBuffer).toEqual(mockRenderedBuffer);
+
+      // Verify ZERO AI calls were made
+      expect(generateBackgroundMock).not.toHaveBeenCalled();
+
+      // Verify compositor called with updated spec
+      expect(renderPosterMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          posterSpec: expect.objectContaining({
+            headline: 'Parisian Midnight',
+            price: '185 EUR',
+          }),
+          canonicalProductSha256: mockProductSha,
+          backgroundSha256: mockBgSha,
+        }),
+      );
+
+      // Cryptographic hash continuity assertions
+      expect(result.visualAsset.sourceProductAssetDigest).toBe(mockProductSha);
+      expect(result.visualAsset.backgroundAssetDigest).toBe(mockBgSha);
+
+      // Invalidation assessment checks
+      expect(result.invalidationAssessment).toBeDefined();
+      expect(result.invalidationAssessment?.invalidatedApprovalDomains).toContain(
+        ApprovalDomain.CONTENT_APPROVED,
+      );
+      expect(result.invalidationAssessment?.invalidatedApprovalDomains).toContain(
+        ApprovalDomain.VISUAL_APPROVED,
+      );
+      expect(result.invalidationAssessment?.preservedApprovalDomains).toContain(
+        ApprovalDomain.PRODUCT_GOVERNANCE_APPROVED,
+      );
+    });
+
+    it('executes targeted layout revision (placement & scale) with zero drift on preserved layers', async () => {
+      const { useCase, generateBackgroundMock, renderPosterMock } = setupMocks();
+
+      const plan: RevisionPlan = {
+        id: 'plan-layout-1',
+        creativeJobId: 'job-p1',
+        baseVersionNumber: 1,
+        requestedByUserId: 'user-editor',
+        rawInstruction: 'Align: left; Scale: 1.25',
+        executionStrategy: 'ZERO_AI_COMPOSITE',
+        confidence: 'CONFIDENT',
+        confidenceScore: 0.95,
+        mutations: [
+          {
+            target: RevisionTargetType.PRODUCT_PLACEMENT,
+            fieldName: 'productPlacement',
+            requestedValue: 'LEFT',
+          },
+          {
+            target: RevisionTargetType.PRODUCT_SCALE,
+            fieldName: 'productScale',
+            requestedValue: 1.25,
+          },
+        ],
+        affectedLayerGroups: ['PRODUCT_HERO', 'SURFACE_SHADOW'],
+        preservedLayerDigests: {
+          BACKGROUND: mockBgSha,
+        },
+        requiresConfirmation: false,
+        estimatedExecutionMs: 90,
+        createdAt: new Date(),
+      };
+
+      const result = await useCase.executePlan({
+        creativeJobId: 'job-p1',
+        plan,
+        actorUserId: 'user-editor',
+        actorRoles: [RoleCode.MARKETING_EDITOR],
+      });
+
+      expect(result.isPassed).toBe(true);
+      expect(generateBackgroundMock).not.toHaveBeenCalled();
+
+      expect(renderPosterMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          posterSpec: expect.objectContaining({
+            productPlacement: 'LEFT',
+            layoutIntent: expect.objectContaining({ productScale: 1.25 }),
+          }),
+          backgroundSha256: mockBgSha,
+        }),
+      );
+
+      expect(result.visualAsset.backgroundAssetDigest).toBe(mockBgSha);
+      expect(result.visualAsset.sourceProductAssetDigest).toBe(mockProductSha);
+    });
+
+    it('executes AI background regeneration with confirmed plan, updates background digest and preserves product hero', async () => {
+      const { useCase, generateBackgroundMock } = setupMocks();
+
+      const plan: RevisionPlan = {
+        id: 'plan-style-1',
+        creativeJobId: 'job-p1',
+        baseVersionNumber: 1,
+        requestedByUserId: 'user-admin',
+        rawInstruction: 'Style: Nocturne Royale',
+        executionStrategy: 'AI_BACKGROUND_REGEN',
+        confidence: 'CONFIDENT',
+        confidenceScore: 1.0,
+        mutations: [
+          {
+            target: RevisionTargetType.STYLE_PRESET,
+            fieldName: 'stylePreset',
+            requestedValue: 'NOCTURNE_ROYALE',
+          },
+        ],
+        affectedLayerGroups: ['BACKGROUND', 'SURFACE_SHADOW'],
+        preservedLayerDigests: {
+          PRODUCT_HERO: mockProductSha,
+        },
+        requiresConfirmation: true,
+        estimatedExecutionMs: 3500,
+        createdAt: new Date(),
+      };
+
+      const result = await useCase.executePlan({
+        creativeJobId: 'job-p1',
+        plan,
+        confirmed: true,
+        actorUserId: 'user-admin',
+        actorRoles: [RoleCode.ADMIN],
+      });
+
+      expect(result.isPassed).toBe(true);
+      expect(generateBackgroundMock).toHaveBeenCalledTimes(1);
+
+      // Authentic product cutout MUST be preserved bit-for-bit
+      expect(result.visualAsset.sourceProductAssetDigest).toBe(mockProductSha);
+
+      // Invalidation assessment: visual approval invalidated, but content approval preserved!
+      expect(result.invalidationAssessment?.invalidatedApprovalDomains).toContain(
+        ApprovalDomain.VISUAL_APPROVED,
+      );
+      expect(result.invalidationAssessment?.preservedApprovalDomains).toContain(
+        ApprovalDomain.CONTENT_APPROVED,
+      );
+    });
+
+    it('rejects unconfirmed plan when requiresConfirmation is true', async () => {
+      const { useCase, generateBackgroundMock, renderPosterMock } = setupMocks();
+
+      const plan: RevisionPlan = {
+        id: 'plan-ambig-1',
+        creativeJobId: 'job-p1',
+        baseVersionNumber: 1,
+        requestedByUserId: 'user-editor',
+        rawInstruction: 'make it feel darker and moodier',
+        executionStrategy: 'AI_BACKGROUND_REGEN',
+        confidence: 'AMBIGUOUS',
+        confidenceScore: 0.72,
+        mutations: [
+          {
+            target: RevisionTargetType.STYLE_PRESET,
+            fieldName: 'stylePreset',
+            requestedValue: 'NOCTURNE_ROYALE',
+          },
+        ],
+        affectedLayerGroups: ['BACKGROUND'],
+        preservedLayerDigests: {
+          PRODUCT_HERO: mockProductSha,
+        },
+        requiresConfirmation: true,
+        confirmationReason: 'Ambiguous instruction mapped to Nocturne Royale',
+        estimatedExecutionMs: 4000,
+        createdAt: new Date(),
+      };
+
+      await expect(
+        useCase.executePlan({
+          creativeJobId: 'job-p1',
+          plan,
+          confirmed: false,
+          actorUserId: 'user-admin',
+          actorRoles: [RoleCode.ADMIN],
+        }),
+      ).rejects.toThrow(AmbiguousRevisionError);
+
+      expect(generateBackgroundMock).not.toHaveBeenCalled();
+      expect(renderPosterMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects revision when base version does not match source asset version (optimistic concurrency)', async () => {
+      const { useCase } = setupMocks();
+
+      const plan: RevisionPlan = {
+        id: 'plan-stale-1',
+        creativeJobId: 'job-p1',
+        baseVersionNumber: 5, // Source asset is version 1!
+        requestedByUserId: 'user-editor',
+        rawInstruction: 'Headline: Outdated Edit',
+        executionStrategy: 'ZERO_AI_COMPOSITE',
+        confidence: 'CONFIDENT',
+        confidenceScore: 1.0,
+        mutations: [
+          {
+            target: RevisionTargetType.HEADLINE,
+            fieldName: 'headline',
+            requestedValue: 'Outdated Edit',
+          },
+        ],
+        affectedLayerGroups: ['TYPOGRAPHY'],
+        preservedLayerDigests: {
+          PRODUCT_HERO: mockProductSha,
+          BACKGROUND: mockBgSha,
+        },
+        requiresConfirmation: false,
+        estimatedExecutionMs: 80,
+        createdAt: new Date(),
+      };
+
+      await expect(
+        useCase.executePlan({
+          creativeJobId: 'job-p1',
+          plan,
+          actorUserId: 'user-editor',
+          actorRoles: [RoleCode.MARKETING_EDITOR],
+        }),
+      ).rejects.toThrow(CreativeStaleVersionError);
+    });
+
+    it('detects and rejects layer drift when non-targeted layer hash does not match source digest', async () => {
+      const { useCase } = setupMocks();
+
+      const plan: RevisionPlan = {
+        id: 'plan-drift-1',
+        creativeJobId: 'job-p1',
+        baseVersionNumber: 1,
+        requestedByUserId: 'user-editor',
+        rawInstruction: 'Headline: Drift Test',
+        executionStrategy: 'ZERO_AI_COMPOSITE',
+        confidence: 'CONFIDENT',
+        confidenceScore: 1.0,
+        mutations: [
+          {
+            target: RevisionTargetType.HEADLINE,
+            fieldName: 'headline',
+            requestedValue: 'Drift Test',
+          },
+        ],
+        affectedLayerGroups: ['TYPOGRAPHY'],
+        preservedLayerDigests: {
+          PRODUCT_HERO: 'unexpected-tampered-product-hash',
+          BACKGROUND: mockBgSha,
+        },
+        requiresConfirmation: false,
+        estimatedExecutionMs: 80,
+        createdAt: new Date(),
+      };
+
+      await expect(
+        useCase.executePlan({
+          creativeJobId: 'job-p1',
+          plan,
+          actorUserId: 'user-editor',
+          actorRoles: [RoleCode.MARKETING_EDITOR],
+        }),
+      ).rejects.toThrow(LayerDriftViolationError);
+    });
+
+    it('enforces permission matrix on executePlan', async () => {
+      const { useCase } = setupMocks();
+
+      const aiPlan: RevisionPlan = {
+        id: 'plan-perm-ai',
+        creativeJobId: 'job-p1',
+        baseVersionNumber: 1,
+        requestedByUserId: 'user-editor',
+        rawInstruction: 'New Background',
+        executionStrategy: 'AI_BACKGROUND_REGEN',
+        confidence: 'CONFIDENT',
+        confidenceScore: 1.0,
+        mutations: [
+          {
+            target: RevisionTargetType.NEW_BACKGROUND,
+            fieldName: 'newBackground',
+            requestedValue: true,
+          },
+        ],
+        affectedLayerGroups: ['BACKGROUND'],
+        preservedLayerDigests: {
+          PRODUCT_HERO: mockProductSha,
+        },
+        requiresConfirmation: true,
+        estimatedExecutionMs: 3000,
+        createdAt: new Date(),
+      };
+
+      // VIEWER lacks REGENERATE_CREATIVE
+      await expect(
+        useCase.executePlan({
+          creativeJobId: 'job-p1',
+          plan: aiPlan,
+          confirmed: true,
+          actorUserId: 'user-viewer',
+          actorRoles: [RoleCode.VIEWER],
+        }),
+      ).rejects.toThrow(ForbiddenError);
+
+      const zeroAiPlan: RevisionPlan = {
+        id: 'plan-perm-zero',
+        creativeJobId: 'job-p1',
+        baseVersionNumber: 1,
+        requestedByUserId: 'user-viewer',
+        rawInstruction: 'Headline: Read Only Attempt',
+        executionStrategy: 'ZERO_AI_COMPOSITE',
+        confidence: 'CONFIDENT',
+        confidenceScore: 1.0,
+        mutations: [
+          {
+            target: RevisionTargetType.HEADLINE,
+            fieldName: 'headline',
+            requestedValue: 'Read Only Attempt',
+          },
+        ],
+        affectedLayerGroups: ['TYPOGRAPHY'],
+        preservedLayerDigests: {
+          PRODUCT_HERO: mockProductSha,
+          BACKGROUND: mockBgSha,
+        },
+        requiresConfirmation: false,
+        estimatedExecutionMs: 80,
+        createdAt: new Date(),
+      };
+
+      // VIEWER lacks EDIT_CREATIVE
+      await expect(
+        useCase.executePlan({
+          creativeJobId: 'job-p1',
+          plan: zeroAiPlan,
+          actorUserId: 'user-viewer',
+          actorRoles: [RoleCode.VIEWER],
+        }),
+      ).rejects.toThrow(ForbiddenError);
+    });
+
+    it('emits enriched CREATIVE_REVISED outbox event when outboxWriter is provided', async () => {
+      const { useCase } = setupMocks();
+
+      const appendMock = jest.fn((_event: OutboxEventDraft): Promise<string> =>
+        Promise.resolve('outbox-rev-1'),
+      );
+      const outboxWriter: OutboxWriter = { append: appendMock };
+
+      const plan: RevisionPlan = {
+        id: 'plan-enriched-outbox',
+        creativeJobId: 'job-p1',
+        baseVersionNumber: 1,
+        requestedByUserId: 'user-editor',
+        rawInstruction: 'Headline: Luxury Reimagined',
+        executionStrategy: 'ZERO_AI_COMPOSITE',
+        confidence: 'CONFIDENT',
+        confidenceScore: 1.0,
+        mutations: [
+          {
+            target: RevisionTargetType.HEADLINE,
+            fieldName: 'headline',
+            requestedValue: 'Luxury Reimagined',
+          },
+        ],
+        affectedLayerGroups: ['TYPOGRAPHY'],
+        preservedLayerDigests: {
+          PRODUCT_HERO: mockProductSha,
+          BACKGROUND: mockBgSha,
+        },
+        requiresConfirmation: false,
+        estimatedExecutionMs: 80,
+        createdAt: new Date(),
+      };
+
+      const result = await useCase.executePlan({
+        creativeJobId: 'job-p1',
+        plan,
+        actorUserId: 'user-editor',
+        actorRoles: [RoleCode.MARKETING_EDITOR],
+        outboxWriter,
+      });
+
+      expect(result.isPassed).toBe(true);
+      expect(appendMock).toHaveBeenCalledTimes(1);
+
+      const appendedEvent = appendMock.mock.calls[0]![0];
+      expect(appendedEvent.topic).toBe('CREATIVE_REVISED');
+      expect(appendedEvent.aggregateType).toBe('CreativeJob');
+      expect(appendedEvent.aggregateId).toBe('job-p1');
+      expect(appendedEvent.idempotencyKey).toBe(
+        `creative-job:job-p1:revised:${result.visualAsset.id}`,
+      );
+
+      const payload = appendedEvent.payload as Record<string, unknown>;
+      expect(payload.creativeJobId).toBe('job-p1');
+      expect(payload.visualAssetId).toBe(result.visualAsset.id);
+      expect(payload.previousVisualAssetId).toBe('asset-v1');
+      expect(payload.versionNumber).toBe(2);
+      expect(payload.baseVersionNumber).toBe(1);
+      expect(payload.planId).toBe('plan-enriched-outbox');
+      expect(payload.rawInstruction).toBe('Headline: Luxury Reimagined');
+      expect(payload.executionStrategy).toBe('ZERO_AI_COMPOSITE');
+      expect(payload.mutations).toBeDefined();
+
+      const assessment = payload.invalidationAssessment as Record<string, unknown>;
+      expect(assessment).toBeDefined();
+      expect(assessment.invalidatedGateCodes).toBeDefined();
+      expect(assessment.preservedGateCodes).toBeDefined();
+      expect(assessment.invalidatedApprovalDomains).toBeDefined();
+      expect(assessment.preservedApprovalDomains).toBeDefined();
+      expect(assessment.affectedLayerGroups).toContain('TYPOGRAPHY');
+      expect(assessment.preservedLayerDigests).toBeDefined();
     });
   });
 });
