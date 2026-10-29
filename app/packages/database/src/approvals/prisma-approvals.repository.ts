@@ -15,7 +15,10 @@ import {
   type CreateApprovalInput,
   type CreatePendingInteractionInput,
   type CreateRevisionRequestInput,
+  type ListReviewQueueQuery,
+  type PaginatedReviewQueue,
   type PendingReviewInteractionRecord,
+  type ReviewQueueItem,
   type RevisionRequestRecord,
 } from '@parisian-shopper/application';
 import { ValidationError } from '@parisian-shopper/common';
@@ -325,6 +328,160 @@ export class PrismaApprovalsRepository implements ApprovalsRepository {
       include: { approverUser: true },
     });
     return record === null ? null : toApprovalRecord(record);
+  }
+
+  public async findApprovalEventsByJobId(
+    contentJobId: string,
+  ): Promise<readonly ApprovalEventRecord[]> {
+    const records = await this.prisma.approvalEvent.findMany({
+      where: { contentJobId },
+      orderBy: { createdAt: 'desc' },
+      include: { approverUser: true },
+    });
+    return records.map(toApprovalRecord);
+  }
+
+  public async findReviewQueue(
+    query: ListReviewQueueQuery & { requesterUserId?: string },
+  ): Promise<PaginatedReviewQueue> {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.max(1, Math.min(100, query.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.ContentJobWhereInput = {};
+
+    if (query.status === 'UNDER_REVIEW') {
+      where.status = 'UNDER_REVIEW';
+    } else if (query.status === 'APPROVED') {
+      where.status = 'APPROVED';
+    } else if (query.status === 'REJECTED') {
+      where.status = 'REJECTED';
+    } else if (query.status === 'HISTORY') {
+      where.status = { in: ['APPROVED', 'REJECTED'] };
+    }
+
+    if (query.campaignId) {
+      where.campaignId = query.campaignId;
+    }
+
+    if (query.productSnapshotId) {
+      where.productSnapshotId = query.productSnapshotId;
+    }
+
+    if (query.requesterUserId) {
+      where.requesterUserId = query.requesterUserId;
+    }
+
+    if (query.search && query.search.trim().length > 0) {
+      const term = query.search.trim();
+      where.OR = [
+        { productSnapshot: { sku: { contains: term, mode: 'insensitive' } } },
+        { productSnapshot: { productName: { contains: term, mode: 'insensitive' } } },
+        { campaign: { name: { contains: term, mode: 'insensitive' } } },
+        { campaign: { code: { contains: term, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [total, jobs] = await Promise.all([
+      this.prisma.contentJob.count({ where }),
+      this.prisma.contentJob.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { updatedAt: 'desc' },
+        include: {
+          productSnapshot: true,
+          requester: true,
+          campaign: true,
+          versions: {
+            orderBy: { versionNumber: 'desc' },
+            take: 1,
+            include: {
+              validationResults: { orderBy: { createdAt: 'desc' }, take: 1 },
+              revisionRequest: true,
+            },
+          },
+          revisionRequests: {
+            where: { status: 'PENDING' },
+            take: 1,
+          },
+          approvalEvents: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            include: { approverUser: true },
+          },
+        },
+      }),
+    ]);
+
+    const items: ReviewQueueItem[] = jobs.map((job) => {
+      const targetVersion = job.versions[0];
+      const val = targetVersion?.validationResults[0];
+      const output = targetVersion?.structuredOutput as {
+        headline?: string;
+        english_caption?: string;
+      } | null;
+      const brand = job.productSnapshot.brand;
+      const priceUsd = Number(job.productSnapshot.price) || 0;
+      const images = Array.isArray(job.productSnapshot.images)
+        ? (job.productSnapshot.images as unknown[])
+        : [];
+      const primaryImage =
+        (images.find((img: unknown) => (img as { role?: string })?.role === 'primary') as {
+          url?: string;
+        }) ?? (images[0] as { url?: string });
+      const imageUrl = primaryImage?.url;
+
+      const activeRev = job.revisionRequests[0];
+      const latestAppr = job.approvalEvents[0];
+
+      return {
+        jobId: job.id,
+        jobStatus: job.status,
+        productSnapshotId: job.productSnapshotId,
+        sku: job.productSnapshot.sku,
+        productName: job.productSnapshot.productName,
+        brand,
+        priceUsd,
+        ...(imageUrl ? { imageUrl } : {}),
+        ...(job.campaignId ? { campaignId: job.campaignId } : {}),
+        ...(job.campaign?.code ? { campaignCode: job.campaign.code } : {}),
+        ...(job.campaign?.name ? { campaignName: job.campaign.name } : {}),
+        requesterUserId: job.requesterUserId,
+        requesterDisplayName: job.requester.displayName,
+        currentVersionNumber: targetVersion?.versionNumber ?? 0,
+        targetVersionId: targetVersion?.id ?? '',
+        targetVersionNumber: targetVersion?.versionNumber ?? 0,
+        targetVersionAuthorUserId:
+          targetVersion?.revisionRequest?.requestedByUserId ?? job.requesterUserId,
+        headline: output?.headline ?? '',
+        ...(output?.english_caption ? { englishCaption: output.english_caption } : {}),
+        validationStatus: val?.status ?? 'UNKNOWN',
+        blockingCount: val?.blockingCount ?? 0,
+        warningCount: val?.warningCount ?? 0,
+        submittedAt: targetVersion?.createdAt ?? job.createdAt,
+        ...(activeRev ? { activeRevision: toRevisionRecord(activeRev) } : {}),
+        ...(latestAppr
+          ? {
+              latestApproval: {
+                decision: latestAppr.decision,
+                approverUserId: latestAppr.approverUserId,
+                approverDisplayName: latestAppr.approverUser.displayName,
+                ...(latestAppr.comment ? { comment: latestAppr.comment } : {}),
+                decidedAt: latestAppr.createdAt,
+              },
+            }
+          : {}),
+      };
+    });
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    };
   }
 
   public async getReviewState(contentJobId: string): Promise<ContentReviewState | null> {

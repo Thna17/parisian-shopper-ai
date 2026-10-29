@@ -668,7 +668,27 @@ export class AmbiguousRevisionError extends ApplicationError {
     super({
       code: 'CONFLICT',
       publicMessage: `Ambiguous revision requires confirmation: ${message}`,
-      ...(details !== undefined ? { details } : {}),
+      details: { ...(details ?? {}) },
+    });
+  }
+}
+
+export class CreativeExportNotFoundError extends ApplicationError {
+  public constructor(exportId: string) {
+    super({
+      code: 'NOT_FOUND',
+      publicMessage: `Creative export "${exportId}" was not found.`,
+      details: { exportId },
+    });
+  }
+}
+
+export class CreativeExportConflictError extends ApplicationError {
+  public constructor(visualAssetId: string, format: string, encoding: string) {
+    super({
+      code: 'CONFLICT',
+      publicMessage: `Creative export already exists for asset "${visualAssetId}", format "${format}", and encoding "${encoding}".`,
+      details: { visualAssetId, format, encoding },
     });
   }
 }

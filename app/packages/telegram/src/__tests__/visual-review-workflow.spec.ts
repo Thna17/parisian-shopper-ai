@@ -19,6 +19,7 @@ import {
   GenerateCreativeUseCase,
   RevisePosterUseCase,
   ExportPosterUseCase,
+  ExportDownloadTokenService,
   TelegramActionTokenService,
 } from '@parisian-shopper/application';
 import { FeatureFlag } from '@parisian-shopper/config';
@@ -1263,6 +1264,86 @@ describe('Telegram Visual Review Workflow', () => {
         expect(response.resourceKey).toBe(sampleJob.id);
         expect(response.messageType).toBe('INTERACTION_PROMPT');
         expect(response.messages[0]?.messageType).toBe('INTERACTION_PROMPT');
+      });
+
+      it('W32-D: executes ExportPosterUseCase and returns documentBuffer and direct download token link', async () => {
+        const mockExportUseCase: jest.Mocked<ExportPosterUseCase> = {
+          execute: jest.fn(() =>
+            Promise.resolve({
+              exportId: 'export-w32d-123',
+              storageKey: 'cas/creative/sample.png',
+              validationStatus: 'PASSED' as const,
+              filename: 'chanel-no-5-story.png',
+              buffer: Buffer.from('mock-export-bytes'),
+              mimeType: 'image/png',
+              width: 1080,
+              height: 1920,
+              byteSize: 10240,
+              sha256: 'abc1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+            }),
+          ),
+        } as unknown as jest.Mocked<ExportPosterUseCase>;
+
+        const tokenService = new ExportDownloadTokenService({
+          secret: 'test-secret-1234567890123456',
+          ttlSeconds: 3600,
+        });
+
+        const exportHandler = new VisualReviewCallbackHandler(
+          jobRepo,
+          assetRepo,
+          revisionRepo,
+          approvalRepo,
+          workflowRepo,
+          tokens,
+          approveCreative,
+          generateCreative,
+          mockLogger,
+          undefined,
+          undefined,
+          undefined,
+          mockExportUseCase,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          tokenService,
+        );
+
+        const token: TelegramActionTokenRecord = {
+          id: 'tok-export-story-png',
+          telegramIdentityId: actor.identityId,
+          action: TelegramAction.SELECT_EXPORT_FORMAT,
+          resourceId: sampleJob.id,
+          metadata: {
+            creativeJobId: sampleJob.id,
+            visualAssetId: 'asset-1',
+            format: 'STORY_1080_1920',
+            encoding: 'PNG',
+          },
+          singleUse: false,
+          expiresAt: new Date(Date.now() + 60_000),
+        };
+
+        const response = await exportHandler.handleAction(actor, token);
+
+        expect(mockExportUseCase.execute).toHaveBeenCalledWith({
+          creativeJobId: sampleJob.id,
+          visualAssetId: 'asset-1',
+          format: 'STORY_1080_1920',
+          encoding: 'PNG',
+          actorUserId: actor.internalUserId,
+          actorRoles: actor.roles,
+        });
+
+        expect(response.messages).toHaveLength(1);
+        const msg = response.messages[0]!;
+        expect(msg.documentBuffer).toEqual(Buffer.from('mock-export-bytes'));
+        expect(msg.documentFilename).toBe('chanel-no-5-story.png');
+        expect(msg.photoBuffer).toEqual(Buffer.from('mock-export-bytes'));
+        expect(msg.text).toContain('Export Generated: chanel-no-5-story.png');
+        expect(msg.text).toContain('1080×1920');
+        expect(msg.text).toContain('/v1/creatives/exports/export-w32d-123/download?token=');
       });
     });
   });

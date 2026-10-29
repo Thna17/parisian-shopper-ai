@@ -180,7 +180,17 @@ export class GrammyTelegramGateway implements TelegramDeliveryGateway {
         continue;
       }
 
-      if (message.photoBuffer !== undefined) {
+      if (message.documentBuffer !== undefined) {
+        await this.bot.api.sendDocument(
+          telegramUserId,
+          new InputFile(message.documentBuffer, message.documentFilename ?? 'creative.png'),
+          {
+            caption: message.text,
+            ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
+            ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
+          },
+        );
+      } else if (message.photoBuffer !== undefined) {
         await this.bot.api.sendPhoto(
           telegramUserId,
           new InputFile(message.photoBuffer, 'creative.png'),

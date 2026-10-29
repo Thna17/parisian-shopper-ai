@@ -1,9 +1,17 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { describe, expect, it, jest } from '@jest/globals';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { type ApplicationLogger, ForbiddenError, ValidationError } from '@parisian-shopper/common';
 import { RoleCode } from '../../auth/domain/permissions.js';
 import { ExportPosterUseCase } from './export-poster.use-case.js';
+import {
+  type CreativeExportRepository,
+  type CreateCreativeExportInput,
+  type CreativeExportRecord,
+} from './creative-export.repository.js';
+import { HardVisualGatesEngine } from '../domain/services/hard-visual-gates.engine.js';
+import { HardGateCode } from '../domain/services/hard-visual-gates.port.js';
 import {
   type CreateCreativeJobInput,
   type CreativeJobRecord,
@@ -165,6 +173,8 @@ describe('ExportPosterUseCase', () => {
     readonly jobStatus?: CreativeJobStatus;
     readonly assetOverrides?: Partial<VisualAssetRecord>;
     readonly approvalEvents?: readonly CreativeApprovalEventRecord[];
+    readonly exportRepo?: CreativeExportRepository;
+    readonly hardGatesEngine?: HardVisualGatesEngine;
   }
 
   interface SetupMocksResult {
@@ -177,6 +187,7 @@ describe('ExportPosterUseCase', () => {
     readonly approvalRepo: CreativeApprovalRepository;
     readonly storageSaveMock: jest.Mock<(input: SaveAssetInput) => Promise<StoredAssetMetadata>>;
     readonly storageGetBufferMock: jest.Mock<(key: string) => Promise<Buffer | null>>;
+    readonly exportRepoMock: jest.Mocked<CreativeExportRepository>;
   }
 
   function setupMocks(options?: SetupMocksOptions): SetupMocksResult {
@@ -230,8 +241,17 @@ describe('ExportPosterUseCase', () => {
       ),
     };
 
-    const storageSaveMock = jest.fn((_input: SaveAssetInput): Promise<StoredAssetMetadata> => {
-      throw new Error('Not implemented');
+    const storageSaveMock = jest.fn((input: SaveAssetInput): Promise<StoredAssetMetadata> => {
+      const sha = createHash('sha256').update(input.buffer).digest('hex');
+      const ext = input.mimeType === 'image/jpeg' ? 'jpg' : 'png';
+      return Promise.resolve({
+        storageKey: `cas/${sha.slice(0, 2)}/${sha.slice(2, 4)}/${sha}.${ext}`,
+        sha256Digest: sha,
+        mimeType: input.mimeType,
+        byteSize: input.buffer.length,
+        assetRole: input.assetRole,
+        createdAt: new Date(),
+      });
     });
     const storageGetBufferMock = jest.fn((key: string): Promise<Buffer | null> => {
       if (key.includes(mockProductSha)) return Promise.resolve(mockProductBuffer);
@@ -346,6 +366,34 @@ describe('ExportPosterUseCase', () => {
       ),
     };
 
+    const exportRepoMock: jest.Mocked<CreativeExportRepository> = {
+      createExport: jest.fn((input: CreateCreativeExportInput): Promise<CreativeExportRecord> =>
+        Promise.resolve({
+          id: 'export-exp-1',
+          creativeJobId: input.creativeJobId,
+          visualAssetId: input.visualAssetId,
+          format: input.format,
+          encoding: input.encoding,
+          width: input.width,
+          height: input.height,
+          aspectRatio: input.aspectRatio,
+          byteSize: input.byteSize,
+          sha256: input.sha256,
+          storageKey: input.storageKey,
+          quality: input.quality,
+          validationStatus: input.validationStatus ?? 'PASSED',
+          exportedByUserId: input.exportedByUserId,
+          createdAt: new Date(),
+        }),
+      ),
+      findById: jest.fn(() => Promise.resolve(null)),
+      findByAssetAndFormat: jest.fn(() => Promise.resolve(null)),
+      listByJobId: jest.fn(() => Promise.resolve([])),
+      listByVisualAssetId: jest.fn(() => Promise.resolve([])),
+    };
+
+    const effectiveExportRepo = options?.exportRepo ?? exportRepoMock;
+
     const useCase = new ExportPosterUseCase(
       jobRepo,
       assetRepo,
@@ -355,6 +403,9 @@ describe('ExportPosterUseCase', () => {
       approvalRepo,
       logger,
       posterCompositor,
+      undefined,
+      effectiveExportRepo,
+      options?.hardGatesEngine,
     );
 
     return {
@@ -365,6 +416,7 @@ describe('ExportPosterUseCase', () => {
       approvalRepo,
       storageSaveMock,
       storageGetBufferMock,
+      exportRepoMock,
     };
   }
 
@@ -920,6 +972,324 @@ describe('ExportPosterUseCase', () => {
       expect(assetFindByIdMock).toHaveBeenCalledWith('asset-exp-1');
       expect(assetFindByIdMock).not.toHaveBeenCalledWith('asset-exp-newer-unapproved');
       expect(renderPosterMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Multi-Format Export Ledger & Hard Gate Verification (W32-C)', () => {
+    it('persists export ledger record with dimensions, sha256, and storage key', async () => {
+      const { useCase, exportRepoMock, storageSaveMock } = setupMocks();
+
+      const result = await useCase.execute({
+        creativeJobId: 'job-exp-1',
+        visualAssetId: 'asset-exp-1',
+        format: 'PORTRAIT_1080_1350',
+        encoding: 'JPEG',
+        quality: 95,
+        actorUserId: 'user-approver-1',
+        actorRoles: [RoleCode.MARKETING_APPROVER],
+      });
+
+      expect(result.exportId).toBe('export-exp-1');
+      expect(result.storageKey).toMatch(/^cas\//);
+      expect(result.validationStatus).toBe('PASSED');
+      expect(result.width).toBe(1080);
+      expect(result.height).toBe(1350);
+      expect(result.mimeType).toBe('image/jpeg');
+
+      expect(exportRepoMock.createExport).toHaveBeenCalledWith({
+        creativeJobId: 'job-exp-1',
+        visualAssetId: 'asset-exp-1',
+        format: 'PORTRAIT_1080_1350',
+        encoding: 'JPEG',
+        width: 1080,
+        height: 1350,
+        aspectRatio: '4:5',
+        byteSize: result.byteSize,
+        sha256: result.sha256,
+        storageKey: result.storageKey!,
+        quality: 95,
+        validationStatus: 'PASSED',
+        exportedByUserId: 'user-approver-1',
+      });
+
+      expect(storageSaveMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assetRole: 'COMPOSITED_CREATIVE',
+          mimeType: 'image/jpeg',
+          width: 1080,
+          height: 1350,
+        }),
+      );
+    });
+
+    it('idempotently reuses existing export from ledger and CAS without re-compositing', async () => {
+      const { useCase, exportRepoMock, storageGetBufferMock, renderPosterMock } = setupMocks();
+
+      const cachedBuffer = Buffer.from('cached-poster-binary-bytes');
+      const cachedSha = createHash('sha256').update(cachedBuffer).digest('hex');
+
+      const existingRecord: CreativeExportRecord = {
+        id: 'export-cached-1',
+        creativeJobId: 'job-exp-1',
+        visualAssetId: 'asset-exp-1',
+        format: 'SQUARE_1080',
+        encoding: 'PNG',
+        width: 1080,
+        height: 1080,
+        aspectRatio: '1:1',
+        byteSize: cachedBuffer.length,
+        sha256: cachedSha,
+        storageKey: 'cas/ca/ch/cached-key.png',
+        quality: undefined,
+        validationStatus: 'PASSED',
+        exportedByUserId: 'user-prev',
+        createdAt: new Date('2026-10-29T00:00:00.000Z'),
+      };
+
+      exportRepoMock.findByAssetAndFormat.mockResolvedValue(existingRecord);
+      storageGetBufferMock.mockImplementation((key) =>
+        key === 'cas/ca/ch/cached-key.png'
+          ? Promise.resolve(cachedBuffer)
+          : Promise.resolve(mockBgBuffer),
+      );
+
+      const result = await useCase.execute({
+        creativeJobId: 'job-exp-1',
+        visualAssetId: 'asset-exp-1',
+        format: 'SQUARE_1080',
+        encoding: 'PNG',
+        actorUserId: 'user-approver-1',
+        actorRoles: [RoleCode.MARKETING_APPROVER],
+      });
+
+      expect(renderPosterMock).not.toHaveBeenCalled();
+      expect(result.exportId).toBe('export-cached-1');
+      expect(result.storageKey).toBe('cas/ca/ch/cached-key.png');
+      expect(result.buffer.toString()).toBe('cached-poster-binary-bytes');
+      expect(result.sha256).toBe(cachedSha);
+      expect(result.validationStatus).toBe('PASSED');
+    });
+
+    it('rejects export with ValidationError when post-adaptation hard visual gates fail (CTA-Hero collision)', async () => {
+      const gatesEngine = new HardVisualGatesEngine();
+      const { useCase, renderPosterMock, exportRepoMock } = setupMocks({
+        hardGatesEngine: gatesEngine,
+      });
+
+      renderPosterMock.mockImplementation(
+        async (input: RenderPosterInput): Promise<RenderPosterResult> => {
+          const width = input.posterSpec.outputFormat.width;
+          const height = input.posterSpec.outputFormat.height;
+          const buf = await createDummyRenderedBuffer(width, height);
+          const digest = createHash('sha256').update(buf).digest('hex');
+          return {
+            posterBuffer: buf,
+            mimeType: 'image/png',
+            sha256: digest,
+            width,
+            height,
+            byteSize: buf.length,
+            latencyMs: 15,
+            compositorVersion: 'v2',
+            layoutManifest: {
+              version: '1.0',
+              templateId: input.posterSpec.templateId,
+              dimensions: { width, height },
+              safeMargins: { top: 40, bottom: 40, left: 40, right: 40 },
+              elements: [
+                {
+                  id: 'hero',
+                  type: 'PRODUCT',
+                  boundingBox: { x: 300, y: 300, width: 400, height: 400 },
+                },
+                {
+                  id: 'cta_button',
+                  type: 'BUTTON',
+                  boundingBox: { x: 350, y: 350, width: 200, height: 80 },
+                },
+              ],
+            },
+            productDigest: mockProductSha,
+            backgroundDigest: mockBgSha,
+            outputDigest: digest,
+          };
+        },
+      );
+
+      await expect(
+        useCase.execute({
+          creativeJobId: 'job-exp-1',
+          visualAssetId: 'asset-exp-1',
+          format: 'SQUARE_1080',
+          encoding: 'PNG',
+          actorUserId: 'user-approver-1',
+          actorRoles: [RoleCode.MARKETING_APPROVER],
+        }),
+      ).rejects.toThrow(HardGateCode.GATE_CTA_HERO_COLLISION);
+
+      expect(exportRepoMock.createExport).not.toHaveBeenCalled();
+    });
+
+    it('rejects export with ValidationError when typography penetrates safe margins', async () => {
+      const gatesEngine = new HardVisualGatesEngine();
+      const { useCase, renderPosterMock, exportRepoMock } = setupMocks({
+        hardGatesEngine: gatesEngine,
+      });
+
+      renderPosterMock.mockImplementation(
+        async (input: RenderPosterInput): Promise<RenderPosterResult> => {
+          const width = input.posterSpec.outputFormat.width;
+          const height = input.posterSpec.outputFormat.height;
+          const buf = await createDummyRenderedBuffer(width, height);
+          const digest = createHash('sha256').update(buf).digest('hex');
+          return {
+            posterBuffer: buf,
+            mimeType: 'image/png',
+            sha256: digest,
+            width,
+            height,
+            byteSize: buf.length,
+            latencyMs: 15,
+            compositorVersion: 'v2',
+            layoutManifest: {
+              version: '1.0',
+              templateId: input.posterSpec.templateId,
+              dimensions: { width, height },
+              safeMargins: { top: 40, bottom: 40, left: 40, right: 40 },
+              elements: [
+                {
+                  id: 'headline',
+                  type: 'TEXT',
+                  text: 'Offscreen Penetrating Headline',
+                  boundingBox: { x: 5, y: 5, width: 600, height: 60 },
+                },
+              ],
+            },
+            productDigest: mockProductSha,
+            backgroundDigest: mockBgSha,
+            outputDigest: digest,
+          };
+        },
+      );
+
+      await expect(
+        useCase.execute({
+          creativeJobId: 'job-exp-1',
+          visualAssetId: 'asset-exp-1',
+          format: 'SQUARE_1080',
+          encoding: 'PNG',
+          actorUserId: 'user-approver-1',
+          actorRoles: [RoleCode.MARKETING_APPROVER],
+        }),
+      ).rejects.toThrow(HardGateCode.GATE_SAFE_MARGIN_VIOLATION);
+
+      expect(exportRepoMock.createExport).not.toHaveBeenCalled();
+    });
+
+    it('exports cleanly when layout satisfies all constraints with hard visual gates active', async () => {
+      const gatesEngine = new HardVisualGatesEngine();
+      const { useCase, renderPosterMock, exportRepoMock } = setupMocks({
+        hardGatesEngine: gatesEngine,
+      });
+
+      renderPosterMock.mockImplementation(
+        async (input: RenderPosterInput): Promise<RenderPosterResult> => {
+          const width = input.posterSpec.outputFormat.width;
+          const height = input.posterSpec.outputFormat.height;
+          const buf = await createDummyRenderedBuffer(width, height);
+          const digest = createHash('sha256').update(buf).digest('hex');
+          return {
+            posterBuffer: buf,
+            mimeType: 'image/png',
+            sha256: digest,
+            width,
+            height,
+            byteSize: buf.length,
+            latencyMs: 15,
+            compositorVersion: 'v2',
+            layoutManifest: {
+              version: '1.0',
+              templateId: input.posterSpec.templateId,
+              dimensions: { width, height },
+              safeMargins: { top: 40, bottom: 40, left: 40, right: 40 },
+              elements: [
+                {
+                  id: 'headline',
+                  type: 'TEXT',
+                  text: 'The Parisian Secret',
+                  boundingBox: { x: 100, y: 100, width: 880, height: 60 },
+                },
+                {
+                  id: 'hero',
+                  type: 'PRODUCT',
+                  boundingBox: { x: 240, y: 180, width: 600, height: 650 },
+                },
+                {
+                  id: 'cta',
+                  type: 'BUTTON',
+                  boundingBox: { x: 390, y: 880, width: 300, height: 60 },
+                },
+              ],
+            },
+            productDigest: mockProductSha,
+            backgroundDigest: mockBgSha,
+            outputDigest: digest,
+          };
+        },
+      );
+
+      const result = await useCase.execute({
+        creativeJobId: 'job-exp-1',
+        visualAssetId: 'asset-exp-1',
+        format: 'SQUARE_1080',
+        encoding: 'PNG',
+        actorUserId: 'user-approver-1',
+        actorRoles: [RoleCode.MARKETING_APPROVER],
+      });
+
+      expect(result.validationStatus).toBe('PASSED');
+      expect(result.exportId).toBe('export-exp-1');
+      expect(exportRepoMock.createExport).toHaveBeenCalledTimes(1);
+    });
+
+    it('emits CREATIVE_EXPORTED event to outboxWriter upon successful export persistence', async () => {
+      const { useCase, exportRepoMock } = setupMocks();
+      const appendMock = jest.fn((_event: unknown) => Promise.resolve('outbox-event-1'));
+      const mockOutboxWriter = { append: appendMock };
+
+      const result = await useCase.execute({
+        creativeJobId: 'job-exp-1',
+        visualAssetId: 'asset-exp-1',
+        format: 'PORTRAIT_1080_1350',
+        encoding: 'JPEG',
+        quality: 90,
+        actorUserId: 'user-approver-1',
+        actorRoles: [RoleCode.MARKETING_APPROVER],
+        outboxWriter: mockOutboxWriter,
+      });
+
+      expect(result.exportId).toBe('export-exp-1');
+      expect(exportRepoMock.createExport).toHaveBeenCalledTimes(1);
+      expect(appendMock).toHaveBeenCalledTimes(1);
+      expect(appendMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          topic: 'CREATIVE_EXPORTED',
+          aggregateType: 'CreativeExport',
+          aggregateId: 'export-exp-1',
+          payload: expect.objectContaining({
+            exportId: 'export-exp-1',
+            creativeJobId: 'job-exp-1',
+            visualAssetId: 'asset-exp-1',
+            format: 'PORTRAIT_1080_1350',
+            encoding: 'JPEG',
+            width: 1080,
+            height: 1350,
+            aspectRatio: '4:5',
+            validationStatus: 'PASSED',
+            exportedByUserId: 'user-approver-1',
+          }),
+        }),
+      );
     });
   });
 });

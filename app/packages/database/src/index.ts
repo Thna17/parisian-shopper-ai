@@ -19,3 +19,4 @@ export * from './auth/prisma-user-account.repository.js';
 export * from './campaigns/prisma-campaign.repository.js';
 export * from './creative/index.js';
 export * from './outbox/prisma-outbox-relay.repository.js';
+export * from './publishing/prisma-publishing.repository.js';

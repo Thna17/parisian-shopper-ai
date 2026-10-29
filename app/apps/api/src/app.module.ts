@@ -14,6 +14,10 @@ import { AuthModule } from './auth/auth.module.js';
 import { ProductsApiModule } from './products/products.module.js';
 import { CampaignsApiModule } from './campaigns/campaigns.module.js';
 import { ContentApiModule } from './content/content.module.js';
+import { ApprovalsApiModule } from './approvals/approvals.module.js';
+import { CreativesApiModule } from './creatives/creatives.module.js';
+import { CreativeApiModule } from './creative/creative.module.js';
+import { PublishingApiModule } from './publishing/publishing.module.js';
 
 @Module({
   imports: [
@@ -31,6 +35,10 @@ import { ContentApiModule } from './content/content.module.js';
     ProductsApiModule,
     CampaignsApiModule,
     ContentApiModule,
+    ApprovalsApiModule,
+    CreativesApiModule,
+    CreativeApiModule,
+    PublishingApiModule,
   ],
 })
 export class AppModule {}

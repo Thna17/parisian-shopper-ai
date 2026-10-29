@@ -19,6 +19,7 @@ interface MockModel {
   findMany: AsyncMock;
   findUniqueOrThrow: AsyncMock;
   update: AsyncMock;
+  count?: AsyncMock;
 }
 
 interface MockPrismaClient {
@@ -48,6 +49,7 @@ describe('PrismaCreativeSceneRepository', () => {
         findMany: jest.fn(),
         findUniqueOrThrow: jest.fn(),
         update: jest.fn(),
+        count: jest.fn(),
       },
       creativeSceneVersion: {
         create: jest.fn(),
@@ -469,6 +471,28 @@ describe('PrismaCreativeSceneRepository', () => {
       const list = await repository.listVersions('scene-1');
       expect(list).toHaveLength(1);
       expect(list[0]?.versionNumber).toBe(1);
+    });
+
+    it('paginates scenes with findScenes', async () => {
+      const now = new Date();
+      mockPrisma.creativeScene.count!.mockResolvedValue(1);
+      mockPrisma.creativeScene.findMany.mockResolvedValue([
+        {
+          id: 'scene-1',
+          creativeJobId: 'job-1',
+          campaignId: null,
+          title: 'Title',
+          currentVersionNumber: 1,
+          createdAt: now,
+          updatedAt: now,
+          versions: [],
+        },
+      ]);
+
+      const result = await repository.findScenes({ page: 1, limit: 10 });
+      expect(result.total).toBe(1);
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]?.scene.id).toBe('scene-1');
     });
   });
 });

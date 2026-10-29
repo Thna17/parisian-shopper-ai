@@ -44,6 +44,8 @@ export interface CreativeConfig {
   maxBytes: number;
   allowFakeInProduction: boolean;
   allowLegacyProductAssetFallback: boolean;
+  exportDownloadTokenSecret: string;
+  exportDownloadTokenTtlSeconds: number;
 }
 
 export interface HiggsfieldConfig {
@@ -154,6 +156,10 @@ export class AppConfigService {
       allowFakeInProduction: this.config.get('CREATIVE_ALLOW_FAKE_IN_PRODUCTION', { infer: true }),
       allowLegacyProductAssetFallback:
         this.config.get('ALLOW_LEGACY_PRODUCT_ASSET_FALLBACK', { infer: true }) ?? false,
+      exportDownloadTokenSecret: this.config.get('EXPORT_DOWNLOAD_TOKEN_SECRET', { infer: true }),
+      exportDownloadTokenTtlSeconds: this.config.get('EXPORT_DOWNLOAD_TOKEN_TTL_SECONDS', {
+        infer: true,
+      }),
     };
   }
 

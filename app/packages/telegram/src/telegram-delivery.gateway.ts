@@ -23,6 +23,17 @@ export interface TelegramDeliveryGateway {
     },
   ): Promise<{ messageId: number }>;
 
+  sendDocument?(
+    chatId: string,
+    documentBuffer: Buffer | Uint8Array,
+    filename: string,
+    options?: {
+      caption?: string;
+      parseMode?: 'MarkdownV2' | 'HTML' | 'Markdown';
+      buttons?: readonly (readonly TelegramButton[])[];
+    },
+  ): Promise<{ messageId: number }>;
+
   editMessageText(
     chatId: string,
     messageId: number,
@@ -80,6 +91,12 @@ export class FakeTelegramGateway implements TelegramDeliveryGateway {
   public readonly sentPhotos: {
     chatId: string;
     photoBuffer: Buffer | Uint8Array;
+    options?: Record<string, unknown> | undefined;
+  }[] = [];
+  public readonly sentDocuments: {
+    chatId: string;
+    documentBuffer: Buffer | Uint8Array;
+    filename: string;
     options?: Record<string, unknown> | undefined;
   }[] = [];
   public readonly editedMessages: {
@@ -151,6 +168,31 @@ export class FakeTelegramGateway implements TelegramDeliveryGateway {
       message: {
         text: options?.caption ?? '',
         photoBuffer,
+        ...(options?.buttons !== undefined ? { buttons: options.buttons } : {}),
+        ...(options?.parseMode !== undefined ? { parseMode: options.parseMode } : {}),
+      },
+    });
+    return Promise.resolve({ messageId });
+  }
+
+  public sendDocument(
+    chatId: string,
+    documentBuffer: Buffer | Uint8Array,
+    filename: string,
+    options?: {
+      caption?: string;
+      parseMode?: 'MarkdownV2' | 'HTML' | 'Markdown';
+      buttons?: readonly (readonly TelegramButton[])[];
+    },
+  ): Promise<{ messageId: number }> {
+    const messageId = ++this.nextMessageId;
+    this.sentDocuments.push({ chatId, documentBuffer, filename, options });
+    this.sent.push({
+      telegramUserId: chatId,
+      message: {
+        text: options?.caption ?? '',
+        documentBuffer,
+        documentFilename: filename,
         ...(options?.buttons !== undefined ? { buttons: options.buttons } : {}),
         ...(options?.parseMode !== undefined ? { parseMode: options.parseMode } : {}),
       },

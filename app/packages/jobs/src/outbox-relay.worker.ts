@@ -23,6 +23,7 @@ export const OUTBOX_RELAY_TOPICS = [
   'CONTENT_APPROVED',
   'CREATIVE_VALIDATED',
   'CREATIVE_APPROVED',
+  'CREATIVE_EXPORTED',
 ] as const;
 
 @Injectable()
@@ -89,6 +90,8 @@ export class OutboxRelayWorker implements OnModuleInit, OnModuleDestroy {
         await this.handleCreativeValidated(event);
       } else if (event.topic === 'CREATIVE_APPROVED') {
         await this.handleCreativeApproved(event);
+      } else if (event.topic === 'CREATIVE_EXPORTED') {
+        this.handleCreativeExported(event);
       }
       await this.repository.markProcessed(event.id, new Date());
       this.logger.log(
@@ -171,5 +174,17 @@ export class OutboxRelayWorker implements OnModuleInit, OnModuleDestroy {
         visualAssetId: event.payload.visualAssetId,
       });
     }
+  }
+
+  private handleCreativeExported(event: ClaimedOutboxEvent): void {
+    this.logger.log('Processed CREATIVE_EXPORTED outbox telemetry event', {
+      action: 'creative_exported_telemetry_dispatched',
+      outboxEventId: event.id,
+      exportId: event.payload.exportId,
+      creativeJobId: event.payload.creativeJobId,
+      visualAssetId: event.payload.visualAssetId,
+      format: event.payload.format,
+      encoding: event.payload.encoding,
+    });
   }
 }

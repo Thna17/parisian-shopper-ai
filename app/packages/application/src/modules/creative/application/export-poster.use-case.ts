@@ -8,6 +8,7 @@ import {
   APPLICATION_LOGGER,
   ForbiddenError,
   ValidationError,
+  type OutboxWriter,
 } from '@parisian-shopper/common';
 import { Permission, PermissionService } from '../../auth/domain/permissions.js';
 import { CREATIVE_JOB_REPOSITORY, type CreativeJobRepository } from './creative-job.repository.js';
@@ -32,6 +33,16 @@ import {
   type ContentGenerationRepository,
 } from '../../content/application/content-generation.repository.js';
 import {
+  CREATIVE_EXPORT_REPOSITORY,
+  type CreativeExportRepository,
+  type CreativeExportRecord,
+} from './creative-export.repository.js';
+import {
+  HARD_VISUAL_GATES_ENGINE,
+  HardVisualGatesEngine,
+} from '../domain/services/hard-visual-gates.engine.js';
+import { type TypographyBlockInput } from '../domain/services/hard-visual-gates.port.js';
+import {
   PosterCopyBuilder,
   type ProductFactsInput,
   type ValidatedContentInput,
@@ -54,6 +65,7 @@ export interface ExportPosterInput {
   readonly quality?: number | undefined;
   readonly actorUserId: string;
   readonly actorRoles: readonly string[];
+  readonly outboxWriter?: OutboxWriter | undefined;
 }
 
 export interface ExportPosterResult {
@@ -64,6 +76,9 @@ export interface ExportPosterResult {
   readonly height: number;
   readonly sha256: string;
   readonly byteSize: number;
+  readonly exportId?: string | undefined;
+  readonly storageKey?: string | undefined;
+  readonly validationStatus?: string | undefined;
 }
 
 const FORMAT_CONFIG: Record<
@@ -106,6 +121,15 @@ export class ExportPosterUseCase {
     posterCompositor?: PosterCompositor,
     @Optional()
     private readonly permissions: PermissionService = new PermissionService(),
+    @Optional()
+    @Inject(CREATIVE_EXPORT_REPOSITORY)
+    private readonly exportRepo?: CreativeExportRepository,
+    @Optional()
+    @Inject(HARD_VISUAL_GATES_ENGINE)
+    private readonly hardGatesEngine?: HardVisualGatesEngine,
+    @Optional()
+    @Inject('OUTBOX_WRITER')
+    private readonly defaultOutboxWriter?: OutboxWriter,
   ) {
     this.posterCompositor = posterCompositor ?? new SharpPosterCompositor();
   }
@@ -188,6 +212,41 @@ export class ExportPosterUseCase {
     const contentVersion = await this.contentRepo.findVersionById(job.contentVersionId);
     if (!contentVersion) throw new ValidationError({ publicMessage: 'Content version not found.' });
 
+    // Idempotency check: Reuse existing export if already recorded in ledger and CAS
+    if (this.exportRepo) {
+      const existing = await this.exportRepo.findByAssetAndFormat(
+        asset.id,
+        input.format,
+        input.encoding,
+      );
+      if (existing) {
+        const cachedBuffer = await this.storage
+          .getAssetBuffer(existing.storageKey)
+          .catch(() => null);
+        if (cachedBuffer) {
+          this.logger.log(
+            `Reusing existing cached export ${existing.id} for asset ${asset.id} (${input.format}, ${input.encoding})`,
+          );
+          const safeSku = snapshot.product.product.sku.replace(/[^A-Za-z0-9_-]/g, '_');
+          const ext = input.encoding === 'JPEG' ? 'jpg' : 'png';
+          const filename = `poster-${safeSku}-${config.width}x${config.height}.${ext}`;
+          const mimeType = input.encoding === 'JPEG' ? 'image/jpeg' : 'image/png';
+          return {
+            buffer: cachedBuffer,
+            mimeType,
+            filename,
+            width: existing.width,
+            height: existing.height,
+            sha256: existing.sha256,
+            byteSize: existing.byteSize,
+            exportId: existing.id,
+            storageKey: existing.storageKey,
+            validationStatus: existing.validationStatus,
+          };
+        }
+      }
+    }
+
     // Load authentic product buffer
     const productBuffer = await this.resolveProductBuffer(snapshot, asset.sourceProductAssetDigest);
     const productSha = createHash('sha256').update(productBuffer).digest('hex');
@@ -247,6 +306,60 @@ export class ExportPosterUseCase {
       backgroundSha256: backgroundSha,
     });
 
+    // Post-adaptation hard visual gate verification
+    if (this.hardGatesEngine) {
+      const heroElement = renderResult.layoutManifest.elements.find(
+        (e) =>
+          e.type === 'PRODUCT' ||
+          e.id.toLowerCase().includes('hero') ||
+          e.id.toLowerCase().includes('product'),
+      );
+      const ctaElement = renderResult.layoutManifest.elements.find(
+        (e) => e.type === 'BUTTON' || e.id.toLowerCase().includes('cta'),
+      );
+      const typographyBlocks: TypographyBlockInput[] = renderResult.layoutManifest.elements
+        .filter((e) => e.type === 'TEXT')
+        .map((e) => ({
+          role: e.id,
+          text: e.text ?? '',
+          box: e.boundingBox,
+          textColor: (e as { textColor?: string }).textColor ?? '#1A1A1A',
+        }));
+
+      const gateOutcome = await this.hardGatesEngine.evaluate({
+        assetBuffer: renderResult.posterBuffer,
+        expectedSha256: renderResult.sha256,
+        aspectRatio: config.aspectRatio,
+        width: config.width,
+        height: config.height,
+        productAssetBuffer: productBuffer,
+        productSha256: productSha,
+        heroBoundingBox: heroElement?.boundingBox,
+        ctaBoundingBox: ctaElement?.boundingBox,
+        typographyBlocks: typographyBlocks.length > 0 ? typographyBlocks : undefined,
+        productSnapshot: snapshot,
+        factualInput: {
+          productSnapshot: snapshot,
+          typographyBlocks: typographyBlocks.length > 0 ? typographyBlocks : undefined,
+          renderedSnapshotHash: snapshot.snapshotHash,
+          sceneSku: snapshot.product.product.sku,
+        },
+        renderedSnapshotHash: snapshot.snapshotHash,
+        sceneSku: snapshot.product.product.sku,
+      });
+
+      if (!gateOutcome.isPassed) {
+        const failureMessages = gateOutcome.failures
+          .map((f) => `[${f.code}] ${f.message}`)
+          .join('; ');
+        this.logger.warn(`Export failed post-adaptation hard visual gates: ${failureMessages}`);
+        throw new ValidationError({
+          publicMessage: `Export layout adaptation failed hard visual gates: ${failureMessages}`,
+          details: { failures: gateOutcome.failures },
+        });
+      }
+    }
+
     // Encode to requested output format
     let finalBuffer: Buffer;
     let mimeType: 'image/png' | 'image/jpeg';
@@ -268,6 +381,75 @@ export class ExportPosterUseCase {
     const safeSku = snapshot.product.product.sku.replace(/[^A-Za-z0-9_-]/g, '_');
     const filename = `poster-${safeSku}-${config.width}x${config.height}.${ext}`;
 
+    // Save to Content-Addressable Storage (CAS)
+    let storageKey = `cas/${sha256.slice(0, 2)}/${sha256.slice(2, 4)}/${sha256}.${ext}`;
+    try {
+      const stored = await this.storage.saveAsset({
+        buffer: finalBuffer,
+        mimeType,
+        assetRole: 'COMPOSITED_CREATIVE',
+        width: config.width,
+        height: config.height,
+      });
+      storageKey = stored.storageKey;
+    } catch (err: unknown) {
+      this.logger.warn(
+        `Failed to store export in CAS, falling back to deterministic key: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    // Persist immutable export ledger record
+    let exportRecord: CreativeExportRecord | null = null;
+    if (this.exportRepo) {
+      exportRecord = await this.exportRepo.createExport({
+        creativeJobId: job.id,
+        visualAssetId: asset.id,
+        format: input.format,
+        encoding: input.encoding,
+        width: config.width,
+        height: config.height,
+        aspectRatio: config.aspectRatio,
+        byteSize: finalBuffer.length,
+        sha256,
+        storageKey,
+        quality: input.encoding === 'JPEG' ? (input.quality ?? 95) : undefined,
+        validationStatus: 'PASSED',
+        exportedByUserId: input.actorUserId,
+      });
+    }
+
+    // Emit Outbox event: CREATIVE_EXPORTED
+    const effectiveOutbox = input.outboxWriter ?? this.defaultOutboxWriter;
+    if (effectiveOutbox && exportRecord) {
+      await effectiveOutbox.append({
+        topic: 'CREATIVE_EXPORTED',
+        schemaVersion: 1,
+        idempotencyKey: `creative-export:${exportRecord.id}:exported`,
+        aggregateType: 'CreativeExport',
+        aggregateId: exportRecord.id,
+        payload: {
+          exportId: exportRecord.id,
+          creativeJobId: job.id,
+          visualAssetId: asset.id,
+          format: input.format,
+          encoding: input.encoding,
+          width: config.width,
+          height: config.height,
+          aspectRatio: config.aspectRatio,
+          byteSize: finalBuffer.length,
+          sha256,
+          storageKey,
+          exportedByUserId: input.actorUserId,
+          validationStatus: exportRecord.validationStatus,
+        },
+        occurredAt: new Date(),
+        availableAt: new Date(),
+      });
+      this.logger.log(
+        `Emitted CREATIVE_EXPORTED outbox telemetry event for export ${exportRecord.id}`,
+      );
+    }
+
     return {
       buffer: finalBuffer,
       mimeType,
@@ -276,6 +458,16 @@ export class ExportPosterUseCase {
       height: config.height,
       sha256,
       byteSize: finalBuffer.length,
+      ...(exportRecord
+        ? {
+            exportId: exportRecord.id,
+            storageKey: exportRecord.storageKey,
+            validationStatus: exportRecord.validationStatus,
+          }
+        : {
+            storageKey,
+            validationStatus: 'PASSED',
+          }),
     };
   }
 

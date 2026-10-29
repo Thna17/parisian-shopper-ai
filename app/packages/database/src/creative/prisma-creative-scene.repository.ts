@@ -6,6 +6,9 @@ import {
   type CreativeSceneRepository,
   type CreativeSceneVersionRecord,
   type LayerDependencyRecord,
+  type ListCreativeScenesQuery,
+  type CreativeSceneSummary,
+  type PaginatedCreativeScenes,
   type PosterAspectRatio,
   type RecordDependencyInvalidationInput,
   type SafeMargins,
@@ -594,5 +597,89 @@ export class PrismaCreativeSceneRepository implements CreativeSceneRepository {
       include: VERSION_INCLUDE_RELATIONS,
     });
     return rows.map(toVersionRecord);
+  }
+
+  public async findScenes(query: ListCreativeScenesQuery): Promise<PaginatedCreativeScenes> {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.min(50, Math.max(1, query.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.CreativeSceneWhereInput = {};
+    if (query.campaignId) {
+      where.campaignId = query.campaignId;
+    }
+    if (query.search && query.search.trim().length > 0) {
+      where.title = { contains: query.search.trim(), mode: 'insensitive' };
+    }
+
+    const [total, sceneRows] = await Promise.all([
+      this.prisma.creativeScene.count({ where }),
+      this.prisma.creativeScene.findMany({
+        where,
+        orderBy: { updatedAt: 'desc' },
+        skip,
+        take: limit,
+        include: {
+          versions: {
+            orderBy: { versionNumber: 'desc' },
+            take: 1,
+            include: VERSION_INCLUDE_RELATIONS,
+          },
+        },
+      }),
+    ]);
+
+    const items: CreativeSceneSummary[] = [];
+    for (const row of sceneRows) {
+      const sceneRecord = toSceneRecord(row);
+      const latestVerRow = row.versions[0];
+      const latestVersion = latestVerRow ? toVersionRecord(latestVerRow) : undefined;
+
+      let productSnapshot: CreativeSceneSummary['productSnapshot'] = undefined;
+      let campaign: CreativeSceneSummary['campaign'] = undefined;
+
+      if (latestVerRow?.productSnapshotId) {
+        const snap = await this.prisma.productSnapshot.findUnique({
+          where: { id: latestVerRow.productSnapshotId },
+        });
+        if (snap) {
+          productSnapshot = {
+            id: snap.id,
+            sku: snap.sku,
+            productName: snap.productName,
+            brand: snap.brand,
+            price: Number(snap.price),
+          };
+        }
+      }
+
+      if (row.campaignId) {
+        const camp = await this.prisma.campaign.findUnique({
+          where: { id: row.campaignId },
+        });
+        if (camp) {
+          campaign = {
+            id: camp.id,
+            code: camp.code,
+            name: camp.name,
+          };
+        }
+      }
+
+      items.push({
+        scene: sceneRecord,
+        ...(latestVersion ? { latestVersion } : {}),
+        ...(productSnapshot ? { productSnapshot } : {}),
+        ...(campaign ? { campaign } : {}),
+      });
+    }
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 }
