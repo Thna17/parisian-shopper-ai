@@ -321,6 +321,15 @@ export class TelegramCommandCenter {
         await this.repository.clearActiveWorkflowMessage(activeFlow.id);
         return one('Creation cancelled.');
       }
+      if (this.visualCallbackHandler?.handleTextMessage !== undefined) {
+        const visualCancelRes = await this.visualCallbackHandler.handleTextMessage(
+          actor,
+          '/cancel',
+        );
+        if (visualCancelRes !== null) {
+          return visualCancelRes;
+        }
+      }
       return one('There is no active pending action to cancel.');
     }
 
@@ -340,8 +349,18 @@ export class TelegramCommandCenter {
           return await this.status(actor);
         case 'history':
           return await this.history(actor, command.argument);
-        default:
+        default: {
+          if (this.visualCallbackHandler?.handleTextMessage !== undefined) {
+            const visualRes = await this.visualCallbackHandler.handleTextMessage(
+              actor,
+              input.text.trim(),
+            );
+            if (visualRes !== null) {
+              return visualRes;
+            }
+          }
           return one('Unknown command. Use /help to see available commands.');
+        }
       }
     } catch (error) {
       return one(telegramSafeError(error));
@@ -523,6 +542,9 @@ export class TelegramCommandCenter {
         case TelegramAction.PROMPT_PUBLISH_CHANNEL:
         case TelegramAction.CONFIRM_PUBLISH_CHANNEL:
         case TelegramAction.REPLACE_PRODUCT_ASSET:
+        case TelegramAction.CONFIRM_STRUCTURED_REVISION:
+        case TelegramAction.CANCEL_STRUCTURED_REVISION:
+        case TelegramAction.CHOOSE_REVISION_STYLE:
           if (this.visualCallbackHandler !== undefined) {
             return this.visualCallbackHandler.handleAction(actor, token);
           }

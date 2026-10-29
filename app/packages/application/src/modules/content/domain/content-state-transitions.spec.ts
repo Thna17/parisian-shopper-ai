@@ -14,6 +14,7 @@ describe('ContentJob state transitions', () => {
     expect(canTransitionContentJob('UNDER_REVIEW', 'REJECTED')).toBe(true);
     expect(canTransitionContentJob('UNDER_REVIEW', 'REVISION_REQUESTED')).toBe(true);
     expect(canTransitionContentJob('REVISION_REQUESTED', 'GENERATING')).toBe(true);
+    expect(canTransitionContentJob('REVISION_REQUESTED', 'UNDER_REVIEW')).toBe(true);
     expect(canTransitionContentJob('FAILED', 'GENERATING')).toBe(true);
   });
 

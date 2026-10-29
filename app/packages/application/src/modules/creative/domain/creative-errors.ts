@@ -642,3 +642,33 @@ export class ProductHeroContainmentError extends ApplicationError {
     });
   }
 }
+
+export class RevisionPlanValidationError extends ApplicationError {
+  public constructor(message: string, details?: Readonly<Record<string, unknown>>) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: `Invalid revision plan: ${message}`,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}
+
+export class LayerDriftViolationError extends ApplicationError {
+  public constructor(message: string, details?: Readonly<Record<string, unknown>>) {
+    super({
+      code: 'CONFLICT',
+      publicMessage: `Layer drift invariant violation: ${message}`,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}
+
+export class AmbiguousRevisionError extends ApplicationError {
+  public constructor(message: string, details?: Readonly<Record<string, unknown>>) {
+    super({
+      code: 'CONFLICT',
+      publicMessage: `Ambiguous revision requires confirmation: ${message}`,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+}

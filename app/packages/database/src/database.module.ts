@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import {
   APPROVALS_REPOSITORY,
   BRAND_RULE_REPOSITORY,
+  CAMPAIGN_REPOSITORY,
   CONTENT_GENERATION_REPOSITORY,
   CREATIVE_APPROVAL_REPOSITORY,
   CREATIVE_JOB_REPOSITORY,
@@ -16,6 +17,7 @@ import {
   PRODUCT_REVALIDATION_UNIT_OF_WORK,
   PRODUCT_SNAPSHOT_REPOSITORY,
   TELEGRAM_WORKFLOW_REPOSITORY,
+  USER_ACCOUNT_REPOSITORY,
   USER_SESSION_REPOSITORY,
   VALIDATION_REPOSITORY,
   VISUAL_ASSET_REPOSITORY,
@@ -43,6 +45,8 @@ import { PrismaTelegramWorkflowRepository } from './telegram/prisma-telegram-wor
 import { PrismaApprovalsRepository } from './approvals/prisma-approvals.repository.js';
 import { PrismaPasswordCredentialRepository } from './auth/prisma-password-credential.repository.js';
 import { PrismaUserSessionRepository } from './auth/prisma-user-session.repository.js';
+import { PrismaUserAccountRepository } from './auth/prisma-user-account.repository.js';
+import { PrismaCampaignRepository } from './campaigns/prisma-campaign.repository.js';
 import {
   PrismaCreativeApprovalRepository,
   PrismaCreativeJobRepository,
@@ -66,6 +70,8 @@ import {
     PrismaApprovalsRepository,
     PrismaPasswordCredentialRepository,
     PrismaUserSessionRepository,
+    PrismaUserAccountRepository,
+    PrismaCampaignRepository,
     PrismaCreativeJobRepository,
     PrismaVisualAssetRepository,
     PrismaVisualValidationRepository,
@@ -109,6 +115,8 @@ import {
     { provide: APPROVALS_REPOSITORY, useExisting: PrismaApprovalsRepository },
     { provide: PASSWORD_CREDENTIAL_REPOSITORY, useExisting: PrismaPasswordCredentialRepository },
     { provide: USER_SESSION_REPOSITORY, useExisting: PrismaUserSessionRepository },
+    { provide: USER_ACCOUNT_REPOSITORY, useExisting: PrismaUserAccountRepository },
+    { provide: CAMPAIGN_REPOSITORY, useExisting: PrismaCampaignRepository },
     { provide: CREATIVE_JOB_REPOSITORY, useExisting: PrismaCreativeJobRepository },
     { provide: VISUAL_ASSET_REPOSITORY, useExisting: PrismaVisualAssetRepository },
     { provide: VISUAL_VALIDATION_REPOSITORY, useExisting: PrismaVisualValidationRepository },
@@ -135,6 +143,8 @@ import {
     PrismaApprovalsRepository,
     PrismaPasswordCredentialRepository,
     PrismaUserSessionRepository,
+    PrismaUserAccountRepository,
+    PrismaCampaignRepository,
     PrismaCreativeJobRepository,
     PrismaVisualAssetRepository,
     PrismaVisualValidationRepository,
@@ -157,6 +167,8 @@ import {
     APPROVALS_REPOSITORY,
     PASSWORD_CREDENTIAL_REPOSITORY,
     USER_SESSION_REPOSITORY,
+    USER_ACCOUNT_REPOSITORY,
+    CAMPAIGN_REPOSITORY,
     CREATIVE_JOB_REPOSITORY,
     VISUAL_ASSET_REPOSITORY,
     VISUAL_VALIDATION_REPOSITORY,

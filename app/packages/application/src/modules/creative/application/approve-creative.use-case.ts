@@ -22,6 +22,7 @@ import {
   VisualAssetNotFoundError,
   CreativeJobNotReadyForApprovalError,
   CreativeValidationFailedError,
+  CreativeStaleVersionError,
 } from '../domain/creative-errors.js';
 
 export interface ApproveCreativeInput {
@@ -75,6 +76,14 @@ export class ApproveCreativeUseCase {
     const asset = await this.assetRepo.findById(visualAssetId);
     if (!asset || asset.creativeJobId !== creativeJobId) {
       throw new VisualAssetNotFoundError(visualAssetId);
+    }
+
+    // Invariant: cannot approve a stale visual asset if a newer version exists for this job
+    const latestAsset = await this.assetRepo.findLatestByJobId(creativeJobId);
+    if (latestAsset && latestAsset.id !== visualAssetId) {
+      throw new CreativeStaleVersionError(
+        `Cannot approve visual asset ${visualAssetId} (v${asset.versionNumber}) because a newer version exists (v${latestAsset.versionNumber})`,
+      );
     }
 
     // 3. Invariant: Only valid assets with PASSED / PASSED_WITH_WARNINGS validation results can be transitioned to APPROVED

@@ -3,12 +3,18 @@ import {
   calculateProductDependencyHashes,
   normalizedProductEnvelopeSchema,
   type CreateProductSnapshotRecord,
+  type ListProductSnapshotsQuery,
   type NormalizedProductEnvelope,
+  type PaginatedProductSnapshots,
   type ProductDependencyHashes,
   type ProductSnapshot,
   type ProductSnapshotRepository,
 } from '@parisian-shopper/application';
-import { Prisma, type ProductSnapshot as PrismaProductSnapshot } from '@prisma/client';
+import {
+  Prisma,
+  ProductStockStatus,
+  type ProductSnapshot as PrismaProductSnapshot,
+} from '@prisma/client';
 
 import { PrismaService } from '../prisma.service.js';
 
@@ -73,6 +79,68 @@ export class PrismaProductSnapshotRepository implements ProductSnapshotRepositor
       orderBy: { createdAt: 'desc' },
     });
     return record === null ? null : toSnapshotDomain(record);
+  }
+
+  public async findPaginated(
+    query: ListProductSnapshotsQuery = {},
+  ): Promise<PaginatedProductSnapshots> {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.min(100, Math.max(1, query.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.ProductSnapshotWhereInput = {};
+
+    if (query.search && query.search.trim() !== '') {
+      const q = query.search.trim();
+      where.OR = [
+        { productName: { contains: q, mode: 'insensitive' } },
+        { brand: { contains: q, mode: 'insensitive' } },
+        { sku: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    if (query.brand && query.brand.trim() !== '') {
+      where.brand = { equals: query.brand.trim(), mode: 'insensitive' };
+    }
+
+    if (query.category && query.category.trim() !== '') {
+      where.category = { equals: query.category.trim(), mode: 'insensitive' };
+    }
+
+    if (query.stockStatus && query.stockStatus.trim() !== '') {
+      const normalizedStock = query.stockStatus
+        .trim()
+        .toLowerCase()
+        .replace(/-/g, '_') as ProductStockStatus;
+      if (Object.values(ProductStockStatus).includes(normalizedStock)) {
+        where.stockStatus = normalizedStock;
+      }
+    }
+
+    const [records, totalGrouped] = await Promise.all([
+      this.prisma.productSnapshot.findMany({
+        where,
+        distinct: ['sku'],
+        orderBy: [{ sku: 'asc' }, { createdAt: 'desc' }],
+        skip,
+        take: limit,
+      }),
+      this.prisma.productSnapshot.groupBy({
+        by: ['sku'],
+        where,
+      }),
+    ]);
+
+    const total = totalGrouped.length;
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    return {
+      items: records.map(toSnapshotDomain),
+      total,
+      page,
+      limit,
+      totalPages,
+    };
   }
 }
 

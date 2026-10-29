@@ -26,7 +26,9 @@
     "db:studio": "pnpm --filter @parisian-shopper/database prisma:studio",
     "dev": "pnpm --parallel --filter @parisian-shopper/api --filter @parisian-shopper/worker dev",
     "dev:api": "pnpm --filter @parisian-shopper/api dev",
+    "dev:web": "pnpm --filter @parisian-shopper/web dev",
     "dev:worker": "pnpm --filter @parisian-shopper/worker dev",
+    "build:web": "pnpm --filter @parisian-shopper/web build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "higgsfield:seedance": "node --env-file=.env.local --import tsx examples/higgsfield-seedance/index.ts",
@@ -43,11 +45,12 @@
     "security:check": "node scripts/check-security.mjs",
     "start:api": "node apps/api/dist/main.js",
     "start:worker": "node apps/worker/dist/main.js",
-    "test": "pnpm test:unit && pnpm test:integration && pnpm test:e2e",
+    "test": "pnpm test:unit && pnpm test:integration && pnpm test:e2e && pnpm test:web",
     "test:e2e": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.e2e.config.cjs --runInBand",
     "test:integration": "TESTCONTAINERS_RYUK_DISABLED=true node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.integration.config.cjs --runInBand",
     "test:unit": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.unit.config.cjs --runInBand",
-    "typecheck": "tsc -b --pretty false"
+    "test:web": "pnpm --filter @parisian-shopper/web test",
+    "typecheck": "tsc -b --pretty false && pnpm --filter @parisian-shopper/web typecheck"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

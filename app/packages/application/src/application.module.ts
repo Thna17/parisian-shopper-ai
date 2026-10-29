@@ -11,6 +11,7 @@ import { ProductsModule } from './modules/products/products.module.js';
 import { TelegramModule } from './modules/telegram/telegram.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { ValidationModule } from './modules/validation/validation.module.js';
+import { CampaignsModule } from './modules/campaigns/campaigns.module.js';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ValidationModule } from './modules/validation/validation.module.js';
     UsersModule,
     TelegramModule,
     ProductsModule,
+    CampaignsModule,
     ContentModule,
     AiModule,
     ValidationModule,
@@ -31,6 +33,7 @@ import { ValidationModule } from './modules/validation/validation.module.js';
     UsersModule,
     TelegramModule,
     ProductsModule,
+    CampaignsModule,
     ContentModule,
     AiModule,
     ValidationModule,

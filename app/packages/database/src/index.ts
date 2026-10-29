@@ -15,5 +15,7 @@ export * from './telegram/prisma-telegram-workflow.repository.js';
 export * from './approvals/prisma-approvals.repository.js';
 export * from './auth/prisma-password-credential.repository.js';
 export * from './auth/prisma-user-session.repository.js';
+export * from './auth/prisma-user-account.repository.js';
+export * from './campaigns/prisma-campaign.repository.js';
 export * from './creative/index.js';
 export * from './outbox/prisma-outbox-relay.repository.js';

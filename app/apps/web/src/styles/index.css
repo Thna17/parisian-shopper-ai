@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #f8f7f4;
+  --surface: #ffffff;
+  --surface2: #f1f0ec;
+  --text: #20262d;
+  --muted: #667078;
+  --primary: #243746;
+  --gold: #b59761;
+  --good: #23856b;
+  --warn: #b67c27;
+  --bad: #c25656;
+  --border: #e2e2de;
+  --shadow: 0 3px 18px rgba(30, 37, 37, 0.035);
+  --shadow-lg: 0 24px 85px rgba(22, 30, 36, 0.18);
+  --radius: 12px;
+  --radius-lg: 17px;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --khmer: 'Noto Sans Khmer', 'Khmer OS', var(--font);
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --bg: #11191e;
+  --surface: #192329;
+  --surface2: #222f35;
+  --text: #ebf0ef;
+  --muted: #a2adb1;
+  --primary: #c9d7d8;
+  --gold: #d6bc87;
+  --good: #58b79a;
+  --warn: #e0a64f;
+  --bad: #e98181;
+  --border: #354249;
+  --shadow: 0 8px 20px rgba(0, 0, 0, 0.11);
+  --shadow-lg: 0 24px 85px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  height: 100%;
+  font-family: var(--font);
+  font-size: 14px;
+  background-color: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.khmer {
+  font-family: var(--khmer);
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}

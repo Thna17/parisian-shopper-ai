@@ -5,4 +5,5 @@ export const TELEGRAM_VISUAL_CALLBACK_HANDLER = Symbol('TELEGRAM_VISUAL_CALLBACK
 
 export interface TelegramVisualCallbackHandler {
   handleAction(actor: TelegramActor, token: TelegramActionTokenRecord): Promise<TelegramResponse>;
+  handleTextMessage?(actor: TelegramActor, text: string): Promise<TelegramResponse | null>;
 }
