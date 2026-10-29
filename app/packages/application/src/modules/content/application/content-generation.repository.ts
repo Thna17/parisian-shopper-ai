@@ -65,12 +65,12 @@ export interface CreateContentJobInput {
 }
 
 export interface ListContentJobsQuery {
-  readonly page?: number;
-  readonly limit?: number;
-  readonly status?: ContentJobStatus;
-  readonly productSnapshotId?: string;
-  readonly campaignId?: string;
-  readonly requesterUserId?: string;
+  readonly page?: number | undefined;
+  readonly limit?: number | undefined;
+  readonly status?: ContentJobStatus | undefined;
+  readonly productSnapshotId?: string | undefined;
+  readonly campaignId?: string | undefined;
+  readonly requesterUserId?: string | undefined;
 }
 
 export interface PaginatedContentJobs {

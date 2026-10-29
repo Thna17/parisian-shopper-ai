@@ -33,12 +33,12 @@ export interface GetContentJobDetailInput {
 
 export interface ContentJobDetail {
   readonly job: ContentJob;
-  readonly productSnapshot?: ProductSnapshot | null;
-  readonly campaign?: CampaignSummary | null;
+  readonly productSnapshot?: ProductSnapshot | null | undefined;
+  readonly campaign?: CampaignSummary | null | undefined;
   readonly attempts: readonly GenerationAttempt[];
   readonly versions: readonly ContentVersion[];
-  readonly currentVersion?: ContentVersion | null;
-  readonly latestValidationResult?: PersistedValidationResult | null;
+  readonly currentVersion?: ContentVersion | null | undefined;
+  readonly latestValidationResult?: PersistedValidationResult | null | undefined;
 }
 
 @Injectable()
@@ -57,12 +57,11 @@ export class GetContentJobDetailUseCase {
   ) {}
 
   public async execute(input: GetContentJobDetailInput): Promise<ContentJobDetail> {
-    const canViewAny = this.permissions.hasAnyRolePermission(input.actorRoles, [
-      Permission.VIEW_ALL_CONTENT,
-      Permission.VIEW_OWN_CONTENT,
-      Permission.CREATE_CONTENT,
-      Permission.EDIT_CONTENT,
-    ]);
+    const canViewAny =
+      this.permissions.hasAnyRolePermission(input.actorRoles, Permission.VIEW_ALL_CONTENT) ||
+      this.permissions.hasAnyRolePermission(input.actorRoles, Permission.VIEW_OWN_CONTENT) ||
+      this.permissions.hasAnyRolePermission(input.actorRoles, Permission.CREATE_CONTENT) ||
+      this.permissions.hasAnyRolePermission(input.actorRoles, Permission.EDIT_CONTENT);
 
     if (!canViewAny) {
       throw new ForbiddenError({
@@ -73,14 +72,14 @@ export class GetContentJobDetailUseCase {
     const job = await this.repository.findJobById(input.contentJobId);
     if (!job) {
       throw new NotFoundError({
-        code: 'CONTENT_JOB_NOT_FOUND',
         publicMessage: 'Content job was not found.',
       });
     }
 
-    const hasViewAll = this.permissions.hasAnyRolePermission(input.actorRoles, [
+    const hasViewAll = this.permissions.hasAnyRolePermission(
+      input.actorRoles,
       Permission.VIEW_ALL_CONTENT,
-    ]);
+    );
 
     if (!hasViewAll && job.requesterUserId !== input.actorUserId) {
       throw new ForbiddenError({
@@ -99,7 +98,10 @@ export class GetContentJobDetailUseCase {
       campaign = await this.campaigns.findById(job.campaignId);
     }
 
-    const currentVersion = versions.length > 0 ? versions[versions.length - 1] : null;
+    const currentVersion: ContentVersion | null =
+      versions.length > 0 && versions[versions.length - 1] !== undefined
+        ? versions[versions.length - 1]!
+        : null;
 
     let latestValidationResult: PersistedValidationResult | null = null;
     if (currentVersion) {

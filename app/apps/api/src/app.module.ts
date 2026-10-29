@@ -13,6 +13,7 @@ import { MetricsModule } from './metrics/metrics.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ProductsApiModule } from './products/products.module.js';
 import { CampaignsApiModule } from './campaigns/campaigns.module.js';
+import { ContentApiModule } from './content/content.module.js';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { CampaignsApiModule } from './campaigns/campaigns.module.js';
     AuthModule,
     ProductsApiModule,
     CampaignsApiModule,
+    ContentApiModule,
   ],
 })
 export class AppModule {}

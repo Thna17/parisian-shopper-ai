@@ -13,6 +13,7 @@ import {
   type PersistedValidationResult,
   type ValidationRepository,
 } from '../../validation/application/validation.repository.js';
+import { FindingSeverity } from '../../validation/domain/validation.js';
 import { assertContentJobTransition } from '../domain/content.js';
 import {
   CONTENT_GENERATION_REPOSITORY,
@@ -46,12 +47,11 @@ export class SubmitContentForReviewUseCase {
   ) {}
 
   public async execute(input: SubmitContentForReviewInput): Promise<SubmitContentForReviewResult> {
-    if (
-      !this.permissions.hasAnyRolePermission(input.actorRoles, [
-        Permission.CREATE_CONTENT,
-        Permission.EDIT_CONTENT,
-      ])
-    ) {
+    const canSubmit =
+      this.permissions.hasAnyRolePermission(input.actorRoles, Permission.CREATE_CONTENT) ||
+      this.permissions.hasAnyRolePermission(input.actorRoles, Permission.EDIT_CONTENT);
+
+    if (!canSubmit) {
       throw new ForbiddenError({
         publicMessage: 'Permission denied: Cannot submit content for review.',
       });
@@ -60,7 +60,6 @@ export class SubmitContentForReviewUseCase {
     const job = await this.repository.findJobById(input.contentJobId);
     if (!job) {
       throw new NotFoundError({
-        code: 'CONTENT_JOB_NOT_FOUND',
         publicMessage: 'Content job was not found.',
       });
     }
@@ -75,7 +74,6 @@ export class SubmitContentForReviewUseCase {
     const version = await this.repository.findVersionById(input.contentVersionId);
     if (!version || version.contentJobId !== job.id) {
       throw new ValidationError({
-        code: 'CONTENT_VERSION_NOT_FOUND',
         publicMessage: 'Content version was not found for this content job.',
       });
     }
@@ -89,16 +87,17 @@ export class SubmitContentForReviewUseCase {
 
     const hasBlockingFindings =
       validationResult.blockingCount > 0 ||
-      validationResult.findings.some((f) => f.severity === 'BLOCKED');
+      validationResult.findings.some((f) => f.severity === FindingSeverity.BLOCKING);
 
     if (hasBlockingFindings) {
       throw new ValidationError({
-        code: 'CONTENT_HAS_BLOCKING_FACTUAL_FINDINGS',
         publicMessage:
           'Cannot submit content version for review: version has blocking factual validation errors.',
         details: {
           blockingCount: validationResult.blockingCount,
-          findings: validationResult.findings.filter((f) => f.severity === 'BLOCKED'),
+          findings: validationResult.findings.filter(
+            (f) => f.severity === FindingSeverity.BLOCKING,
+          ),
         },
       });
     }

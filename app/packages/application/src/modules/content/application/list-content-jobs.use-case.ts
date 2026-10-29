@@ -24,12 +24,11 @@ export class ListContentJobsUseCase {
   ) {}
 
   public async execute(input: ListContentJobsInput): Promise<PaginatedContentJobs> {
-    const canViewAny = this.permissions.hasAnyRolePermission(input.actorRoles, [
-      Permission.VIEW_ALL_CONTENT,
-      Permission.VIEW_OWN_CONTENT,
-      Permission.CREATE_CONTENT,
-      Permission.EDIT_CONTENT,
-    ]);
+    const canViewAny =
+      this.permissions.hasAnyRolePermission(input.actorRoles, Permission.VIEW_ALL_CONTENT) ||
+      this.permissions.hasAnyRolePermission(input.actorRoles, Permission.VIEW_OWN_CONTENT) ||
+      this.permissions.hasAnyRolePermission(input.actorRoles, Permission.CREATE_CONTENT) ||
+      this.permissions.hasAnyRolePermission(input.actorRoles, Permission.EDIT_CONTENT);
 
     if (!canViewAny) {
       throw new ForbiddenError({
@@ -37,13 +36,18 @@ export class ListContentJobsUseCase {
       });
     }
 
-    const hasViewAll = this.permissions.hasAnyRolePermission(input.actorRoles, [
+    const hasViewAll = this.permissions.hasAnyRolePermission(
+      input.actorRoles,
       Permission.VIEW_ALL_CONTENT,
-    ]);
+    );
 
     const effectiveQuery: ListContentJobsQuery = {
       ...input.query,
-      requesterUserId: hasViewAll ? input.query.requesterUserId : input.actorUserId,
+      ...(hasViewAll
+        ? input.query.requesterUserId !== undefined
+          ? { requesterUserId: input.query.requesterUserId }
+          : {}
+        : { requesterUserId: input.actorUserId }),
     };
 
     if (this.repository.findPaginatedJobs) {
