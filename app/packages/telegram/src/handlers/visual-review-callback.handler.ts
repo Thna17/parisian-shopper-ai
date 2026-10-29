@@ -6,6 +6,7 @@ import {
   CREATIVE_APPROVAL_REPOSITORY,
   CREATIVE_JOB_REPOSITORY,
   CREATIVE_REVISION_REPOSITORY,
+  ExportDownloadTokenService,
   ExportPosterUseCase,
   GenerateCreativeUseCase,
   hasAnyRolePermission,
@@ -94,6 +95,8 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
     rejectCreative?: RejectCreativeUseCase,
     @Optional()
     grammarParser?: RevisionGrammarParser,
+    @Optional()
+    private readonly downloadTokenService?: ExportDownloadTokenService,
   ) {
     this.rejectCreative =
       rejectCreative ??
@@ -616,6 +619,7 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
         templateId: chosenTemplate,
         actorUserId: actor.internalUserId,
         actorRoles: actor.roles,
+        ...(this.outboxWriter !== undefined ? { outboxWriter: this.outboxWriter } : {}),
       });
 
       const keyboard = await this.buildReviewKeyboardForAsset(
@@ -660,6 +664,7 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
         textEdits: { headline: textOverride },
         actorUserId: actor.internalUserId,
         actorRoles: actor.roles,
+        ...(this.outboxWriter !== undefined ? { outboxWriter: this.outboxWriter } : {}),
       });
 
       const keyboard = await this.buildReviewKeyboardForAsset(
@@ -1093,6 +1098,7 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
         stylePreset: targetPreset,
         actorUserId: actor.internalUserId,
         actorRoles: actor.roles,
+        ...(this.outboxWriter !== undefined ? { outboxWriter: this.outboxWriter } : {}),
       });
 
       const keyboard = await this.buildReviewKeyboardForAsset(
@@ -1135,6 +1141,7 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
         sourceVisualAssetId: visualAssetId,
         actorUserId: actor.internalUserId,
         actorRoles: actor.roles,
+        ...(this.outboxWriter !== undefined ? { outboxWriter: this.outboxWriter } : {}),
       });
 
       const keyboard = await this.buildReviewKeyboardForAsset(
@@ -1289,13 +1296,25 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
         encoding,
         actorUserId: actor.internalUserId,
         actorRoles: actor.roles,
+        ...(this.outboxWriter !== undefined ? { outboxWriter: this.outboxWriter } : {}),
       });
+
+      let downloadLinkText = '';
+      if (result.exportId && this.downloadTokenService) {
+        const downloadToken = this.downloadTokenService.generateToken({
+          exportId: result.exportId,
+          userId: actor.internalUserId,
+        });
+        downloadLinkText = `\n🔗 Direct Link: \`/v1/creatives/exports/${result.exportId}/download?token=${downloadToken}\``;
+      }
 
       return {
         messages: [
           {
-            text: `📦 *Export Generated: ${result.filename}*\n\n📐 Dimensions: ${result.width}×${result.height}\n💾 File size: ${(result.byteSize / 1024).toFixed(1)} KB\n🔐 SHA-256: \`#${result.sha256.slice(0, 8)}\``,
+            text: `📦 *Export Generated: ${result.filename}*\n\n📐 Dimensions: ${result.width}×${result.height}\n💾 File size: ${(result.byteSize / 1024).toFixed(1)} KB\n🔐 SHA-256: \`#${result.sha256.slice(0, 8)}\`${downloadLinkText}`,
             photoBuffer: result.buffer,
+            documentBuffer: result.buffer,
+            documentFilename: result.filename,
           },
         ],
         callbackNotice: `Exported ${result.filename}!`,

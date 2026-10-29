@@ -94,6 +94,11 @@ export const environmentSchema = z
     CREATIVE_ASSET_MAX_BYTES: z.coerce.number().int().min(1024).max(50_000_000).default(10_485_760),
     CREATIVE_ALLOW_FAKE_IN_PRODUCTION: booleanFromEnvironment.default(false),
     ALLOW_LEGACY_PRODUCT_ASSET_FALLBACK: booleanFromEnvironment.default(false),
+    EXPORT_DOWNLOAD_TOKEN_SECRET: z
+      .string()
+      .min(16)
+      .default('parisian-shopper-export-secret-key-development'),
+    EXPORT_DOWNLOAD_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
     FEATURE_HIGGSFIELD_PROVIDER: booleanFromEnvironment.default(false),
     FEATURE_PRODUCT_IMAGE_TO_VIDEO: booleanFromEnvironment.default(false),
     HIGGSFIELD_VIDEO_MODEL: z

@@ -23,6 +23,9 @@ import {
   type CreateInitialSceneAtomicInput,
   type CreateRevisionAtomicInput,
   type CreativeSceneRepository,
+  type CreativeSceneSummary,
+  type ListCreativeScenesQuery,
+  type PaginatedCreativeScenes,
   type RecordDependencyInvalidationInput,
 } from './creative-scene.repository.js';
 import { CreateInitialSceneUseCase } from './create-initial-scene.use-case.js';
@@ -310,6 +313,26 @@ class InMemoryCreativeSceneRepository implements CreativeSceneRepository {
       if (v.sceneId === sceneId) result.push(v);
     }
     return await Promise.resolve(result.sort((a, b) => a.versionNumber - b.versionNumber));
+  }
+
+  public async findScenes(query: ListCreativeScenesQuery): Promise<PaginatedCreativeScenes> {
+    const all = Array.from(this.scenes.values());
+    const items: CreativeSceneSummary[] = all.map((scene) => {
+      const latestVersion = Array.from(this.versions.values())
+        .filter((v) => v.sceneId === scene.id)
+        .sort((a, b) => b.versionNumber - a.versionNumber)[0];
+      return {
+        scene,
+        ...(latestVersion ? { latestVersion } : {}),
+      };
+    });
+    return Promise.resolve({
+      items,
+      total: items.length,
+      page: query.page ?? 1,
+      limit: query.limit ?? 20,
+      totalPages: 1,
+    });
   }
 }
 

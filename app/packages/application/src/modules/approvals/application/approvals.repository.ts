@@ -3,6 +3,8 @@ import {
   type ApprovalEventRecord,
   type ApprovalStatusView,
   type ContentReviewState,
+  type ListReviewQueueQuery,
+  type PaginatedReviewQueue,
   type PendingReviewAction,
   type PendingReviewInteractionRecord,
   type RevisionRequestRecord,
@@ -42,6 +44,10 @@ export interface ApprovalsRepository {
   findRevisionRequestsByJobId(contentJobId: string): Promise<readonly RevisionRequestRecord[]>;
   createApproval(input: CreateApprovalInput): Promise<ApprovalEventRecord>;
   findApprovalEventByJobId(contentJobId: string): Promise<ApprovalEventRecord | null>;
+  findApprovalEventsByJobId(contentJobId: string): Promise<readonly ApprovalEventRecord[]>;
+  findReviewQueue(
+    query: ListReviewQueueQuery & { requesterUserId?: string },
+  ): Promise<PaginatedReviewQueue>;
   getReviewState(contentJobId: string): Promise<ContentReviewState | null>;
   getApprovalStatus(contentJobId: string): Promise<ApprovalStatusView | null>;
   createPendingInteraction(

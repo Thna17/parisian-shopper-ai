@@ -10,21 +10,21 @@ import {
   BRAND_RULE_REPOSITORY,
   type BrandRuleRepository,
   type BrandRuleVersion,
+  CAMPAIGN_REPOSITORY,
   CONTENT_GENERATION_ENQUEUER,
   CONTENT_GENERATION_REPOSITORY,
-  type ContentGenerationEnqueuer,
   type ContentGenerationRepository,
   type ContentJob,
   type ContentVersion,
   type CreateContentJobInput,
   type CreateDirectVersionInput,
+  DEVELOPMENT_BRAND_RULES,
   FICTIONAL_PRODUCTS,
   type GenerationAttempt,
   type ListContentJobsQuery,
   type PaginatedContentJobs,
   PASSWORD_CREDENTIAL_REPOSITORY,
   PASSWORD_HASHER,
-  Permission,
   PRODUCT_SNAPSHOT_REPOSITORY,
   type ProductSnapshot,
   type ProductSnapshotRepository,
@@ -83,12 +83,7 @@ describe('Content Studio API Integration (e2e)', () => {
     name: 'Luxury Standard 2026',
     version: 1,
     status: 'ACTIVE',
-    rules: {
-      voice_tone: 'Sophisticated and evocative',
-      target_audience: 'High net-worth fragrance enthusiasts',
-      dos: ['Emphasize craftsmanship'],
-      donts: ['Use discount buzzwords'],
-    } as any,
+    rules: DEVELOPMENT_BRAND_RULES,
     createdAt: new Date('2026-10-01T00:00:00.000Z'),
     activatedAt: new Date('2026-10-01T00:00:00.000Z'),
   };
@@ -100,7 +95,7 @@ describe('Content Studio API Integration (e2e)', () => {
   const validationResults = new Map<string, PersistedValidationResult>();
 
   const initialJob: ContentJob = {
-    id: 'job-seed-001',
+    id: '00000000-0000-4000-8000-000000000010',
     productSnapshotId: sampleSnapshot.id,
     brandRuleVersionId: sampleBrandRule.id,
     requesterUserId: adminUserId,
@@ -115,7 +110,7 @@ describe('Content Studio API Integration (e2e)', () => {
   };
 
   const initialAttempt: GenerationAttempt = {
-    id: 'att-seed-001',
+    id: '00000000-0000-4000-8000-000000000012',
     contentJobId: initialJob.id,
     attemptNumber: 1,
     provider: 'fake',
@@ -127,7 +122,7 @@ describe('Content Studio API Integration (e2e)', () => {
   };
 
   const initialVersion: ContentVersion = {
-    id: 'ver-seed-001',
+    id: '00000000-0000-4000-8000-000000000011',
     contentJobId: initialJob.id,
     versionNumber: 1,
     brandRuleVersionId: sampleBrandRule.id,
@@ -151,7 +146,7 @@ describe('Content Studio API Integration (e2e)', () => {
   };
 
   const initialValidation: PersistedValidationResult = {
-    id: 'val-seed-001',
+    id: '00000000-0000-4000-8000-000000000013',
     contentVersionId: initialVersion.id,
     validatorVersion: '1.0',
     status: 'PASSED',
@@ -237,7 +232,7 @@ describe('Content Studio API Integration (e2e)', () => {
       if (!job) throw new Error('Job not found');
       const currentList = versions.get(input.contentJobId) ?? [];
       const newVersion: ContentVersion = {
-        id: `ver-${Date.now()}`,
+        id: '00000000-0000-4000-8000-000000000099',
         contentJobId: input.contentJobId,
         versionNumber: currentList.length + 1,
         brandRuleVersionId: job.brandRuleVersionId,
@@ -255,13 +250,13 @@ describe('Content Studio API Integration (e2e)', () => {
       jobs.set(job.id, { ...job, status: 'DRAFT', updatedAt: new Date() });
       return newVersion;
     },
-    async beginGeneration(): Promise<any> {
+    async beginGeneration(): Promise<never> {
       throw new Error('Not used in test direct call');
     },
-    async completeGeneration(): Promise<any> {
+    async completeGeneration(): Promise<never> {
       throw new Error('Not used in test direct call');
     },
-    async failGeneration(): Promise<any> {},
+    async failGeneration(): Promise<void> {},
   };
 
   const mockValidationRepo: ValidationRepository = {
@@ -342,8 +337,10 @@ describe('Content Studio API Integration (e2e)', () => {
           id: adminUserId,
           displayName: 'Admin Merchandiser',
           status: 'ACTIVE',
+          disabledAt: null,
           roles: ['ADMIN'],
           permissions: resolvePermissionsForRoles(['ADMIN']),
+          passwordCredential: null,
         };
       }
       if (id === unauthorizedUserId) {
@@ -351,8 +348,10 @@ describe('Content Studio API Integration (e2e)', () => {
           id: unauthorizedUserId,
           displayName: 'Guest Employee',
           status: 'ACTIVE',
+          disabledAt: null,
           roles: ['VIEWER'],
           permissions: resolvePermissionsForRoles(['VIEWER']),
+          passwordCredential: null,
         };
       }
       return null;
@@ -445,7 +444,7 @@ describe('Content Studio API Integration (e2e)', () => {
         enqueue: jest.fn(async (jobId: string) => {
           mockEnqueuedJobs.push(jobId);
         }),
-      } as ContentGenerationEnqueuer)
+      })
       .overrideProvider(CreativeGenerationQueue)
       .useValue({ addJob: jest.fn(), isHealthy: async () => true })
       .overrideProvider(PrismaService)
@@ -466,6 +465,8 @@ describe('Content Studio API Integration (e2e)', () => {
       .useValue({ findByUserId: async () => null })
       .overrideProvider(PRODUCT_SNAPSHOT_REPOSITORY)
       .useValue(mockSnapshotRepo)
+      .overrideProvider(CAMPAIGN_REPOSITORY)
+      .useValue({ findById: jest.fn(async () => null) })
       .overrideProvider(BRAND_RULE_REPOSITORY)
       .useValue(mockBrandRepo)
       .overrideProvider(CONTENT_GENERATION_REPOSITORY)
@@ -508,6 +509,7 @@ describe('Content Studio API Integration (e2e)', () => {
     const res = await request(server)
       .post('/v1/content/jobs')
       .set('Cookie', [`ps_session=${validSessionToken}`])
+      .set('Origin', 'https://malicious-attacker.com')
       .send({
         productSnapshotId: sampleSnapshot.id,
         contentType: 'PRODUCT_SPOTLIGHT',
@@ -570,7 +572,8 @@ describe('Content Studio API Integration (e2e)', () => {
       .set('Cookie', [`ps_session=${validSessionToken}`]);
 
     expect(res.status).toBe(200);
-    expect(res.body.items.every((j: any) => j.status === 'DRAFT')).toBe(true);
+    const items = res.body.items as Array<{ status: string }>;
+    expect(items.every((j) => j.status === 'DRAFT')).toBe(true);
   });
 
   it('CONTENT-E2E-08: gets full content job detail', async () => {
@@ -580,7 +583,7 @@ describe('Content Studio API Integration (e2e)', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.job.id).toBe(initialJob.id);
-    expect(res.body.product.sku).toBe('PERF-ROSE-001');
+    expect(res.body.product.sku).toBe('FIC-PERF-001');
     expect(res.body.product.priceUsd).toBe(230);
     expect(res.body.versions).toHaveLength(1);
     expect(res.body.attempts).toHaveLength(1);
@@ -637,12 +640,12 @@ describe('Content Studio API Integration (e2e)', () => {
     // Create a mock version with blocking error
     const blockedVersion: ContentVersion = {
       ...initialVersion,
-      id: 'ver-blocked-001',
+      id: '00000000-0000-4000-8000-000000000088',
       versionNumber: 3,
     };
     versions.set(initialJob.id, [...(versions.get(initialJob.id) ?? []), blockedVersion]);
     validationResults.set(blockedVersion.id, {
-      id: 'val-blocked-001',
+      id: '00000000-0000-4000-8000-000000000089',
       contentVersionId: blockedVersion.id,
       validatorVersion: '1.0',
       status: 'FAILED',
@@ -653,8 +656,8 @@ describe('Content Studio API Integration (e2e)', () => {
       createdAt: new Date(),
       findings: [
         {
-          id: 'f-blocking',
-          validationResultId: 'val-blocked-001',
+          id: '00000000-0000-4000-8000-000000000090',
+          validationResultId: '00000000-0000-4000-8000-000000000089',
           field: 'price',
           severity: FindingSeverity.BLOCKING,
           code: FindingCode.PRICE_MISMATCH,

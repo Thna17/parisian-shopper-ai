@@ -76,6 +76,8 @@ export interface TelegramMessage {
   text: string;
   buttons?: readonly (readonly TelegramButton[])[];
   photoBuffer?: Buffer | Uint8Array;
+  documentBuffer?: Buffer | Uint8Array;
+  documentFilename?: string;
   parseMode?: 'MarkdownV2' | 'HTML' | 'Markdown';
   action?: TelegramMessageAction;
   messageId?: number;

@@ -321,4 +321,51 @@ describe('OutboxRelayWorker', () => {
     );
     expect(markProcessedMock).toHaveBeenCalledWith('outbox-event-1', expect.any(Date));
   });
+
+  it('processes and logs CREATIVE_EXPORTED telemetry event and marks it processed', async () => {
+    const event = createMockEvent('CREATIVE_EXPORTED', {
+      exportId: 'exp-w32-test-1',
+      creativeJobId: 'job-123',
+      visualAssetId: 'asset-456',
+      format: 'STORY_1080_1920',
+      encoding: 'PNG',
+    });
+
+    const claimEventsMock = jest.fn((_t?: readonly string[], _l?: number, _n?: Date) =>
+      Promise.resolve([event]),
+    );
+    const markProcessedMock = jest.fn((_id?: string, _n?: Date) => Promise.resolve());
+    const markFailedMock = jest.fn((_id?: string, _err?: string, _ret?: Date, _term?: boolean) =>
+      Promise.resolve(),
+    );
+
+    const repository: OutboxRelayRepository = {
+      claimEvents: claimEventsMock,
+      markProcessed: markProcessedMock,
+      markFailed: markFailedMock,
+    };
+
+    const creativeQueue: CreativeGenerationEnqueuer = {
+      enqueue: jest.fn(() => Promise.resolve()),
+    };
+
+    const worker = new OutboxRelayWorker(repository, creativeQueue, mockLogger);
+
+    const count = await worker.dispatchOnce();
+
+    expect(count).toBe(1);
+    expect(mockLogger.log).toHaveBeenCalledWith(
+      'Processed CREATIVE_EXPORTED outbox telemetry event',
+      expect.objectContaining({
+        action: 'creative_exported_telemetry_dispatched',
+        outboxEventId: 'outbox-event-1',
+        exportId: 'exp-w32-test-1',
+        creativeJobId: 'job-123',
+        visualAssetId: 'asset-456',
+        format: 'STORY_1080_1920',
+        encoding: 'PNG',
+      }),
+    );
+    expect(markProcessedMock).toHaveBeenCalledWith('outbox-event-1', expect.any(Date));
+  });
 });

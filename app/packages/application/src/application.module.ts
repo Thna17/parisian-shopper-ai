@@ -12,6 +12,7 @@ import { TelegramModule } from './modules/telegram/telegram.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { ValidationModule } from './modules/validation/validation.module.js';
 import { CampaignsModule } from './modules/campaigns/campaigns.module.js';
+import { PublishingModule } from './modules/publishing/publishing.module.js';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { CampaignsModule } from './modules/campaigns/campaigns.module.js';
     BrandModule,
     AuditModule,
     CreativeModule,
+    PublishingModule,
   ],
   exports: [
     AuthModule,
@@ -41,6 +43,7 @@ import { CampaignsModule } from './modules/campaigns/campaigns.module.js';
     BrandModule,
     AuditModule,
     CreativeModule,
+    PublishingModule,
   ],
 })
 export class ApplicationModule {}

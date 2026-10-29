@@ -71,6 +71,42 @@ export interface RecordDependencyInvalidationInput {
   readonly outboxEvent?: OutboxEventDraft | undefined;
 }
 
+export interface ListCreativeScenesQuery {
+  readonly campaignId?: string | undefined;
+  readonly search?: string | undefined;
+  readonly page?: number | undefined;
+  readonly limit?: number | undefined;
+}
+
+export interface CreativeSceneSummary {
+  readonly scene: CreativeSceneRecord;
+  readonly latestVersion?: CreativeSceneVersionRecord | undefined;
+  readonly productSnapshot?:
+    | {
+        readonly id: string;
+        readonly sku: string;
+        readonly productName: string;
+        readonly brand: string;
+        readonly price: number;
+      }
+    | undefined;
+  readonly campaign?:
+    | {
+        readonly id: string;
+        readonly code: string;
+        readonly name: string;
+      }
+    | undefined;
+}
+
+export interface PaginatedCreativeScenes {
+  readonly items: readonly CreativeSceneSummary[];
+  readonly total: number;
+  readonly page: number;
+  readonly limit: number;
+  readonly totalPages: number;
+}
+
 export interface CreativeSceneRepository {
   createInitialScene(
     input: CreateInitialSceneAtomicInput,
@@ -92,4 +128,5 @@ export interface CreativeSceneRepository {
   findLatestVersionByJobId(creativeJobId: string): Promise<CreativeSceneVersionRecord | null>;
   findLatestVersionBySceneId(sceneId: string): Promise<CreativeSceneVersionRecord | null>;
   listVersions(sceneId: string): Promise<readonly CreativeSceneVersionRecord[]>;
+  findScenes(query: ListCreativeScenesQuery): Promise<PaginatedCreativeScenes>;
 }

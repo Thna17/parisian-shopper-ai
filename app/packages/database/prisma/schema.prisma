@@ -191,6 +191,17 @@ enum CreativeApprovalDecision {
   CREATIVE_REJECTED
 }
 
+enum ExportFormat {
+  SQUARE_1080
+  PORTRAIT_1080_1350
+  STORY_1080_1920
+}
+
+enum ExportEncoding {
+  PNG
+  JPEG
+}
+
 model User {
   id          String     @id @default(uuid()) @db.Uuid
   displayName String     @map("display_name") @db.VarChar(200)
@@ -217,9 +228,11 @@ model User {
   productAssetRightsEvents    ProductAssetRightsEvent[]    @relation("UserProductAssetRightsEvents")
   requestedSceneVersions      CreativeSceneVersion[]       @relation("UserRequestedSceneVersions")
   recordedSceneInvalidations  SceneInvalidationEvent[]     @relation("UserRecordedSceneInvalidations")
+  creativeExports             CreativeExport[]             @relation("UserCreativeExports")
   passwordCredential          PasswordCredential?
   sessions                    UserSession[]
   createdCampaigns            Campaign[]                   @relation("UserCreatedCampaigns")
+  requestedPublications       Publication[]                @relation("UserRequestedPublications")
 
   @@index([status], map: "users_status_idx")
   @@map("users")
@@ -695,6 +708,7 @@ model ContentVersion {
   pendingReviewInteractions TelegramPendingReviewInteraction[]
   creativeJobs              CreativeJob[]
   sceneVersions             CreativeSceneVersion[]
+  publications              Publication[]
 
   @@unique([contentJobId, versionNumber], map: "content_versions_job_version_key")
   @@index([productSnapshotId, createdAt], map: "content_versions_product_snapshot_id_created_at_idx")
@@ -826,6 +840,7 @@ model CreativeJob {
   approvalEvents     CreativeApprovalEvent[]
   scenes             CreativeScene[]
   channelPublication TelegramChannelPublicationRecord?
+  exports            CreativeExport[]
 
   @@index([contentVersionId, createdAt], map: "creative_jobs_content_version_created_at_idx")
   @@index([status, createdAt], map: "creative_jobs_status_created_at_idx")
@@ -859,6 +874,7 @@ model VisualAsset {
   resultingRevisionRequests CreativeRevisionRequest[]          @relation("ResultingVisualAssetRevision")
   approvalEvents            CreativeApprovalEvent[]
   channelPublications       TelegramChannelPublicationRecord[]
+  exports                   CreativeExport[]
 
   @@unique([creativeJobId, versionNumber], map: "visual_assets_job_version_key")
   @@index([creativeJobId, createdAt], map: "visual_assets_job_created_at_idx")
@@ -942,6 +958,35 @@ model CreativeApprovalEvent {
   @@index([creativeJobId, createdAt], map: "creative_approval_events_job_created_at_idx")
   @@index([visualAssetId, createdAt], map: "creative_approval_events_asset_created_at_idx")
   @@map("creative_approval_events")
+}
+
+model CreativeExport {
+  id               String         @id @default(uuid()) @db.Uuid
+  creativeJobId    String         @map("creative_job_id") @db.Uuid
+  visualAssetId    String         @map("visual_asset_id") @db.Uuid
+  format           ExportFormat
+  encoding         ExportEncoding
+  width            Int
+  height           Int
+  aspectRatio      String         @map("aspect_ratio") @db.VarChar(20)
+  byteSize         Int            @map("byte_size")
+  sha256           String         @db.Char(64)
+  storageKey       String         @map("storage_key") @db.VarChar(300)
+  quality          Int?
+  validationStatus String         @default("PASSED") @map("validation_status") @db.VarChar(50)
+  exportedByUserId String         @map("exported_by_user_id") @db.Uuid
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  creativeJob    CreativeJob @relation(fields: [creativeJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_exports_creative_job_id_fkey")
+  visualAsset    VisualAsset @relation(fields: [visualAssetId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_exports_visual_asset_id_fkey")
+  exportedByUser User        @relation("UserCreativeExports", fields: [exportedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_exports_exported_by_user_id_fkey")
+  publications   Publication[]
+
+  @@unique([visualAssetId, format, encoding], map: "creative_exports_asset_format_encoding_key")
+  @@index([creativeJobId, createdAt], map: "creative_exports_job_created_at_idx")
+  @@index([visualAssetId, createdAt], map: "creative_exports_asset_created_at_idx")
+  @@index([sha256], map: "creative_exports_sha256_idx")
+  @@map("creative_exports")
 }
 
 model CreativeScene {
@@ -1305,9 +1350,10 @@ model Campaign {
   createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  createdBy   User              @relation("UserCreatedCampaigns", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "campaigns_created_by_id_fkey")
-  products    CampaignProduct[]
-  contentJobs ContentJob[]
+  createdBy    User              @relation("UserCreatedCampaigns", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "campaigns_created_by_id_fkey")
+  products     CampaignProduct[]
+  contentJobs  ContentJob[]
+  publications Publication[]
 
   @@index([status, createdAt], map: "campaigns_status_created_at_idx")
   @@index([createdById, createdAt], map: "campaigns_created_by_created_at_idx")
@@ -1333,3 +1379,75 @@ model CampaignProduct {
   @@map("campaign_products")
 }
 
+// ─── Publishing & Distribution ──────────────────────────────────────────────
+
+enum PublicationStatus {
+  DRAFT
+  READY
+  QUEUED
+  PROCESSING
+  PUBLISHED
+  FAILED
+  CANCELLED
+  UNKNOWN_OUTCOME
+}
+
+enum PublicationChannel {
+  TELEGRAM_CHANNEL
+  FACEBOOK_PAGE
+  INSTAGRAM
+  MANUAL_EXPORT
+}
+
+model Publication {
+  id                     String            @id @default(uuid()) @db.Uuid
+  contentVersionId       String            @map("content_version_id") @db.Uuid
+  creativeExportId       String?           @map("creative_export_id") @db.Uuid
+  destinationChannel     PublicationChannel @map("destination_channel")
+  destinationAccountId   String?           @map("destination_account_id") @db.VarChar(120)
+  requestedByUserId      String            @map("requested_by_user_id") @db.Uuid
+  status                 PublicationStatus @default(DRAFT)
+  idempotencyKey         String            @unique(map: "publications_idempotency_key") @map("idempotency_key") @db.VarChar(200)
+  campaignId             String?           @map("campaign_id") @db.Uuid
+  scheduledAt            DateTime?         @map("scheduled_at") @db.Timestamptz(3)
+  publishedAt            DateTime?         @map("published_at") @db.Timestamptz(3)
+  externalPublicationId  String?           @map("external_publication_id") @db.VarChar(300)
+  cancellationReason     String?           @map("cancellation_reason") @db.VarChar(500)
+  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  contentVersion  ContentVersion      @relation(fields: [contentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "publications_content_version_id_fkey")
+  creativeExport  CreativeExport?     @relation(fields: [creativeExportId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "publications_creative_export_id_fkey")
+  requestedByUser User                @relation("UserRequestedPublications", fields: [requestedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "publications_requested_by_user_id_fkey")
+  campaign        Campaign?           @relation(fields: [campaignId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "publications_campaign_id_fkey")
+  attempts        PublicationAttempt[]
+
+  @@index([status, createdAt], map: "publications_status_created_at_idx")
+  @@index([requestedByUserId, createdAt], map: "publications_requested_by_created_at_idx")
+  @@index([contentVersionId], map: "publications_content_version_id_idx")
+  @@index([campaignId], map: "publications_campaign_id_idx")
+  @@index([destinationChannel, status], map: "publications_channel_status_idx")
+  @@map("publications")
+}
+
+model PublicationAttempt {
+  id                    String            @id @default(uuid()) @db.Uuid
+  publicationId         String            @map("publication_id") @db.Uuid
+  attemptNumber         Int               @map("attempt_number")
+  status                PublicationStatus @default(PROCESSING)
+  startedAt             DateTime          @default(now()) @map("started_at") @db.Timestamptz(3)
+  completedAt           DateTime?         @map("completed_at") @db.Timestamptz(3)
+  providerResult        Json?             @map("provider_result") @db.JsonB
+  externalPublicationId String?           @map("external_publication_id") @db.VarChar(300)
+  errorCode             String?           @map("error_code") @db.VarChar(100)
+  errorMessage          String?           @map("error_message") @db.VarChar(2000)
+  retryEligible         Boolean           @default(false) @map("retry_eligible")
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  publication Publication @relation(fields: [publicationId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "publication_attempts_publication_id_fkey")
+
+  @@unique([publicationId, attemptNumber], map: "publication_attempts_pub_attempt_key")
+  @@index([publicationId, startedAt], map: "publication_attempts_pub_started_at_idx")
+  @@index([status, startedAt], map: "publication_attempts_status_started_at_idx")
+  @@map("publication_attempts")
+}

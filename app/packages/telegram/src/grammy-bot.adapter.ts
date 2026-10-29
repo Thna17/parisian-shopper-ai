@@ -228,7 +228,24 @@ export class GrammyBotAdapter implements OnModuleInit, OnModuleDestroy {
 
       // Track 2: Send New Message & Synchronize Pointer
       let sentMessageId: number | undefined;
-      if (message.photoBuffer !== undefined) {
+      if (message.documentBuffer !== undefined) {
+        const file = new InputFile(
+          message.documentBuffer,
+          message.documentFilename ?? 'export.png',
+        );
+        const sent = context.replyWithDocument
+          ? await context.replyWithDocument(file, {
+              caption: message.text,
+              ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
+              ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
+            })
+          : await context.api.sendDocument(chatId ?? '', file, {
+              caption: message.text,
+              ...(message.parseMode !== undefined ? { parse_mode: message.parseMode } : {}),
+              ...(replyMarkup !== undefined ? { reply_markup: replyMarkup } : {}),
+            });
+        sentMessageId = sent?.message_id;
+      } else if (message.photoBuffer !== undefined) {
         const file = new InputFile(message.photoBuffer, 'poster.png');
         const sent = context.replyWithPhoto
           ? await context.replyWithPhoto(file, {

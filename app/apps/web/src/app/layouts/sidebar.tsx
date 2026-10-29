@@ -101,13 +101,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseM
               to="/content"
               label="Content Studio"
               icon={<Sparkles className="w-4 h-4" />}
-              isComingSoon
+              onClick={onCloseMobile}
             />
             <SidebarItem
               to="/creative"
               label="Creative Studio"
               icon={<Palette className="w-4 h-4" />}
-              isComingSoon
+              onClick={onCloseMobile}
             />
           </div>
         </div>
@@ -118,12 +118,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseM
             Governance
           </div>
           <div className="space-y-0.5">
-            {hasPermission(Permission.APPROVE_CONTENT) && (
+            {(hasPermission(Permission.APPROVE_CONTENT) ||
+              hasPermission(Permission.VIEW_ALL_CONTENT) ||
+              hasPermission(Permission.VIEW_OWN_CONTENT)) && (
               <SidebarItem
                 to="/reviews"
                 label="Four-Eyes Reviews"
                 icon={<CheckSquare className="w-4 h-4" />}
-                isComingSoon
+                onClick={onCloseMobile}
               />
             )}
             <SidebarItem
@@ -142,10 +144,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseM
           </div>
           <div className="space-y-0.5">
             <SidebarItem
-              to="/telegram"
-              label="Telegram Channel"
+              to="/publishing"
+              label="Publishing Desk"
               icon={<Send className="w-4 h-4" />}
-              isComingSoon
+              onClick={onCloseMobile}
             />
           </div>
         </div>

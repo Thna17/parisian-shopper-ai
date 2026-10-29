@@ -37,6 +37,12 @@ import { RejectCreativeUseCase } from './application/reject-creative.use-case.js
 import { RelayoutPosterUseCase } from './application/relayout-poster.use-case.js';
 import { RevisePosterUseCase } from './application/revise-poster.use-case.js';
 import { ExportPosterUseCase } from './application/export-poster.use-case.js';
+import {
+  ExportDownloadTokenService,
+  EXPORT_DOWNLOAD_TOKEN_SERVICE,
+  EXPORT_DOWNLOAD_TOKEN_CONFIG,
+  type ExportDownloadTokenConfig,
+} from './application/export-download-token.service.js';
 import { CreateInitialSceneUseCase } from './application/create-initial-scene.use-case.js';
 import { ReviseSceneUseCase } from './application/revise-scene.use-case.js';
 import { GetSceneVersionUseCase } from './application/get-scene-version.use-case.js';
@@ -45,11 +51,18 @@ import {
   AuthoritativeSceneEvidenceVerifier,
   AUTHORITATIVE_SCENE_EVIDENCE_VERIFIER,
 } from './application/services/authoritative-scene-evidence-verifier.js';
+import { ListCreativeProjectsUseCase } from './application/list-creative-projects.use-case.js';
+import { GetCreativeProjectDetailUseCase } from './application/get-creative-project-detail.use-case.js';
+import { CreateCreativeProjectUseCase } from './application/create-creative-project.use-case.js';
+import { ValidateCreativeProjectUseCase } from './application/validate-creative-project.use-case.js';
+import { RenderCreativePreviewUseCase } from './application/render-creative-preview.use-case.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { ProductsModule } from '../products/products.module.js';
+import { ContentModule } from '../content/content.module.js';
+import { BrandModule } from '../brand/brand.module.js';
 
 @Module({
-  imports: [AuthModule, ProductsModule],
+  imports: [AuthModule, ProductsModule, ContentModule, BrandModule],
   providers: [
     {
       provide: ASSET_STORAGE,
@@ -129,6 +142,19 @@ import { ProductsModule } from '../products/products.module.js';
     RelayoutPosterUseCase,
     RevisePosterUseCase,
     ExportPosterUseCase,
+    {
+      provide: EXPORT_DOWNLOAD_TOKEN_CONFIG,
+      inject: [AppConfigService],
+      useFactory: (config: AppConfigService): ExportDownloadTokenConfig => ({
+        secret: config.creative.exportDownloadTokenSecret,
+        ttlSeconds: config.creative.exportDownloadTokenTtlSeconds,
+      }),
+    },
+    ExportDownloadTokenService,
+    {
+      provide: EXPORT_DOWNLOAD_TOKEN_SERVICE,
+      useClass: ExportDownloadTokenService,
+    },
     CreateInitialSceneUseCase,
     ReviseSceneUseCase,
     GetSceneVersionUseCase,
@@ -138,6 +164,11 @@ import { ProductsModule } from '../products/products.module.js';
       provide: AUTHORITATIVE_SCENE_EVIDENCE_VERIFIER,
       useClass: AuthoritativeSceneEvidenceVerifier,
     },
+    ListCreativeProjectsUseCase,
+    GetCreativeProjectDetailUseCase,
+    CreateCreativeProjectUseCase,
+    ValidateCreativeProjectUseCase,
+    RenderCreativePreviewUseCase,
   ],
   exports: [
     ASSET_STORAGE,
@@ -163,12 +194,30 @@ import { ProductsModule } from '../products/products.module.js';
     RelayoutPosterUseCase,
     RevisePosterUseCase,
     ExportPosterUseCase,
+    {
+      provide: EXPORT_DOWNLOAD_TOKEN_CONFIG,
+      inject: [AppConfigService],
+      useFactory: (config: AppConfigService): ExportDownloadTokenConfig => ({
+        secret: config.creative.exportDownloadTokenSecret,
+        ttlSeconds: config.creative.exportDownloadTokenTtlSeconds,
+      }),
+    },
+    ExportDownloadTokenService,
+    {
+      provide: EXPORT_DOWNLOAD_TOKEN_SERVICE,
+      useClass: ExportDownloadTokenService,
+    },
     CreateInitialSceneUseCase,
     ReviseSceneUseCase,
     GetSceneVersionUseCase,
     SceneInvalidationService,
     AuthoritativeSceneEvidenceVerifier,
     AUTHORITATIVE_SCENE_EVIDENCE_VERIFIER,
+    ListCreativeProjectsUseCase,
+    GetCreativeProjectDetailUseCase,
+    CreateCreativeProjectUseCase,
+    ValidateCreativeProjectUseCase,
+    RenderCreativePreviewUseCase,
   ],
 })
 export class CreativeModule {}
