@@ -682,4 +682,22 @@ export class PrismaCreativeSceneRepository implements CreativeSceneRepository {
       totalPages: Math.ceil(total / limit),
     };
   }
+
+  public async updateVersionState(
+    sceneVersionId: string,
+    state: { status: string; isExportEligible?: boolean; invalidationReason?: string },
+  ): Promise<void> {
+    await this.prisma.sceneVersionState.update({
+      where: { sceneVersionId },
+      data: {
+        status: state.status,
+        ...(state.isExportEligible !== undefined
+          ? { isExportEligible: state.isExportEligible }
+          : {}),
+        ...(state.invalidationReason !== undefined
+          ? { invalidationReason: state.invalidationReason }
+          : {}),
+      },
+    });
+  }
 }

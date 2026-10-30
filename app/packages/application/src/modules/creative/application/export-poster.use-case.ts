@@ -25,6 +25,10 @@ import {
   type ProductSnapshotRepository,
 } from '../../products/application/product-snapshot.repository.js';
 import {
+  CREATIVE_SCENE_REPOSITORY,
+  type CreativeSceneRepository,
+} from './creative-scene.repository.js';
+import {
   CREATIVE_APPROVAL_REPOSITORY,
   type CreativeApprovalRepository,
 } from './creative-approval.repository.js';
@@ -130,6 +134,9 @@ export class ExportPosterUseCase {
     @Optional()
     @Inject('OUTBOX_WRITER')
     private readonly defaultOutboxWriter?: OutboxWriter,
+    @Optional()
+    @Inject(CREATIVE_SCENE_REPOSITORY)
+    private readonly sceneRepo?: CreativeSceneRepository,
   ) {
     this.posterCompositor = posterCompositor ?? new SharpPosterCompositor();
   }
@@ -203,6 +210,29 @@ export class ExportPosterUseCase {
 
       if (asset.creativeJobId !== job.id) {
         throw new VisualAssetNotFoundError(asset.id);
+      }
+    }
+
+    // SceneVersionState verification (if scene exists)
+    if (this.sceneRepo) {
+      const scene = await this.sceneRepo.findByJobId(job.id);
+      if (scene) {
+        const sceneVersion = await this.sceneRepo.findVersionByNumber(
+          scene.id,
+          asset.versionNumber,
+        );
+        if (sceneVersion?.state) {
+          if (sceneVersion.state.status !== 'APPROVED' || !sceneVersion.state.isExportEligible) {
+            throw new ValidationError({
+              publicMessage: `Scene version v${sceneVersion.versionNumber} is not approved for export (current state: ${sceneVersion.state.status}).`,
+            });
+          }
+        }
+        if (scene.currentVersionNumber > asset.versionNumber && !input.visualAssetId) {
+          throw new ValidationError({
+            publicMessage: `Cannot export unapproved scene revision: active scene revision is v${scene.currentVersionNumber}, while only v${asset.versionNumber} is approved.`,
+          });
+        }
       }
     }
 

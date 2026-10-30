@@ -18,6 +18,8 @@ import {
   PRODUCT_REVALIDATION_UNIT_OF_WORK,
   PRODUCT_SNAPSHOT_REPOSITORY,
   PUBLISHING_REPOSITORY,
+  ANALYTICS_REPOSITORY,
+  BUDGET_LEDGER_REPOSITORY,
   TELEGRAM_WORKFLOW_REPOSITORY,
   USER_ACCOUNT_REPOSITORY,
   USER_SESSION_REPOSITORY,
@@ -50,6 +52,8 @@ import { PrismaUserSessionRepository } from './auth/prisma-user-session.reposito
 import { PrismaUserAccountRepository } from './auth/prisma-user-account.repository.js';
 import { PrismaCampaignRepository } from './campaigns/prisma-campaign.repository.js';
 import { PrismaPublishingRepository } from './publishing/prisma-publishing.repository.js';
+import { PrismaAnalyticsRepository } from './analytics/prisma-analytics.repository.js';
+import { PrismaBudgetLedgerRepository } from './analytics/prisma-budget-ledger.repository.js';
 import {
   PrismaCreativeApprovalRepository,
   PrismaCreativeExportRepository,
@@ -77,6 +81,8 @@ import {
     PrismaUserAccountRepository,
     PrismaCampaignRepository,
     PrismaPublishingRepository,
+    PrismaAnalyticsRepository,
+    PrismaBudgetLedgerRepository,
     PrismaCreativeJobRepository,
     PrismaVisualAssetRepository,
     PrismaVisualValidationRepository,
@@ -124,6 +130,8 @@ import {
     { provide: USER_ACCOUNT_REPOSITORY, useExisting: PrismaUserAccountRepository },
     { provide: CAMPAIGN_REPOSITORY, useExisting: PrismaCampaignRepository },
     { provide: PUBLISHING_REPOSITORY, useExisting: PrismaPublishingRepository },
+    { provide: ANALYTICS_REPOSITORY, useExisting: PrismaAnalyticsRepository },
+    { provide: BUDGET_LEDGER_REPOSITORY, useExisting: PrismaBudgetLedgerRepository },
     { provide: CREATIVE_JOB_REPOSITORY, useExisting: PrismaCreativeJobRepository },
     { provide: VISUAL_ASSET_REPOSITORY, useExisting: PrismaVisualAssetRepository },
     { provide: VISUAL_VALIDATION_REPOSITORY, useExisting: PrismaVisualValidationRepository },
@@ -154,6 +162,8 @@ import {
     PrismaUserAccountRepository,
     PrismaCampaignRepository,
     PrismaPublishingRepository,
+    PrismaAnalyticsRepository,
+    PrismaBudgetLedgerRepository,
     PrismaCreativeJobRepository,
     PrismaVisualAssetRepository,
     PrismaVisualValidationRepository,
@@ -180,6 +190,8 @@ import {
     USER_ACCOUNT_REPOSITORY,
     CAMPAIGN_REPOSITORY,
     PUBLISHING_REPOSITORY,
+    ANALYTICS_REPOSITORY,
+    BUDGET_LEDGER_REPOSITORY,
     CREATIVE_JOB_REPOSITORY,
     VISUAL_ASSET_REPOSITORY,
     VISUAL_VALIDATION_REPOSITORY,

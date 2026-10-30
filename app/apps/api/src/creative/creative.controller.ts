@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiCookieAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ForbiddenError } from '@parisian-shopper/common';
 import {
   type SanitizedEmployeeDto,
   Permission,
@@ -28,6 +29,8 @@ import {
   ReviseSceneUseCase,
   GetSceneVersionUseCase,
   ExportPosterUseCase,
+  ApproveCreativeUseCase,
+  RejectCreativeUseCase,
   type CreativeSceneVersionRecord,
   type SceneLayerDraft,
   type SceneLayerRecord,
@@ -37,6 +40,8 @@ import {
   type VisualAssetRepository,
   CREATIVE_SCENE_REPOSITORY,
   type CreativeSceneRepository,
+  CREATIVE_JOB_REPOSITORY,
+  type CreativeJobRepository,
 } from '@parisian-shopper/application';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
@@ -48,6 +53,8 @@ import { ListCreativeProjectsQueryDto } from './dto/list-creative-projects-query
 import { CreateCreativeProjectDto } from './dto/create-creative-project.dto.js';
 import { ReviseCreativeProjectDto } from './dto/revise-creative-project.dto.js';
 import { ExportCreativeProjectDto } from './dto/export-creative-project.dto.js';
+import { ApproveCreativeProjectDto } from './dto/approve-creative-project.dto.js';
+import { RejectCreativeProjectDto } from './dto/reject-creative-project.dto.js';
 import {
   type ExportResponseDto,
   type PaginatedCreativeProjectsResponseDto,
@@ -55,6 +62,7 @@ import {
   type RenderPreviewResponseDto,
   type TemplateListResponseDto,
   type ValidationResponseDto,
+  type CreativeApprovalResponseDto,
 } from './dto/creative-response.dto.js';
 
 @ApiTags('creative')
@@ -69,12 +77,16 @@ export class CreativeController {
     private readonly reviseSceneUseCase: ReviseSceneUseCase,
     private readonly getSceneVersionUseCase: GetSceneVersionUseCase,
     private readonly exportPosterUseCase: ExportPosterUseCase,
+    private readonly approveCreativeUseCase: ApproveCreativeUseCase,
+    private readonly rejectCreativeUseCase: RejectCreativeUseCase,
     @Inject(ASSET_STORAGE)
     private readonly storage: AssetStoragePort,
     @Inject(VISUAL_ASSET_REPOSITORY)
     private readonly visualAssetRepo: VisualAssetRepository,
     @Inject(CREATIVE_SCENE_REPOSITORY)
     private readonly sceneRepo: CreativeSceneRepository,
+    @Inject(CREATIVE_JOB_REPOSITORY)
+    private readonly jobRepo: CreativeJobRepository,
   ) {}
 
   @Get('templates')
@@ -258,10 +270,24 @@ export class CreativeController {
   @ApiOperation({
     summary: 'Download or view rendered raster image bytes (authenticated, private no-store)',
   })
-  public async streamRenderFile(@Param('id') id: string, @Res() res: Response): Promise<void> {
+  public async streamRenderFile(
+    @Param('id') id: string,
+    @Res() res: Response,
+    @CurrentUser() employee: SanitizedEmployeeDto,
+  ): Promise<void> {
     const asset = await this.visualAssetRepo.findById(id);
     if (!asset) {
       throw new NotFoundException(`Visual asset "${id}" not found.`);
+    }
+
+    if (
+      !employee.roles.includes('ADMIN') &&
+      !employee.permissions.includes(Permission.VIEW_ALL_CONTENT)
+    ) {
+      const job = await this.jobRepo.findById(asset.creativeJobId);
+      if (job && job.requestedByUserId && job.requestedByUserId !== employee.id) {
+        throw new ForbiddenError({ publicMessage: 'Permission denied: Cannot view this render.' });
+      }
     }
 
     const buffer = await this.storage.getAssetBuffer(asset.storageKey);
@@ -275,6 +301,142 @@ export class CreativeController {
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     res.send(buffer);
+  }
+
+  @Post('projects/:id/approve')
+  @UseGuards(SessionAuthGuard, CsrfGuard, PermissionsGuard)
+  @RequirePermissions(Permission.APPROVE_CREATIVE)
+  @HttpCode(HttpStatus.OK)
+  @ApiCookieAuth('ps_session')
+  @ApiOperation({ summary: 'Approve exact creative scene version (enforces Four-Eyes)' })
+  public async approveProject(
+    @Param('id') id: string,
+    @CurrentUser() employee: SanitizedEmployeeDto,
+    @Body() dto?: ApproveCreativeProjectDto,
+  ): Promise<CreativeApprovalResponseDto> {
+    const scene = await this.sceneRepo.findById(id);
+    if (!scene) {
+      throw new NotFoundException(`Creative project "${id}" not found.`);
+    }
+
+    try {
+      const result = await this.approveCreativeUseCase.execute({
+        creativeJobId: scene.creativeJobId,
+        ...(dto?.visualAssetId ? { visualAssetId: dto.visualAssetId } : {}),
+        ...(dto?.sceneVersionId ? { sceneVersionId: dto.sceneVersionId } : {}),
+        approvedBy: employee.id,
+        approverRoles: employee.roles,
+        ...(dto?.comment ? { comment: dto.comment } : {}),
+      });
+
+      return {
+        approvalEventId: result.approvalEvent.id,
+        creativeJobId: result.approvalEvent.creativeJobId,
+        visualAssetId: result.approvalEvent.visualAssetId,
+        ...(result.approvalEvent.sceneVersionId
+          ? { sceneVersionId: result.approvalEvent.sceneVersionId }
+          : {}),
+        decision: result.approvalEvent.decision,
+        approverUserId: result.approvalEvent.approverUserId,
+        ...(result.approvalEvent.approverDisplayName
+          ? { approverDisplayName: result.approvalEvent.approverDisplayName }
+          : { approverDisplayName: employee.displayName }),
+        ...(result.approvalEvent.comment ? { comment: result.approvalEvent.comment } : {}),
+        createdAt: result.approvalEvent.createdAt.toISOString(),
+      };
+    } catch (err: unknown) {
+      if (err instanceof ForbiddenError) {
+        throw err;
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      throw new BadRequestException(message);
+    }
+  }
+
+  @Post('projects/:id/reject')
+  @UseGuards(SessionAuthGuard, CsrfGuard, PermissionsGuard)
+  @RequirePermissions(Permission.REJECT_CREATIVE)
+  @HttpCode(HttpStatus.OK)
+  @ApiCookieAuth('ps_session')
+  @ApiOperation({ summary: 'Reject creative scene version with mandatory reason' })
+  public async rejectProject(
+    @Param('id') id: string,
+    @CurrentUser() employee: SanitizedEmployeeDto,
+    @Body() dto: RejectCreativeProjectDto,
+  ): Promise<CreativeApprovalResponseDto> {
+    const scene = await this.sceneRepo.findById(id);
+    if (!scene) {
+      throw new NotFoundException(`Creative project "${id}" not found.`);
+    }
+
+    try {
+      const result = await this.rejectCreativeUseCase.execute({
+        creativeJobId: scene.creativeJobId,
+        ...(dto.visualAssetId ? { visualAssetId: dto.visualAssetId } : {}),
+        ...(dto.sceneVersionId ? { sceneVersionId: dto.sceneVersionId } : {}),
+        rejectedBy: employee.id,
+        rejecterRoles: employee.roles,
+        comment: dto.reason,
+      });
+
+      return {
+        approvalEventId: result.approvalEvent.id,
+        creativeJobId: result.approvalEvent.creativeJobId,
+        visualAssetId: result.approvalEvent.visualAssetId,
+        ...(result.approvalEvent.sceneVersionId
+          ? { sceneVersionId: result.approvalEvent.sceneVersionId }
+          : {}),
+        decision: result.approvalEvent.decision,
+        approverUserId: result.approvalEvent.approverUserId,
+        ...(result.approvalEvent.approverDisplayName
+          ? { approverDisplayName: result.approvalEvent.approverDisplayName }
+          : { approverDisplayName: employee.displayName }),
+        ...(result.approvalEvent.comment ? { comment: result.approvalEvent.comment } : {}),
+        createdAt: result.approvalEvent.createdAt.toISOString(),
+      };
+    } catch (err: unknown) {
+      if (err instanceof ForbiddenError) {
+        throw err;
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      throw new BadRequestException(message);
+    }
+  }
+
+  @Post('projects/:id/submit')
+  @UseGuards(SessionAuthGuard, CsrfGuard, PermissionsGuard)
+  @RequirePermissions(Permission.EDIT_CREATIVE)
+  @HttpCode(HttpStatus.OK)
+  @ApiCookieAuth('ps_session')
+  @ApiOperation({ summary: 'Submit creative scene version for independent review' })
+  public async submitProject(
+    @Param('id') id: string,
+    @CurrentUser() _employee: SanitizedEmployeeDto,
+    @Body() _dto?: { versionNumber?: number },
+  ): Promise<{ status: string }> {
+    const scene = await this.sceneRepo.findById(id);
+    if (!scene) {
+      throw new NotFoundException(`Creative project "${id}" not found.`);
+    }
+
+    const job = await this.jobRepo.findById(scene.creativeJobId);
+    if (!job) {
+      throw new NotFoundException(`Creative job for project "${id}" not found.`);
+    }
+
+    if (job.status !== 'READY_FOR_REVIEW') {
+      await this.jobRepo.transitionStatus(job.id, job.status, 'READY_FOR_REVIEW');
+    }
+
+    const latestVersion = await this.sceneRepo.findLatestVersionBySceneId(scene.id);
+    if (latestVersion && this.sceneRepo.updateVersionState) {
+      await this.sceneRepo.updateVersionState(latestVersion.id, {
+        status: 'READY_FOR_REVIEW',
+        isExportEligible: false,
+      });
+    }
+
+    return { status: 'READY_FOR_REVIEW' };
   }
 
   @Post('projects/:id/export')
@@ -299,6 +461,7 @@ export class CreativeController {
         format: dto.format,
         encoding: dto.encoding,
         ...(dto.quality !== undefined ? { quality: dto.quality } : {}),
+        ...(dto.visualAssetId ? { visualAssetId: dto.visualAssetId } : {}),
         actorUserId: employee.id,
         actorRoles: employee.roles,
       });
