@@ -2,6 +2,7 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   ApproveCreativeUseCase,
   RejectCreativeUseCase,
+  SelfApprovalProhibitedError,
   ASSET_STORAGE,
   CREATIVE_APPROVAL_REPOSITORY,
   CREATIVE_JOB_REPOSITORY,
@@ -441,13 +442,27 @@ export class VisualReviewCallbackHandler implements TelegramVisualCallbackHandle
       };
     }
 
-    await this.approveCreative.execute({
-      creativeJobId,
-      visualAssetId,
-      approvedBy: actor.internalUserId,
-      approverRoles: actor.roles,
-      ...(this.outboxWriter !== undefined ? { outboxWriter: this.outboxWriter } : {}),
-    });
+    try {
+      await this.approveCreative.execute({
+        creativeJobId,
+        visualAssetId,
+        approvedBy: actor.internalUserId,
+        approverRoles: actor.roles,
+        ...(this.outboxWriter !== undefined ? { outboxWriter: this.outboxWriter } : {}),
+      });
+    } catch (err: unknown) {
+      if (err instanceof SelfApprovalProhibitedError) {
+        return {
+          messages: [
+            {
+              text: '🚫 *Self-Approval Prohibited*\n\nFour-Eyes security policy prohibits approving creative assets that you requested or revised.',
+            },
+          ],
+          callbackNotice: 'Self-approval prohibited.',
+        };
+      }
+      throw err;
+    }
 
     await this.workflowRepo.appendAudit({
       actor,

@@ -32,10 +32,14 @@ export class PrismaCreativeApprovalRepository implements CreativeApprovalReposit
       data: {
         creativeJobId: input.creativeJobId,
         visualAssetId: input.visualAssetId,
+        sceneVersionId: input.sceneVersionId ?? null,
         approverUserId: input.approverUserId,
         decision: input.decision,
         comment: input.comment ?? null,
         visualValidationResultId: input.visualValidationResultId ?? null,
+      },
+      include: {
+        approverUser: true,
       },
     });
 
@@ -46,6 +50,7 @@ export class PrismaCreativeApprovalRepository implements CreativeApprovalReposit
     const rows = await this.prisma.creativeApprovalEvent.findMany({
       where: { creativeJobId },
       orderBy: { createdAt: 'desc' },
+      include: { approverUser: true },
     });
     return rows.map(toRecord);
   }
@@ -56,16 +61,42 @@ export class PrismaCreativeApprovalRepository implements CreativeApprovalReposit
     const rows = await this.prisma.creativeApprovalEvent.findMany({
       where: { visualAssetId },
       orderBy: { createdAt: 'desc' },
+      include: { approverUser: true },
     });
     return rows.map(toRecord);
   }
+
+  public async findBySceneVersionId(
+    sceneVersionId: string,
+  ): Promise<readonly CreativeApprovalEventRecord[]> {
+    const rows = await this.prisma.creativeApprovalEvent.findMany({
+      where: { sceneVersionId },
+      orderBy: { createdAt: 'desc' },
+      include: { approverUser: true },
+    });
+    return rows.map(toRecord);
+  }
+
+  public async findLatestApprovalByJobId(
+    creativeJobId: string,
+  ): Promise<CreativeApprovalEventRecord | null> {
+    const row = await this.prisma.creativeApprovalEvent.findFirst({
+      where: { creativeJobId },
+      orderBy: { createdAt: 'desc' },
+      include: { approverUser: true },
+    });
+    return row ? toRecord(row) : null;
+  }
 }
 
-function toRecord(row: PrismaCreativeApprovalEvent): CreativeApprovalEventRecord {
+function toRecord(
+  row: PrismaCreativeApprovalEvent & { approverUser?: { displayName: string } | null },
+): CreativeApprovalEventRecord {
   return {
     id: row.id,
     creativeJobId: row.creativeJobId,
     visualAssetId: row.visualAssetId,
+    ...(row.sceneVersionId ? { sceneVersionId: row.sceneVersionId } : {}),
     approverUserId: row.approverUserId,
     decision: row.decision,
     ...(row.comment === null ? {} : { comment: row.comment }),
@@ -73,5 +104,6 @@ function toRecord(row: PrismaCreativeApprovalEvent): CreativeApprovalEventRecord
       ? {}
       : { visualValidationResultId: row.visualValidationResultId }),
     createdAt: row.createdAt,
+    ...(row.approverUser?.displayName ? { approverDisplayName: row.approverUser.displayName } : {}),
   };
 }

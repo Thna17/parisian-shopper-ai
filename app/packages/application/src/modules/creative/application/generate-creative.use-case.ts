@@ -52,6 +52,8 @@ import {
 } from '../domain/services/background-quality-validator.js';
 import { deriveLayoutIntentForTemplate } from '../domain/layout-intent.js';
 import { POSTER_COMPOSITOR, type PosterCompositor } from './poster-compositor.port.js';
+import { ReserveAiBudgetUseCase } from '../../analytics/application/reserve-ai-budget.use-case.js';
+import { SettleAiUsageUseCase } from '../../analytics/application/settle-ai-usage.use-case.js';
 
 export interface GenerateCreativeInput {
   readonly contentVersionId: string;
@@ -115,6 +117,10 @@ export class GenerateCreativeUseCase {
     @Optional()
     @Inject('ALLOW_LEGACY_PRODUCT_ASSET_FALLBACK')
     allowLegacyProductAssetFallback?: boolean,
+    @Optional()
+    private readonly reserveBudget?: ReserveAiBudgetUseCase,
+    @Optional()
+    private readonly settleBudget?: SettleAiUsageUseCase,
   ) {
     this.productAssetValidator = productAssetValidator ?? new ProductAssetValidator();
     this.backgroundQualityValidator =
@@ -357,23 +363,50 @@ export class GenerateCreativeUseCase {
         const briefText = preset.buildPrompt({ layoutIntent, category });
         const negativePrompt = preset.negativePrompt;
 
-        const backgroundAsset = await this.provider.generateBackground({
-          creativeJobId: creativeJob.id,
-          contentVersionId,
-          briefText,
-          stylePrompt: preset.id,
-          negativePrompt,
-          targetWidth: geometry.width,
-          targetHeight: geometry.height,
-          aspectRatio: geometry.aspectRatio,
-          creativeProfile: preset.id,
-          layoutIntent,
-        });
+        let creativeReservationId: string | undefined;
+        if (this.reserveBudget) {
+          const res = await this.reserveBudget.execute({
+            idempotencyKey: `creative-job:${creativeJob.id}:bg`,
+            estimatedMaxCost: 0.1,
+            creativeJobId: creativeJob.id,
+          });
+          creativeReservationId = res.id;
+        }
 
-        backgroundBuffer = backgroundAsset.imageBuffer;
-        backgroundMimeType = backgroundAsset.mimeType;
-        backgroundProviderId = backgroundAsset.providerId;
-        backgroundModel = backgroundAsset.model;
+        try {
+          const backgroundAsset = await this.provider.generateBackground({
+            creativeJobId: creativeJob.id,
+            contentVersionId,
+            briefText,
+            stylePrompt: preset.id,
+            negativePrompt,
+            targetWidth: geometry.width,
+            targetHeight: geometry.height,
+            aspectRatio: geometry.aspectRatio,
+            creativeProfile: preset.id,
+            layoutIntent,
+          });
+
+          backgroundBuffer = backgroundAsset.imageBuffer;
+          backgroundMimeType = backgroundAsset.mimeType;
+          backgroundProviderId = backgroundAsset.providerId;
+          backgroundModel = backgroundAsset.model;
+
+          if (creativeReservationId && this.settleBudget) {
+            await this.settleBudget.execute({
+              reservationId: creativeReservationId,
+              provider: backgroundProviderId ?? 'openai',
+              model: backgroundModel ?? 'dall-e-3',
+              actualCost: 0.04,
+              costKnowledge: 'ESTIMATED',
+            });
+          }
+        } catch (bgError) {
+          if (creativeReservationId && this.settleBudget) {
+            await this.settleBudget.release(creativeReservationId, 'Background generation failed');
+          }
+          throw bgError;
+        }
       }
 
       // Pre-composition Background Quality Validation

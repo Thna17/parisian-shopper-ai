@@ -11,9 +11,12 @@ import {
   ReviseSceneUseCase,
   GetSceneVersionUseCase,
   ExportPosterUseCase,
+  ApproveCreativeUseCase,
+  RejectCreativeUseCase,
   type AssetStoragePort,
   type VisualAssetRepository,
   type CreativeSceneRepository,
+  type CreativeJobRepository,
 } from '@parisian-shopper/application';
 import { CreativeController } from './creative.controller.js';
 
@@ -27,9 +30,12 @@ describe('CreativeController (Unit & API Integration)', () => {
   let mockReviseSceneUseCase: jest.Mocked<ReviseSceneUseCase>;
   let mockGetSceneVersionUseCase: jest.Mocked<GetSceneVersionUseCase>;
   let mockExportPosterUseCase: jest.Mocked<ExportPosterUseCase>;
+  let mockApproveCreativeUseCase: jest.Mocked<ApproveCreativeUseCase>;
+  let mockRejectCreativeUseCase: jest.Mocked<RejectCreativeUseCase>;
   let mockStorage: jest.Mocked<AssetStoragePort>;
   let mockVisualAssetRepo: jest.Mocked<VisualAssetRepository>;
   let mockSceneRepo: jest.Mocked<CreativeSceneRepository>;
+  let mockJobRepo: jest.Mocked<CreativeJobRepository>;
 
   const mockEditorEmployee: SanitizedEmployeeDto = {
     id: 'user-editor-1',
@@ -90,6 +96,14 @@ describe('CreativeController (Unit & API Integration)', () => {
       execute: jest.fn(),
     } as unknown as jest.Mocked<ExportPosterUseCase>;
 
+    mockApproveCreativeUseCase = {
+      execute: jest.fn(),
+    } as unknown as jest.Mocked<ApproveCreativeUseCase>;
+
+    mockRejectCreativeUseCase = {
+      execute: jest.fn(),
+    } as unknown as jest.Mocked<RejectCreativeUseCase>;
+
     mockStorage = {
       saveAsset: jest.fn(),
       getAssetBuffer: jest.fn(),
@@ -106,7 +120,16 @@ describe('CreativeController (Unit & API Integration)', () => {
     mockSceneRepo = {
       findById: jest.fn(),
       findScenes: jest.fn(),
+      findLatestVersionBySceneId: jest.fn(),
+      updateVersionState: jest.fn(),
     } as unknown as jest.Mocked<CreativeSceneRepository>;
+
+    mockJobRepo = {
+      createJob: jest.fn(),
+      findById: jest.fn(),
+      transitionStatus: jest.fn(),
+      updateJob: jest.fn(),
+    } as unknown as jest.Mocked<CreativeJobRepository>;
 
     controller = new CreativeController(
       mockListProjectsUseCase,
@@ -117,9 +140,12 @@ describe('CreativeController (Unit & API Integration)', () => {
       mockReviseSceneUseCase,
       mockGetSceneVersionUseCase,
       mockExportPosterUseCase,
+      mockApproveCreativeUseCase,
+      mockRejectCreativeUseCase,
       mockStorage,
       mockVisualAssetRepo,
       mockSceneRepo,
+      mockJobRepo,
     );
   });
 
@@ -394,6 +420,141 @@ describe('CreativeController (Unit & API Integration)', () => {
       expect(res.width).toBe(1080);
       expect(res.height).toBe(1080);
       expect(res.downloadUrl).toContain('/v1/creative/exports/export-uuid-1/download');
+    });
+  });
+
+  describe('CREATIVE-API-09 to 11 — Approval, Rejection, and Submission workflows', () => {
+    it('approves a creative project via ApproveCreativeUseCase', async () => {
+      mockSceneRepo.findById.mockResolvedValue({
+        id: 'scene-1',
+        creativeJobId: 'job-1',
+        campaignId: null,
+        title: 'Ready Poster',
+        currentVersionNumber: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      mockApproveCreativeUseCase.execute.mockResolvedValue({
+        approvalEvent: {
+          id: 'event-1',
+          creativeJobId: 'job-1',
+          visualAssetId: 'asset-1',
+          decision: 'CREATIVE_APPROVED',
+          approverUserId: mockApproverEmployee.id,
+          createdAt: new Date(),
+        },
+      });
+
+      const res = await controller.approveProject('scene-1', mockApproverEmployee, {
+        comment: 'Looks great!',
+      });
+
+      expect(res.decision).toBe('CREATIVE_APPROVED');
+      expect(mockApproveCreativeUseCase.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          creativeJobId: 'job-1',
+          approvedBy: mockApproverEmployee.id,
+        }),
+      );
+    });
+
+    it('rejects a creative project via RejectCreativeUseCase', async () => {
+      mockSceneRepo.findById.mockResolvedValue({
+        id: 'scene-1',
+        creativeJobId: 'job-1',
+        campaignId: null,
+        title: 'Ready Poster',
+        currentVersionNumber: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      mockRejectCreativeUseCase.execute.mockResolvedValue({
+        approvalEvent: {
+          id: 'event-2',
+          creativeJobId: 'job-1',
+          visualAssetId: 'asset-1',
+          decision: 'CREATIVE_REJECTED',
+          approverUserId: mockApproverEmployee.id,
+          comment: 'Color palette contrast issue',
+          createdAt: new Date(),
+        },
+      });
+
+      const res = await controller.rejectProject('scene-1', mockApproverEmployee, {
+        reason: 'Color palette contrast issue',
+      });
+
+      expect(res.decision).toBe('CREATIVE_REJECTED');
+      expect(mockRejectCreativeUseCase.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          creativeJobId: 'job-1',
+          rejectedBy: mockApproverEmployee.id,
+          comment: 'Color palette contrast issue',
+        }),
+      );
+    });
+
+    it('submits a project for review', async () => {
+      mockSceneRepo.findById.mockResolvedValue({
+        id: 'scene-1',
+        creativeJobId: 'job-1',
+        campaignId: null,
+        title: 'Draft Poster',
+        currentVersionNumber: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      mockJobRepo.findById.mockResolvedValue({
+        id: 'job-1',
+        productSnapshotId: 'snap-1',
+        contentVersionId: 'cv-1',
+        requestedByUserId: mockEditorEmployee.id,
+        brandRuleVersionId: 'brv-1',
+        targetPlatform: 'TELEGRAM',
+        aspectRatio: '1:1',
+        creativeProfile: 'PARISIAN_ELEGANCE',
+        status: 'VALIDATING',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      mockSceneRepo.findLatestVersionBySceneId.mockResolvedValue({
+        id: 'ver-1',
+        sceneId: 'scene-1',
+        versionNumber: 1,
+        aspectRatio: '1:1',
+        width: 1080,
+        height: 1080,
+        templateId: 'CENTERED_HERO',
+        templateVersion: '1.0.0',
+        language: 'EN',
+        safeMargins: { top: 40, bottom: 40, left: 40, right: 40 },
+        brandProfileVersionId: 'bp-1',
+        sourceContentVersionId: 'cv-1',
+        productSnapshotId: 'snap-1',
+        sceneHash: 'hash-1',
+        dependencyHash: 'dep-hash-1',
+        requestedByUserId: mockEditorEmployee.id,
+        layers: [],
+        dependencies: [],
+        createdAt: new Date(),
+      });
+
+      const res = await controller.submitProject('scene-1', mockEditorEmployee);
+
+      expect(res.status).toBe('READY_FOR_REVIEW');
+      expect(mockJobRepo.transitionStatus).toHaveBeenCalledWith(
+        'job-1',
+        'VALIDATING',
+        'READY_FOR_REVIEW',
+      );
+      expect(mockSceneRepo.updateVersionState).toHaveBeenCalledWith('ver-1', {
+        status: 'READY_FOR_REVIEW',
+        isExportEligible: false,
+      });
     });
   });
 });

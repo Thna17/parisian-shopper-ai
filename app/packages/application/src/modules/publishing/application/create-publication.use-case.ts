@@ -1,5 +1,6 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { Permission } from '../../auth/domain/permissions.js';
+import { ValidationError } from '@parisian-shopper/common';
 import {
   APPROVALS_REPOSITORY,
   type ApprovalsRepository,
@@ -8,6 +9,14 @@ import {
   CONTENT_GENERATION_REPOSITORY,
   type ContentGenerationRepository,
 } from '../../content/application/content-generation.repository.js';
+import {
+  CREATIVE_EXPORT_REPOSITORY,
+  type CreativeExportRepository,
+} from '../../creative/application/creative-export.repository.js';
+import {
+  CREATIVE_APPROVAL_REPOSITORY,
+  type CreativeApprovalRepository,
+} from '../../creative/application/creative-approval.repository.js';
 import {
   type CreatePublicationInput,
   PublicationChannel,
@@ -29,6 +38,12 @@ export class CreatePublicationUseCase {
     private readonly contentGenerationRepository: ContentGenerationRepository,
     @Inject(APPROVALS_REPOSITORY)
     private readonly approvalsRepository: ApprovalsRepository,
+    @Optional()
+    @Inject(CREATIVE_EXPORT_REPOSITORY)
+    private readonly creativeExportRepository?: CreativeExportRepository,
+    @Optional()
+    @Inject(CREATIVE_APPROVAL_REPOSITORY)
+    private readonly creativeApprovalRepository?: CreativeApprovalRepository,
   ) {}
 
   public async execute(input: CreatePublicationInput): Promise<PublicationRecord> {
@@ -58,6 +73,35 @@ export class CreatePublicationUseCase {
 
     if (!isApproved) {
       throw new ContentVersionNotApprovedError(input.contentVersionId);
+    }
+
+    // SEC-CREATIVE-18: If a creative export ID is provided, verify it is verified and approved
+    if (input.creativeExportId && this.creativeExportRepository) {
+      const exportRecord = await this.creativeExportRepository.findById(input.creativeExportId);
+      if (!exportRecord) {
+        throw new ValidationError({
+          publicMessage: `Creative export ${input.creativeExportId} not found.`,
+        });
+      }
+      if (exportRecord.validationStatus !== 'PASSED') {
+        throw new ValidationError({
+          publicMessage: `Creative export ${input.creativeExportId} validation status is not PASSED (current: ${exportRecord.validationStatus}).`,
+        });
+      }
+      if (this.creativeApprovalRepository) {
+        const approvals = await this.creativeApprovalRepository.findByAssetId(
+          exportRecord.visualAssetId,
+        );
+        const hasApprovedCreative = approvals.some(
+          (a) =>
+            a.decision === 'CREATIVE_APPROVED' && a.creativeJobId === exportRecord.creativeJobId,
+        );
+        if (!hasApprovedCreative) {
+          throw new ValidationError({
+            publicMessage: `Creative export ${input.creativeExportId} references visual asset ${exportRecord.visualAssetId} which is not approved for publication.`,
+          });
+        }
+      }
     }
 
     // Manual export can immediately be set to READY; other destinations start in DRAFT

@@ -117,6 +117,7 @@ export interface CreativeProjectDetailResult {
   readonly canEdit: boolean;
   readonly canApprove: boolean;
   readonly canExport: boolean;
+  readonly approvalIneligibilityReasons?: readonly string[];
 }
 
 @Injectable()
@@ -314,13 +315,46 @@ export class GetCreativeProjectDetailUseCase {
       input.requesterRoles,
       Permission.EDIT_CREATIVE,
     );
-    const canApprove =
-      this.permissions.hasAnyRolePermission(input.requesterRoles, Permission.APPROVE_CREATIVE) &&
-      job?.status === 'READY_FOR_REVIEW' &&
-      job.requestedByUserId !== input.requesterUserId;
+    const isRequester = Boolean(
+      job?.requestedByUserId && job.requestedByUserId === input.requesterUserId,
+    );
+    const isVersionAuthor = Boolean(
+      currentVersion?.requestedByUserId &&
+      currentVersion.requestedByUserId === input.requesterUserId,
+    );
+    const hasApprovePerm = this.permissions.hasAnyRolePermission(
+      input.requesterRoles,
+      Permission.APPROVE_CREATIVE,
+    );
+    const isReviewable = job?.status === 'READY_FOR_REVIEW';
+
+    const canApprove = hasApprovePerm && isReviewable && !isRequester && !isVersionAuthor;
+    const approvalIneligibilityReasons: string[] = [];
+    if (!hasApprovePerm) {
+      approvalIneligibilityReasons.push('Requires APPROVE_CREATIVE permission.');
+    }
+    if (!isReviewable) {
+      approvalIneligibilityReasons.push(
+        `Creative is not ready for review (status: ${job?.status ?? 'UNKNOWN'}).`,
+      );
+    }
+    if (isRequester) {
+      approvalIneligibilityReasons.push(
+        'Four-Eyes policy: Creative requester cannot approve their own creative.',
+      );
+    }
+    if (isVersionAuthor) {
+      approvalIneligibilityReasons.push(
+        'Four-Eyes policy: Revision author cannot approve their own creative revision.',
+      );
+    }
+
+    const isVersionApproved =
+      currentVersion?.state?.status === 'APPROVED' &&
+      currentVersion?.state?.isExportEligible === true;
     const canExport =
       this.permissions.hasAnyRolePermission(input.requesterRoles, Permission.EXPORT_CREATIVE) &&
-      job?.status === 'CREATIVE_APPROVED';
+      (job?.status === 'CREATIVE_APPROVED' || isVersionApproved);
 
     return {
       project,
@@ -336,6 +370,7 @@ export class GetCreativeProjectDetailUseCase {
       canEdit,
       canApprove,
       canExport,
+      approvalIneligibilityReasons,
     };
   }
 }

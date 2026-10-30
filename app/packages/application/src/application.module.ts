@@ -13,6 +13,7 @@ import { UsersModule } from './modules/users/users.module.js';
 import { ValidationModule } from './modules/validation/validation.module.js';
 import { CampaignsModule } from './modules/campaigns/campaigns.module.js';
 import { PublishingModule } from './modules/publishing/publishing.module.js';
+import { AnalyticsModule } from './modules/analytics/analytics.module.js';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { PublishingModule } from './modules/publishing/publishing.module.js';
     AuditModule,
     CreativeModule,
     PublishingModule,
+    AnalyticsModule,
   ],
   exports: [
     AuthModule,
@@ -44,6 +46,7 @@ import { PublishingModule } from './modules/publishing/publishing.module.js';
     AuditModule,
     CreativeModule,
     PublishingModule,
+    AnalyticsModule,
   ],
 })
 export class ApplicationModule {}

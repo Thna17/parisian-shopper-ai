@@ -22,6 +22,9 @@ export const Permission = {
   EXPORT_CREATIVE: 'EXPORT_CREATIVE',
   PUBLISH_CREATIVE: 'PUBLISH_CREATIVE',
   VERIFY_PRODUCT_ASSET_RIGHTS: 'VERIFY_PRODUCT_ASSET_RIGHTS',
+  VIEW_OPERATIONAL_ANALYTICS: 'VIEW_OPERATIONAL_ANALYTICS',
+  VIEW_AI_COSTS: 'VIEW_AI_COSTS',
+  MANAGE_AI_BUDGETS: 'MANAGE_AI_BUDGETS',
 } as const;
 export type Permission = (typeof Permission)[keyof typeof Permission];
 
@@ -35,6 +38,7 @@ const ROLE_PERMISSIONS: Readonly<Record<RoleCode, readonly Permission[]>> = {
     Permission.REGENERATE_CONTENT,
     Permission.EDIT_CREATIVE,
     Permission.REGENERATE_CREATIVE,
+    Permission.VIEW_OPERATIONAL_ANALYTICS,
   ],
   MARKETING_APPROVER: [
     Permission.VIEW_PRODUCTS,
@@ -50,6 +54,8 @@ const ROLE_PERMISSIONS: Readonly<Record<RoleCode, readonly Permission[]>> = {
     Permission.REJECT_CREATIVE,
     Permission.EXPORT_CREATIVE,
     Permission.VERIFY_PRODUCT_ASSET_RIGHTS,
+    Permission.VIEW_OPERATIONAL_ANALYTICS,
+    Permission.VIEW_AI_COSTS,
   ],
   ADMIN: [
     Permission.VIEW_PRODUCTS,
@@ -67,6 +73,9 @@ const ROLE_PERMISSIONS: Readonly<Record<RoleCode, readonly Permission[]>> = {
     Permission.EXPORT_CREATIVE,
     Permission.PUBLISH_CREATIVE,
     Permission.VERIFY_PRODUCT_ASSET_RIGHTS,
+    Permission.VIEW_OPERATIONAL_ANALYTICS,
+    Permission.VIEW_AI_COSTS,
+    Permission.MANAGE_AI_BUDGETS,
   ],
 };
 

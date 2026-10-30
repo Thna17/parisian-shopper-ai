@@ -9,6 +9,8 @@ import {
   BookOpen,
   Send,
   Shield,
+  BarChart3,
+  DollarSign,
   X,
   LogOut,
 } from 'lucide-react';
@@ -151,6 +153,34 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseM
             />
           </div>
         </div>
+
+        {/* Intelligence & Cost Control */}
+        {(hasPermission(Permission.VIEW_OPERATIONAL_ANALYTICS) ||
+          hasPermission(Permission.VIEW_AI_COSTS)) && (
+          <div>
+            <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-app-muted/80">
+              Intelligence & Cost
+            </div>
+            <div className="space-y-0.5">
+              {hasPermission(Permission.VIEW_OPERATIONAL_ANALYTICS) && (
+                <SidebarItem
+                  to="/analytics"
+                  label="Analytics Hub"
+                  icon={<BarChart3 className="w-4 h-4" />}
+                  onClick={onCloseMobile}
+                />
+              )}
+              {hasPermission(Permission.VIEW_AI_COSTS) && (
+                <SidebarItem
+                  to="/analytics/costs"
+                  label="AI Cost Ledger"
+                  icon={<DollarSign className="w-4 h-4" />}
+                  onClick={onCloseMobile}
+                />
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Administration */}
         {roles.includes('ADMIN') && (

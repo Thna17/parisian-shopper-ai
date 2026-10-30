@@ -60,9 +60,10 @@ import { AuthModule } from '../auth/auth.module.js';
 import { ProductsModule } from '../products/products.module.js';
 import { ContentModule } from '../content/content.module.js';
 import { BrandModule } from '../brand/brand.module.js';
+import { AnalyticsModule } from '../analytics/analytics.module.js';
 
 @Module({
-  imports: [AuthModule, ProductsModule, ContentModule, BrandModule],
+  imports: [AuthModule, ProductsModule, ContentModule, BrandModule, AnalyticsModule],
   providers: [
     {
       provide: ASSET_STORAGE,

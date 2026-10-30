@@ -135,4 +135,25 @@ export const creativeApi = {
       payload,
     );
   },
+
+  approveProject: async (
+    id: string,
+    payload: { versionNumber?: number; sceneVersionId?: string; comment?: string } = {},
+  ): Promise<{ approvalEventId: string; decision: string; approverUserId: string }> => {
+    return apiClient.post(`/v1/creative/projects/${encodeURIComponent(id)}/approve`, payload);
+  },
+
+  rejectProject: async (
+    id: string,
+    payload: { reason: string; versionNumber?: number; sceneVersionId?: string },
+  ): Promise<{ approvalEventId: string; decision: string; approverUserId: string }> => {
+    return apiClient.post(`/v1/creative/projects/${encodeURIComponent(id)}/reject`, payload);
+  },
+
+  submitProject: async (
+    id: string,
+    payload: { versionNumber?: number } = {},
+  ): Promise<{ status: string }> => {
+    return apiClient.post(`/v1/creative/projects/${encodeURIComponent(id)}/submit`, payload);
+  },
 };

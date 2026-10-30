@@ -129,4 +129,8 @@ export interface CreativeSceneRepository {
   findLatestVersionBySceneId(sceneId: string): Promise<CreativeSceneVersionRecord | null>;
   listVersions(sceneId: string): Promise<readonly CreativeSceneVersionRecord[]>;
   findScenes(query: ListCreativeScenesQuery): Promise<PaginatedCreativeScenes>;
+  updateVersionState?(
+    sceneVersionId: string,
+    state: { status: string; isExportEligible?: boolean; invalidationReason?: string },
+  ): Promise<void>;
 }

@@ -233,6 +233,7 @@ model User {
   sessions                    UserSession[]
   createdCampaigns            Campaign[]                   @relation("UserCreatedCampaigns")
   requestedPublications       Publication[]                @relation("UserRequestedPublications")
+  createdBudgetPolicies       AiBudgetPolicy[]             @relation("UserCreatedBudgetPolicies")
 
   @@index([status], map: "users_status_idx")
   @@map("users")
@@ -944,6 +945,7 @@ model CreativeApprovalEvent {
   id                       String                   @id @default(uuid()) @db.Uuid
   creativeJobId            String                   @map("creative_job_id") @db.Uuid
   visualAssetId            String                   @map("visual_asset_id") @db.Uuid
+  sceneVersionId           String?                  @map("scene_version_id") @db.Uuid
   approverUserId           String                   @map("approver_user_id") @db.Uuid
   decision                 CreativeApprovalDecision
   comment                  String?                  @db.VarChar(1000)
@@ -952,11 +954,13 @@ model CreativeApprovalEvent {
 
   creativeJob            CreativeJob             @relation(fields: [creativeJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_approval_events_creative_job_id_fkey")
   visualAsset            VisualAsset             @relation(fields: [visualAssetId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_approval_events_visual_asset_id_fkey")
+  sceneVersion           CreativeSceneVersion?   @relation(fields: [sceneVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_approval_events_scene_version_id_fkey")
   approverUser           User                    @relation("UserCreativeApprovalEvents", fields: [approverUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_approval_events_approver_user_id_fkey")
   visualValidationResult VisualValidationResult? @relation(fields: [visualValidationResultId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_approval_events_visual_validation_result_id_fkey")
 
   @@index([creativeJobId, createdAt], map: "creative_approval_events_job_created_at_idx")
   @@index([visualAssetId, createdAt], map: "creative_approval_events_asset_created_at_idx")
+  @@index([sceneVersionId, createdAt], map: "creative_approval_events_scene_version_created_at_idx")
   @@map("creative_approval_events")
 }
 
@@ -1039,6 +1043,7 @@ model CreativeSceneVersion {
   dependencies         LayerDependency[]
   state                SceneVersionState?
   invalidationEvents   SceneInvalidationEvent[]
+  approvalEvents       CreativeApprovalEvent[]
 
   @@unique([sceneId, versionNumber], map: "creative_scene_versions_scene_version_key")
   @@index([sceneId, createdAt], map: "creative_scene_versions_scene_created_at_idx")
@@ -1450,4 +1455,113 @@ model PublicationAttempt {
   @@index([publicationId, startedAt], map: "publication_attempts_pub_started_at_idx")
   @@index([status, startedAt], map: "publication_attempts_status_started_at_idx")
   @@map("publication_attempts")
+}
+
+// ─── AI Budget, Reservation & Cost Ledger ───────────────────────────────────
+
+enum BudgetScope {
+  GLOBAL
+  MONTHLY
+  CAMPAIGN
+}
+
+enum BudgetPolicyStatus {
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+}
+
+enum ReservationStatus {
+  PENDING
+  COMMITTED
+  RELEASED
+  EXPIRED
+  UNRECONCILED
+}
+
+enum CostKnowledgeState {
+  EXACT
+  ESTIMATED
+  ZERO_CONFIRMED
+  UNKNOWN
+}
+
+enum ReconciliationStatus {
+  SETTLED
+  PENDING_RECONCILIATION
+  DISPUTED
+  MANUALLY_RECONCILED
+}
+
+model AiBudgetPolicy {
+  id                 String             @id @default(uuid()) @db.Uuid
+  scope              BudgetScope        @default(MONTHLY)
+  currency           String             @default("USD") @db.VarChar(10)
+  monthlyCeiling     Decimal            @map("monthly_ceiling") @db.Decimal(10, 2)
+  perRequestCeiling  Decimal            @default(2.00) @map("per_request_ceiling") @db.Decimal(10, 4)
+  softAlertThreshold Decimal            @default(80.00) @map("soft_alert_threshold") @db.Decimal(5, 2)
+  effectiveFrom      DateTime           @map("effective_from") @db.Timestamptz(3)
+  effectiveTo        DateTime?          @map("effective_to") @db.Timestamptz(3)
+  status             BudgetPolicyStatus @default(ACTIVE)
+  createdById        String             @map("created_by_id") @db.Uuid
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy    User                @relation("UserCreatedBudgetPolicies", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "ai_budget_policies_created_by_id_fkey")
+  reservations AiCostReservation[]
+
+  @@index([status, effectiveFrom, effectiveTo], map: "ai_budget_policies_status_effective_idx")
+  @@map("ai_budget_policies")
+}
+
+model AiCostReservation {
+  id                  String            @id @default(uuid()) @db.Uuid
+  budgetPolicyId      String            @map("budget_policy_id") @db.Uuid
+  idempotencyKey      String            @unique(map: "ai_cost_reservations_idempotency_key") @map("idempotency_key") @db.VarChar(200)
+  contentJobId        String?           @map("content_job_id") @db.Uuid
+  creativeJobId       String?           @map("creative_job_id") @db.Uuid
+  generationAttemptId String?           @map("generation_attempt_id") @db.Uuid
+  reservedAmount      Decimal           @map("reserved_amount") @db.Decimal(19, 6)
+  currency            String            @default("USD") @db.VarChar(10)
+  status              ReservationStatus @default(PENDING)
+  expiresAt           DateTime          @map("expires_at") @db.Timestamptz(3)
+  settledAt           DateTime?         @map("settled_at") @db.Timestamptz(3)
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  budgetPolicy AiBudgetPolicy  @relation(fields: [budgetPolicyId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "ai_cost_reservations_budget_policy_id_fkey")
+  usageRecords AiUsageRecord[]
+
+  @@index([status, expiresAt], map: "ai_cost_reservations_status_expires_idx")
+  @@index([budgetPolicyId, createdAt], map: "ai_cost_reservations_policy_created_idx")
+  @@index([contentJobId], map: "ai_cost_reservations_content_job_id_idx")
+  @@index([creativeJobId], map: "ai_cost_reservations_creative_job_id_idx")
+  @@map("ai_cost_reservations")
+}
+
+model AiUsageRecord {
+  id                   String               @id @default(uuid()) @db.Uuid
+  reservationId        String?              @map("reservation_id") @db.Uuid
+  generationAttemptId  String?              @map("generation_attempt_id") @db.Uuid
+  provider             String               @db.VarChar(100)
+  model                String               @db.VarChar(200)
+  providerRequestId    String?              @map("provider_request_id") @db.VarChar(200)
+  inputTokens          Int?                 @map("input_tokens")
+  outputTokens         Int?                 @map("output_tokens")
+  totalTokens          Int?                 @map("total_tokens")
+  estimatedCost        Decimal              @map("estimated_cost") @db.Decimal(19, 6)
+  confirmedCost        Decimal?             @map("confirmed_cost") @db.Decimal(19, 6)
+  currency             String               @default("USD") @db.VarChar(10)
+  costKnowledge        CostKnowledgeState   @default(ESTIMATED) @map("cost_knowledge")
+  reconciliationStatus ReconciliationStatus @default(SETTLED) @map("reconciliation_status")
+  reconciliationNotes  String?              @map("reconciliation_notes") @db.VarChar(1000)
+  createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  settledAt            DateTime?            @map("settled_at") @db.Timestamptz(3)
+
+  reservation AiCostReservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "ai_usage_records_reservation_id_fkey")
+
+  @@index([reconciliationStatus, createdAt], map: "ai_usage_records_reconciliation_status_idx")
+  @@index([provider, model, createdAt], map: "ai_usage_records_provider_model_idx")
+  @@index([reservationId], map: "ai_usage_records_reservation_id_idx")
+  @@map("ai_usage_records")
 }

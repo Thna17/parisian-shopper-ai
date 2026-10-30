@@ -30,6 +30,9 @@ import {
   type ContentVersion,
 } from './content-generation.repository.js';
 import { CONTENT_METRICS, type ContentMetrics } from './content-metrics.port.js';
+import { ReserveAiBudgetUseCase } from '../../analytics/application/reserve-ai-budget.use-case.js';
+import { SettleAiUsageUseCase } from '../../analytics/application/settle-ai-usage.use-case.js';
+import { Optional } from '@nestjs/common';
 
 export const AI_EXECUTION_POLICY = Symbol('AI_EXECUTION_POLICY');
 export interface AIExecutionPolicy {
@@ -50,6 +53,8 @@ export class GenerateContentUseCase {
     @Inject(FeatureFlagService) private readonly flags: Pick<FeatureFlagService, 'isEnabled'>,
     private readonly strategies: ContentStrategyRegistry,
     private readonly contextBuilder: AIContextBuilder,
+    @Optional() private readonly reserveBudget?: ReserveAiBudgetUseCase,
+    @Optional() private readonly settleBudget?: SettleAiUsageUseCase,
   ) {}
 
   public async execute(contentJobId: string): Promise<ContentVersion | null> {
@@ -121,6 +126,18 @@ export class GenerateContentUseCase {
     });
     const startedAt = Date.now();
     this.metrics.record('generation_requested', 1, { provider: this.provider.providerName });
+
+    let reservationId: string | undefined;
+    if (this.reserveBudget) {
+      const reservation = await this.reserveBudget.execute({
+        idempotencyKey: `content-attempt:${started.attempt.id}`,
+        estimatedMaxCost: 0.05,
+        contentJobId,
+        generationAttemptId: started.attempt.id,
+      });
+      reservationId = reservation.id;
+    }
+
     try {
       const result = await withTimeout(
         (signal) => this.provider.generate(context, signal),
@@ -149,6 +166,26 @@ export class GenerateContentUseCase {
           : { totalTokens: result.usage.totalTokens }),
         latencyMs,
       });
+
+      if (reservationId && this.settleBudget) {
+        await this.settleBudget.execute({
+          reservationId,
+          provider: result.provider,
+          model: result.model,
+          ...(result.providerRequestId ? { providerRequestId: result.providerRequestId } : {}),
+          ...(result.usage?.inputTokens !== undefined
+            ? { inputTokens: result.usage.inputTokens }
+            : {}),
+          ...(result.usage?.outputTokens !== undefined
+            ? { outputTokens: result.usage.outputTokens }
+            : {}),
+          ...(result.usage?.totalTokens !== undefined
+            ? { totalTokens: result.usage.totalTokens }
+            : {}),
+          generationAttemptId: started.attempt.id,
+        });
+      }
+
       this.metrics.record('generation_succeeded', 1, { provider: result.provider });
       this.metrics.record('generation_latency_ms', latencyMs, { provider: result.provider });
       this.logger.log(
@@ -166,6 +203,18 @@ export class GenerateContentUseCase {
     } catch (unknownError) {
       const error = toGenerationError(unknownError);
       const latencyMs = Date.now() - startedAt;
+
+      if (reservationId && this.settleBudget) {
+        if (error.code === 'AI_PROVIDER_TIMEOUT') {
+          await this.settleBudget.markUnreconciled(
+            reservationId,
+            'AI Provider timed out during content generation',
+          );
+        } else {
+          await this.settleBudget.release(reservationId, error.code);
+        }
+      }
+
       await this.repository.failGeneration({
         contentJobId,
         attemptId: started.attempt.id,

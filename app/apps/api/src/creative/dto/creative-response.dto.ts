@@ -47,3 +47,15 @@ export interface ExportResponseDto {
   readonly mimeType: 'image/png' | 'image/jpeg';
   readonly downloadUrl: string;
 }
+
+export interface CreativeApprovalResponseDto {
+  readonly approvalEventId: string;
+  readonly creativeJobId: string;
+  readonly visualAssetId: string;
+  readonly sceneVersionId?: string | undefined;
+  readonly decision: 'CREATIVE_APPROVED' | 'CREATIVE_REJECTED';
+  readonly approverUserId: string;
+  readonly approverDisplayName?: string | undefined;
+  readonly comment?: string | undefined;
+  readonly createdAt: string;
+}
