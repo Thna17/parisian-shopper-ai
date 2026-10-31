@@ -30,4 +30,18 @@ export class ExportCreativeProjectDto {
   @Min(1)
   @Max(100)
   public quality?: number = 90;
+
+  @ApiPropertyOptional({
+    description: 'Optional specific visual asset ID to export',
+  })
+  @IsOptional()
+  @IsString()
+  public visualAssetId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Optional specific version number to export',
+  })
+  @IsOptional()
+  @IsInt()
+  public versionNumber?: number;
 }

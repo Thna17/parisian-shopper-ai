@@ -20,3 +20,5 @@ export * from './campaigns/prisma-campaign.repository.js';
 export * from './creative/index.js';
 export * from './outbox/prisma-outbox-relay.repository.js';
 export * from './publishing/prisma-publishing.repository.js';
+export * from './analytics/prisma-analytics.repository.js';
+export * from './analytics/prisma-budget-ledger.repository.js';

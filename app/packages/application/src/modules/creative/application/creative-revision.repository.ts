@@ -32,4 +32,7 @@ export interface CreativeRevisionRepository {
     resultingVisualAssetId: string,
   ): Promise<CreativeRevisionRequestRecord>;
   cancelRequest(id: string): Promise<CreativeRevisionRequestRecord>;
+  findByResultingAssetId?(
+    resultingVisualAssetId: string,
+  ): Promise<CreativeRevisionRequestRecord | null>;
 }

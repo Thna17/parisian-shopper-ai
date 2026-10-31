@@ -673,6 +673,59 @@ export class AmbiguousRevisionError extends ApplicationError {
   }
 }
 
+export class CreativeAlreadyApprovedError extends ApplicationError {
+  public constructor(message = 'Creative has already been approved.') {
+    super({
+      code: 'CONFLICT',
+      publicMessage: message,
+    });
+  }
+}
+
+export class CreativeAlreadyRejectedError extends ApplicationError {
+  public constructor(message = 'Creative has already been rejected.') {
+    super({
+      code: 'CONFLICT',
+      publicMessage: message,
+    });
+  }
+}
+
+export class CreativeSelfApprovalProhibitedError extends ApplicationError {
+  public constructor(
+    message = 'Four-eyes policy violation: Creator or revision author cannot approve their own creative.',
+  ) {
+    super({
+      code: 'FORBIDDEN',
+      publicMessage: message,
+    });
+  }
+}
+
+export { SelfApprovalProhibitedError } from '../../approvals/domain/approval-errors.js';
+
+export class CreativeAssetRightsNotClearedError extends ApplicationError {
+  public constructor(
+    message = 'Product asset rights are not verified or have been revoked for this creative.',
+  ) {
+    super({
+      code: 'FORBIDDEN',
+      publicMessage: message,
+    });
+  }
+}
+
+export class CreativeFactualMismatchError extends ApplicationError {
+  public constructor(
+    message = 'Commercial validation failed: Factual data does not match verified product snapshot.',
+  ) {
+    super({
+      code: 'VALIDATION_ERROR',
+      publicMessage: message,
+    });
+  }
+}
+
 export class CreativeExportNotFoundError extends ApplicationError {
   public constructor(exportId: string) {
     super({

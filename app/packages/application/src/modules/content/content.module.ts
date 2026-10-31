@@ -11,9 +11,10 @@ import { GetContentJobDetailUseCase } from './application/get-content-job-detail
 
 import { AuthModule } from '../auth/auth.module.js';
 import { ValidationModule } from '../validation/validation.module.js';
+import { AnalyticsModule } from '../analytics/analytics.module.js';
 
 @Module({
-  imports: [ValidationModule, AuthModule],
+  imports: [ValidationModule, AuthModule, AnalyticsModule],
   providers: [
     AIContextBuilder,
     ContentStrategyRegistry,

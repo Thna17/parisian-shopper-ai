@@ -141,3 +141,53 @@ export function useExportCreativeProject(
     mutationFn: (payload) => creativeApi.exportProject(sceneId, payload),
   });
 }
+
+export function useApproveCreativeProject(
+  sceneId: string,
+): UseMutationResult<
+  { approvalEventId: string; decision: string; approverUserId: string },
+  Error,
+  { versionNumber?: number; sceneVersionId?: string; comment?: string } | undefined
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload) => creativeApi.approveProject(sceneId, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: creativeKeys.detail(sceneId) });
+      void queryClient.invalidateQueries({ queryKey: creativeKeys.versions(sceneId) });
+      void queryClient.invalidateQueries({ queryKey: creativeKeys.lists() });
+    },
+  });
+}
+
+export function useRejectCreativeProject(
+  sceneId: string,
+): UseMutationResult<
+  { approvalEventId: string; decision: string; approverUserId: string },
+  Error,
+  { reason: string; versionNumber?: number; sceneVersionId?: string }
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload) => creativeApi.rejectProject(sceneId, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: creativeKeys.detail(sceneId) });
+      void queryClient.invalidateQueries({ queryKey: creativeKeys.versions(sceneId) });
+      void queryClient.invalidateQueries({ queryKey: creativeKeys.lists() });
+    },
+  });
+}
+
+export function useSubmitCreativeProject(
+  sceneId: string,
+): UseMutationResult<{ status: string }, Error, { versionNumber?: number } | undefined> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload) => creativeApi.submitProject(sceneId, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: creativeKeys.detail(sceneId) });
+      void queryClient.invalidateQueries({ queryKey: creativeKeys.versions(sceneId) });
+      void queryClient.invalidateQueries({ queryKey: creativeKeys.lists() });
+    },
+  });
+}

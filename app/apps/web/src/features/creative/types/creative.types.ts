@@ -136,6 +136,16 @@ export interface SceneLayerRecord extends SceneLayerDraft {
   readonly createdAt: string;
 }
 
+export interface SceneVersionStateRecord {
+  readonly id: string;
+  readonly sceneVersionId: string;
+  readonly status: string;
+  readonly isExportEligible: boolean;
+  readonly invalidationReason?: string | null;
+  readonly invalidatedAt?: string | null;
+  readonly updatedAt: string;
+}
+
 export interface CreativeSceneVersionRecord {
   readonly id: string;
   readonly sceneId: string;
@@ -160,6 +170,7 @@ export interface CreativeSceneVersionRecord {
   readonly metadata: Record<string, unknown> | null;
   readonly createdAt: string;
   readonly layers: readonly SceneLayerRecord[];
+  readonly state?: SceneVersionStateRecord;
 }
 
 export interface CreativeSceneRecord {
@@ -234,6 +245,12 @@ export interface CreativeProjectDetail {
   readonly canEdit: boolean;
   readonly canApprove: boolean;
   readonly canExport: boolean;
+  readonly approvalIneligibilityReasons?: readonly string[];
+  readonly creativeJob?: {
+    readonly id: string;
+    readonly status: string;
+    readonly requestedByUserId?: string | null;
+  };
 }
 
 export interface ValidationFinding {

@@ -88,6 +88,15 @@ export class PrismaCreativeRevisionRepository implements CreativeRevisionReposit
     });
     return toRecord(updated);
   }
+
+  public async findByResultingAssetId(
+    resultingVisualAssetId: string,
+  ): Promise<CreativeRevisionRequestRecord | null> {
+    const record = await this.prisma.creativeRevisionRequest.findFirst({
+      where: { resultingVisualAssetId },
+    });
+    return record === null ? null : toRecord(record);
+  }
 }
 
 function toRecord(row: PrismaCreativeRevisionRequest): CreativeRevisionRequestRecord {
