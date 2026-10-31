@@ -62,6 +62,28 @@ enum BrandRuleStatus {
   RETIRED
 }
 
+enum BrandProfileStatus {
+  DRAFT
+  BENCHMARKING
+  PENDING_SIGN_OFF
+  ACTIVE
+  RETIRED
+  REVOKED
+}
+
+enum BrandSourceSystem {
+  FACEBOOK
+  INSTAGRAM
+  BRAND_GUIDELINES
+  CAMPAIGN_COLLATERAL
+}
+
+enum BrandDatasetStatus {
+  CURATING
+  ACTIVE
+  ARCHIVED
+}
+
 enum ContentType {
   PRODUCT_SPOTLIGHT
   PROMOTION
@@ -1564,4 +1586,63 @@ model AiUsageRecord {
   @@index([provider, model, createdAt], map: "ai_usage_records_provider_model_idx")
   @@index([reservationId], map: "ai_usage_records_reservation_id_idx")
   @@map("ai_usage_records")
+}
+
+model BrandProfileVersion {
+  id                   String             @id @default(uuid()) @db.Uuid
+  versionNumber        Int                @map("version_number")
+  name                 String             @db.VarChar(160)
+  status               BrandProfileStatus @default(DRAFT)
+  evaluationPolicyId   String             @map("evaluation_policy_id") @db.VarChar(100)
+  languagePolicy       Json               @map("language_policy") @db.JsonB
+  toneRules            Json               @map("tone_rules") @db.JsonB
+  visualAestheticRules Json               @map("visual_aesthetic_rules") @db.JsonB
+  typographyRules      Json               @map("typography_rules") @db.JsonB
+  logoRules            Json               @map("logo_rules") @db.JsonB
+  approvedExampleIds   String[]           @map("approved_example_ids")
+  prohibitedPatterns   String[]           @map("prohibited_patterns")
+  benchmarkReport      Json?              @map("benchmark_report") @db.JsonB
+  approvedByUserId     String             @map("approved_by_user_id") @db.Uuid
+  activatedAt          DateTime?          @map("activated_at") @db.Timestamptz(3)
+  createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([name, versionNumber], map: "brand_profile_versions_name_version_key")
+  @@index([status, createdAt], map: "brand_profile_versions_status_created_at_idx")
+  @@map("brand_profile_versions")
+}
+
+model BrandSourceArchive {
+  id                   String            @id @default(uuid()) @db.Uuid
+  sourceSystem         BrandSourceSystem @map("source_system")
+  externalPostId       String?           @map("external_post_id") @db.VarChar(120)
+  captionText          String            @map("caption_text") @db.Text
+  sanitizedCaptionText String            @map("sanitized_caption_text") @db.Text
+  copyrightDeclared    Boolean           @default(false) @map("copyright_declared")
+  copyrightOwner       String            @map("copyright_owner") @db.VarChar(200)
+  licenseReference     String            @map("license_reference") @db.VarChar(200)
+  mediaCasKeys         String[]          @map("media_cas_keys")
+  tags                 String[]          @default([])
+  sha256Hex            String            @map("sha256_hex") @db.VarChar(64)
+  ingestedByUserId     String            @map("ingested_by_user_id") @db.Uuid
+  createdAt            DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([sourceSystem, createdAt], map: "brand_source_archives_system_created_at_idx")
+  @@index([sha256Hex], map: "brand_source_archives_sha256_idx")
+  @@map("brand_source_archives")
+}
+
+model BrandDatasetVersion {
+  id               String             @id @default(uuid()) @db.Uuid
+  name             String             @db.VarChar(160)
+  versionString    String             @unique @map("version_string") @db.VarChar(60)
+  status           BrandDatasetStatus @default(CURATING)
+  assetCount       Int                @default(0) @map("asset_count")
+  gitCommitHash    String?            @map("git_commit_hash") @db.VarChar(64)
+  approvedByUserId String?            @map("approved_by_user_id") @db.Uuid
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([status, createdAt], map: "brand_dataset_versions_status_created_at_idx")
+  @@map("brand_dataset_versions")
 }

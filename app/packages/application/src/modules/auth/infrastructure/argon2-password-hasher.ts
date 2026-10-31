@@ -11,9 +11,10 @@ export class Argon2PasswordHasher implements PasswordHasher {
   private readonly defaultHashLength: number;
 
   public constructor(@Optional() options?: PasswordHasherOptions) {
-    this.defaultMemorySize = options?.memorySize ?? 65536; // 64 MB
-    this.defaultIterations = options?.iterations ?? 3;
-    this.defaultParallelism = options?.parallelism ?? 4;
+    const isTest = process.env.NODE_ENV === 'test';
+    this.defaultMemorySize = options?.memorySize ?? (isTest ? 1024 : 65536);
+    this.defaultIterations = options?.iterations ?? (isTest ? 2 : 3);
+    this.defaultParallelism = options?.parallelism ?? (isTest ? 1 : 4);
     this.defaultHashLength = options?.hashLength ?? 32;
   }
 

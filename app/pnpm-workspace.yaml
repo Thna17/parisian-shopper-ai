@@ -24,3 +24,10 @@ auditConfig:
 
 overrides:
   deepmerge-ts: 8.0.0
+  undici: '>=8.12.2'
+  qs: '>=6.16.1'
+  ip-address: '>=10.7.4'
+  body-parser: '>=2.4.0'
+  zod: '>=4.6.6'
+  multer: '>=2.5.0'
+  follow-redirects: '>=1.16.2'

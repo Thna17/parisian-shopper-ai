@@ -5,6 +5,8 @@ import { GrammyBotAdapter } from '@parisian-shopper/telegram';
 import { jest } from '@jest/globals';
 import request from 'supertest';
 
+import { type Server } from 'node:http';
+
 import { TelegramWebhookController } from '../../../../packages/telegram/src/telegram-webhook.controller.js';
 
 describe('Telegram webhook security (e2e)', () => {
@@ -31,7 +33,16 @@ describe('Telegram webhook security (e2e)', () => {
     await app.init();
   });
 
-  afterAll(async () => app?.close());
+  afterAll(async () => {
+    const server = app?.getHttpServer() as Server | undefined;
+    if (server) {
+      server.closeAllConnections?.();
+      if (server.listening) {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+    await app?.close();
+  });
 
   it('accepts an exact Telegram secret and rejects invalid or missing secrets', async () => {
     const server = requiredApp().getHttpServer() as Parameters<typeof request>[0];
