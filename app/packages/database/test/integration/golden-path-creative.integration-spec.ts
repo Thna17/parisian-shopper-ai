@@ -782,12 +782,12 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
 
     // Operator clicks "Approve Poster" or "Approve Visual"
     const approveVisualButton = findButton({ messages: [visualCardMessage] }, 'Approve');
-    const visualConfirmPrompt = await callback(editorProfile, approveVisualButton);
+    const visualConfirmPrompt = await callback(approverProfile, approveVisualButton);
     expect(visualConfirmPrompt.messages[0]?.text).toContain('commercial use');
 
     // Operator confirms visual approval in 2nd step
     const confirmVisualButton = findButton(visualConfirmPrompt, 'Approve Design');
-    const visualApprovedResponse = await callback(editorProfile, confirmVisualButton);
+    const visualApprovedResponse = await callback(approverProfile, confirmVisualButton);
     expect(visualApprovedResponse.messages[0]?.text).toContain('Approved');
 
     // -------------------------------------------------------------
@@ -810,7 +810,7 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
       where: { creativeJobId: creativeJob!.id, visualAssetId: visualAsset.id },
     });
     expect(creativeApproval.decision).toBe('CREATIVE_APPROVED');
-    expect(creativeApproval.approverUserId).toBe(_editorUser.id);
+    expect(creativeApproval.approverUserId).toBe(_approverUser.id);
     expect(creativeApproval.visualValidationResultId).toBe(visualValidation.id);
 
     // 4. Audit Log Entries recorded for both text approval and visual approval

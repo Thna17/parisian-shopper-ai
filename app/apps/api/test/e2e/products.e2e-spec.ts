@@ -245,6 +245,10 @@ describe('Products API Integration (e2e)', () => {
   });
 
   afterAll(async () => {
+    if (server?.listening) {
+      server.closeAllConnections?.();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
     if (application) {
       await application.close();
     }

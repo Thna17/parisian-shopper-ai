@@ -36,7 +36,12 @@ describe('Employee Web Authentication (e2e)', () => {
   let server: Server;
 
   // In-memory state for authentication E2E verification
-  const hasher = new Argon2PasswordHasher();
+  const hasher = new Argon2PasswordHasher({
+    memorySize: 1024,
+    iterations: 2,
+    parallelism: 1,
+    hashLength: 32,
+  });
   const testPassword = 'SecureParisianPassword2026!';
   let validPasswordHash: string;
 
@@ -344,6 +349,12 @@ describe('Employee Web Authentication (e2e)', () => {
   });
 
   afterAll(async () => {
+    if (server) {
+      server.closeAllConnections?.();
+      if (server.listening) {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
     if (application) {
       await application.close();
     }

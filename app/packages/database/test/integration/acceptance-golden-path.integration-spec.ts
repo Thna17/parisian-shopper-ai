@@ -503,20 +503,20 @@ describe('Phase 1G Acceptance Golden Path and Operational Resilience', () => {
       expect(v2Draft.text).toContain('V2');
 
       // Step 18: Reviewer initiates approval on V2
-      const approverViewResponse = await command(editorProfile, `/status`);
+      const approverViewResponse = await command(approverProfile, `/status`);
       expect(approverViewResponse.messages[0]?.text).toContain(job.productSnapshot.productName);
 
       // Reviewer clicks Approve button on V2
       const v2Buttons = v2Draft.buttons?.flat() ?? [];
       const approveButton = v2Buttons.find((b) => b.text.includes('Approve'))!;
-      const confirmApprovalPrompt = await callback(editorProfile, approveButton.callbackData);
+      const confirmApprovalPrompt = await callback(approverProfile, approveButton.callbackData);
 
       // Step 19: Two-step confirmation: reviewer confirms approval
       expect(confirmApprovalPrompt.messages[0]?.text).toContain('Confirm Approval');
       const confirmButton = confirmApprovalPrompt.messages[0]!.buttons!.flat().find((b) =>
         b.text.includes('Confirm Approve'),
       )!;
-      const approvalConfirmedResponse = await callback(editorProfile, confirmButton.callbackData);
+      const approvalConfirmedResponse = await callback(approverProfile, confirmButton.callbackData);
       expect(approvalConfirmedResponse.messages[0]?.text).toContain('Approved');
 
       // Step 20: Verify APPROVED terminal state and absence of publishing side-effects
@@ -663,11 +663,11 @@ describe('Phase 1G Acceptance Golden Path and Operational Resilience', () => {
       const v2ApproveBtn = v2Buttons.find((b) => b.text.includes('Approve'))!;
       expect(v2ApproveBtn).toBeDefined();
 
-      const confirmPrompt = await callback(editorProfile, v2ApproveBtn.callbackData);
+      const confirmPrompt = await callback(approverProfile, v2ApproveBtn.callbackData);
       const confirmBtn = confirmPrompt.messages[0]!.buttons!.flat().find((b) =>
         b.text.includes('Confirm Approve'),
       )!;
-      const approvalResult = await callback(editorProfile, confirmBtn.callbackData);
+      const approvalResult = await callback(approverProfile, confirmBtn.callbackData);
       expect(approvalResult.messages[0]?.text).toContain('Approved');
 
       const updatedJob = await getPrisma().contentJob.findUniqueOrThrow({

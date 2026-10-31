@@ -44,7 +44,15 @@ describe('API foundation (e2e)', () => {
   });
 
   afterAll(async () => {
-    await application.close();
+    if (server) {
+      server.closeAllConnections?.();
+      if (server.listening) {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+    if (application) {
+      await application.close();
+    }
   });
 
   beforeEach(() => {

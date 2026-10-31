@@ -707,6 +707,12 @@ describe('Production Creative Studio & Composition API Integration (e2e)', () =>
   });
 
   afterAll(async () => {
+    if (server) {
+      (server as any).closeAllConnections?.();
+      if ((server as any).listening) {
+        await new Promise<void>((resolve) => (server as any).close(() => resolve()));
+      }
+    }
     await application.close();
   });
 

@@ -1,7 +1,9 @@
 import { Global, Module } from '@nestjs/common';
 import {
   APPROVALS_REPOSITORY,
+  BRAND_PROFILE_REPOSITORY,
   BRAND_RULE_REPOSITORY,
+  BRAND_SOURCE_REPOSITORY,
   CAMPAIGN_REPOSITORY,
   CONTENT_GENERATION_REPOSITORY,
   CREATIVE_APPROVAL_REPOSITORY,
@@ -37,6 +39,8 @@ import {
 import { PrismaOutboxRelayRepository } from './outbox/prisma-outbox-relay.repository.js';
 import { PrismaService } from './prisma.service.js';
 import { PrismaBrandRuleRepository } from './brand/prisma-brand-rule.repository.js';
+import { PrismaBrandProfileRepository } from './brand/prisma-brand-profile.repository.js';
+import { PrismaBrandSourceRepository } from './brand/prisma-brand-source.repository.js';
 import { PrismaContentGenerationRepository } from './content/prisma-content-generation.repository.js';
 import { PrismaFreshnessPolicyRepository } from './product-snapshot/prisma-freshness-policy.repository.js';
 import { PrismaProductFreshnessAssessmentRepository } from './product-snapshot/prisma-product-freshness-assessment.repository.js';
@@ -96,6 +100,8 @@ import {
     PrismaProductRevalidationUnitOfWork,
     PrismaProductAssetRepository,
     PrismaProductAssetRegistrationUnitOfWork,
+    PrismaBrandProfileRepository,
+    PrismaBrandSourceRepository,
     {
       provide: PrismaStandaloneOutboxWriter,
       inject: [PrismaService],
@@ -121,6 +127,8 @@ import {
       useExisting: PrismaProductRevalidationUnitOfWork,
     },
     { provide: BRAND_RULE_REPOSITORY, useExisting: PrismaBrandRuleRepository },
+    { provide: BRAND_PROFILE_REPOSITORY, useExisting: PrismaBrandProfileRepository },
+    { provide: BRAND_SOURCE_REPOSITORY, useExisting: PrismaBrandSourceRepository },
     { provide: CONTENT_GENERATION_REPOSITORY, useExisting: PrismaContentGenerationRepository },
     { provide: VALIDATION_REPOSITORY, useExisting: PrismaValidationRepository },
     { provide: TELEGRAM_WORKFLOW_REPOSITORY, useExisting: PrismaTelegramWorkflowRepository },
@@ -149,6 +157,8 @@ import {
     PrismaProductSnapshotRepository,
     PrismaProductAssetRepository,
     PrismaProductAssetRegistrationUnitOfWork,
+    PrismaBrandProfileRepository,
+    PrismaBrandSourceRepository,
     PrismaProductFreshnessAssessmentRepository,
     PrismaFreshnessPolicyRepository,
     PrismaProductRevalidationUnitOfWork,
@@ -181,6 +191,8 @@ import {
     FRESHNESS_POLICY_REPOSITORY,
     PRODUCT_REVALIDATION_UNIT_OF_WORK,
     BRAND_RULE_REPOSITORY,
+    BRAND_PROFILE_REPOSITORY,
+    BRAND_SOURCE_REPOSITORY,
     CONTENT_GENERATION_REPOSITORY,
     VALIDATION_REPOSITORY,
     TELEGRAM_WORKFLOW_REPOSITORY,
