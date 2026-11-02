@@ -24,4 +24,8 @@ export interface BrandProfileRepository {
     revokedProfile: BrandProfileVersionRecord | null;
     restoredProfile: BrandProfileVersionRecord;
   }>;
+  updateBenchmarkReport(
+    id: string,
+    benchmarkReport: Record<string, unknown>,
+  ): Promise<BrandProfileVersionRecord>;
 }

@@ -2,6 +2,7 @@
 import { describe, expect, it, jest, beforeEach } from '@jest/globals';
 import {
   type AuthenticateEmployeeUseCase,
+  type ClaimOnboardingInvitationUseCase,
   type LogoutUseCase,
   type SanitizedEmployeeDto,
 } from '@parisian-shopper/application';
@@ -20,9 +21,10 @@ describe('AuthController', () => {
 
   let mockAuthenticateUseCase: jest.Mocked<AuthenticateEmployeeUseCase>;
   let mockLogoutUseCase: jest.Mocked<LogoutUseCase>;
+  let mockClaimInvitationUseCase: jest.Mocked<ClaimOnboardingInvitationUseCase>;
 
   const createController = (): AuthController =>
-    new AuthController(mockAuthenticateUseCase, mockLogoutUseCase);
+    new AuthController(mockAuthenticateUseCase, mockLogoutUseCase, mockClaimInvitationUseCase);
 
   beforeEach(() => {
     mockAuthenticateUseCase = {
@@ -32,6 +34,10 @@ describe('AuthController', () => {
     mockLogoutUseCase = {
       execute: jest.fn(),
     } as unknown as jest.Mocked<LogoutUseCase>;
+
+    mockClaimInvitationUseCase = {
+      execute: jest.fn(),
+    } as unknown as jest.Mocked<ClaimOnboardingInvitationUseCase>;
   });
 
   describe('login', () => {

@@ -145,6 +145,9 @@ describe('SEC-BRAND-01 to SEC-BRAND-10: Brand Profile Governance & Targeted Roll
             },
           }),
         ),
+      updateBenchmarkReport: jest
+        .fn<(...args: any[]) => Promise<any>>()
+        .mockResolvedValue(sampleActiveRecord),
     };
 
     createDraftUseCase = new CreateBrandProfileDraftUseCase(mockRepo);

@@ -115,7 +115,11 @@ export class AppConfigService {
   }
 
   public get prettyLogs(): boolean {
-    return this.config.get('LOG_PRETTY', { infer: true }) && this.nodeEnvironment !== 'production';
+    return (
+      this.config.get('LOG_PRETTY', { infer: true }) &&
+      this.nodeEnvironment !== 'production' &&
+      this.nodeEnvironment !== 'test'
+    );
   }
 
   public get ai(): AIConfig {

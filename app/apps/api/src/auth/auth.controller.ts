@@ -21,6 +21,7 @@ import {
 } from '@nestjs/swagger';
 import {
   AuthenticateEmployeeUseCase,
+  ClaimOnboardingInvitationUseCase,
   LogoutUseCase,
   type SanitizedEmployeeDto,
 } from '@parisian-shopper/application';
@@ -29,6 +30,7 @@ import { clearSessionCookie, setSessionCookie } from './auth-cookie.util.js';
 import { CurrentUser } from './decorators/current-user.decorator.js';
 import { AuthResponseDto, LogoutResponseDto } from './dto/auth-response.dto.js';
 import { LoginDto } from './dto/login.dto.js';
+import { ClaimInvitationDto } from './dto/claim-invitation.dto.js';
 import { CsrfGuard } from './guards/csrf.guard.js';
 import { type AuthenticatedRequest, SessionAuthGuard } from './guards/session-auth.guard.js';
 
@@ -42,6 +44,8 @@ export class AuthController {
     private readonly authenticateEmployeeUseCase: AuthenticateEmployeeUseCase,
     @Inject(LogoutUseCase)
     private readonly logoutUseCase: LogoutUseCase,
+    @Inject(ClaimOnboardingInvitationUseCase)
+    private readonly claimOnboardingInvitationUseCase: ClaimOnboardingInvitationUseCase,
   ) {}
 
   @Post('login')
@@ -98,5 +102,19 @@ export class AuthController {
       ok: true,
       message: 'Logged out successfully',
     };
+  }
+
+  @Post('onboarding/claim')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Claim employee onboarding invitation with token and initial password' })
+  @ApiBody({ type: ClaimInvitationDto })
+  @ApiOkResponse({ description: 'Onboarding invitation claimed successfully' })
+  public async claimOnboarding(
+    @Body() dto: ClaimInvitationDto,
+  ): Promise<{ success: boolean; userId: string; displayName: string }> {
+    return this.claimOnboardingInvitationUseCase.execute({
+      token: dto.token,
+      password: dto.password,
+    });
   }
 }

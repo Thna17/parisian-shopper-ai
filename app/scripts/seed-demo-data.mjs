@@ -20,8 +20,15 @@ const appRoot = path.resolve(__dirname, '..');
 const { PrismaClient } = await import(
   path.join(appRoot, 'packages/database/node_modules/@prisma/client/index.js')
 );
-const { DEVELOPMENT_BRAND_RULES, GEPARLYS_PRODUCTS, DiskAssetStorageAdapter } = await import(
-  path.join(appRoot, 'packages/application/dist/index.js')
+const {
+  DEVELOPMENT_BRAND_RULES,
+  GEPARLYS_PRODUCTS,
+  FICTIONAL_PRODUCTS,
+  DiskAssetStorageAdapter,
+  calculateProductDependencyHashes,
+} = await import(path.join(appRoot, 'packages/application/dist/index.js'));
+const { PrismaProductSnapshotRepository } = await import(
+  path.join(appRoot, 'packages/database/dist/index.js')
 );
 
 const args = process.argv.slice(2);
@@ -175,7 +182,29 @@ async function main() {
       }
     }
 
-    // 5. Display available Geparlys catalog
+    // 5. Seed Product Snapshots (Geparlys + Fictional luxury catalog)
+    const snapshotRepo = new PrismaProductSnapshotRepository(prisma);
+    const catalogToSeed = [...(GEPARLYS_PRODUCTS ?? []), ...(FICTIONAL_PRODUCTS ?? [])];
+    let seededSnapshots = 0;
+
+    for (const envelope of catalogToSeed) {
+      const existing = await snapshotRepo.findLatestBySku(envelope.product.sku);
+      if (!existing) {
+        const hashes = calculateProductDependencyHashes(envelope);
+        await snapshotRepo.create({
+          product: envelope,
+          snapshotHash: hashes.full,
+          dependencyHashes: hashes,
+          normalizerVersion: '1.0.0',
+        });
+        seededSnapshots++;
+      }
+    }
+    console.log(
+      `\n[Product Snapshots] Verified and seeded ${catalogToSeed.length} catalog products (${seededSnapshots} new snapshots created).`,
+    );
+
+    // Display available Geparlys catalog
     if (Array.isArray(GEPARLYS_PRODUCTS) && GEPARLYS_PRODUCTS.length > 0) {
       console.log(
         `\n[Geparlys Parfums Paris Catalog] Seeded ${GEPARLYS_PRODUCTS.length} perfumes:`,

@@ -181,3 +181,77 @@ export interface EvaluationPolicy {
   readonly maxLevenshteinSimilarityThreshold: number; // e.g. 0.45 (45%)
   readonly minCandidateLengthChars: number; // e.g. 20
 }
+
+export interface TestCaseInput {
+  readonly testCaseId: string;
+  readonly prompt: string;
+  readonly candidateText: string;
+  readonly category?: string;
+}
+
+export interface TestCaseEvaluation {
+  readonly testCaseId: string;
+  readonly prompt: string;
+  readonly candidateText: string;
+  readonly toneScore: number;
+  readonly typographyScore: number;
+  readonly originalityScore: number;
+  readonly totalScore: number;
+  readonly passed: boolean;
+  readonly detectedLuxuryAttributes: readonly string[];
+  readonly detectedForbiddenPatterns: readonly string[];
+  readonly detectedLoanwords: readonly string[];
+  readonly originalityViolations: readonly string[];
+}
+
+export interface BenchmarkEvaluationReport {
+  readonly benchmarkRunId: string;
+  readonly profileId: string;
+  readonly profileVersionNumber: number;
+  readonly testDatasetId: string;
+  readonly policyId: string;
+  readonly totalTestCases: number;
+  readonly passedTestCases: number;
+  readonly overallScore: number; // 0.0 - 1.0
+  readonly toneScoreAverage: number;
+  readonly typographyScoreAverage: number;
+  readonly originalityScoreAverage: number;
+  readonly passed: boolean;
+  readonly summaryViolations: readonly string[];
+  readonly testCaseEvaluations: readonly TestCaseEvaluation[];
+  readonly evaluatedAt: string;
+}
+
+export interface ReviewFeedbackRecord {
+  readonly id?: string;
+  readonly sourceType: 'REVIEW_DESK' | 'BENCHMARK_LAB' | 'MANUAL_REVISION';
+  readonly contentJobId?: string | null;
+  readonly contentVersionId?: string | null;
+  readonly originalText: string;
+  readonly revisedText?: string | null;
+  readonly decision: 'APPROVED' | 'REJECTED' | 'REVISED';
+  readonly critiqueNotes?: string | null;
+  readonly toneFlags?: readonly string[];
+  readonly reviewerUserId?: string | null;
+  readonly datasetVersionId?: string | null;
+  readonly createdAt?: Date;
+}
+
+export interface FeedbackIngestionSummary {
+  readonly batchId: string;
+  readonly ingestedCount: number;
+  readonly approvedCount: number;
+  readonly rejectedCount: number;
+  readonly revisedCount: number;
+  readonly commonToneFlags: readonly { readonly flag: string; readonly count: number }[];
+  readonly ingestedAt: string;
+}
+
+export interface CreateBrandDatasetInput {
+  readonly name: string;
+  readonly versionString: string;
+  readonly status?: BrandDatasetStatus | undefined;
+  readonly gitCommitHash?: string | null | undefined;
+  readonly approvedByUserId?: string | null | undefined;
+  readonly initialFeedbackIds?: readonly string[] | undefined;
+}

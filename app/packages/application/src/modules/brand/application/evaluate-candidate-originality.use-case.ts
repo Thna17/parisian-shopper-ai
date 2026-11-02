@@ -1,12 +1,16 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import type { OutboxWriter } from '@parisian-shopper/common';
 import { RegurgitationViolationError } from '../domain/brand-errors.js';
 import type { EvaluationPolicy, OriginalityReport } from '../domain/brand-profile.types.js';
 import { BRAND_SOURCE_REPOSITORY, type BrandSourceRepository } from './brand-source.repository.js';
 
 export interface EvaluateOriginalityInput {
   readonly candidateText: string;
+  readonly candidateId?: string;
   readonly policy?: Partial<EvaluationPolicy>;
   readonly throwOnViolation?: boolean;
+  readonly outboxWriter?: OutboxWriter;
 }
 
 const DEFAULT_POLICY: EvaluationPolicy = {
@@ -21,6 +25,9 @@ export class EvaluateCandidateOriginalityUseCase {
   public constructor(
     @Inject(BRAND_SOURCE_REPOSITORY)
     private readonly brandSourceRepo: BrandSourceRepository,
+    @Optional()
+    @Inject('OUTBOX_WRITER')
+    private readonly defaultOutboxWriter?: OutboxWriter,
   ) {}
 
   public async execute(input: EvaluateOriginalityInput): Promise<OriginalityReport> {
@@ -94,6 +101,26 @@ export class EvaluateCandidateOriginalityUseCase {
     }
 
     const isOriginal = violations.length === 0;
+
+    const outbox = input.outboxWriter ?? this.defaultOutboxWriter;
+    if (outbox && !isOriginal) {
+      const peakScore = Math.max(maxNgram, maxLev);
+      await outbox.append({
+        topic: 'brand.originality.violation_detected',
+        schemaVersion: 1,
+        idempotencyKey: `brand-violation-${input.candidateId ?? randomUUID()}`,
+        aggregateType: 'BrandSourceArchive',
+        aggregateId: worstSourceId ?? 'unknown-source',
+        payload: {
+          candidateId: input.candidateId ?? null,
+          similarityScore: peakScore,
+          matchedHistoricalAssetId: worstSourceId,
+          violatedRule: violations.join('; '),
+        },
+        occurredAt: new Date(),
+        availableAt: new Date(),
+      });
+    }
 
     if (!isOriginal && input.throwOnViolation) {
       const peakScore = Math.max(maxNgram, maxLev);

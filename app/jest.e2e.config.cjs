@@ -9,4 +9,5 @@ module.exports = {
     '<rootDir>/tests/e2e/**/*.e2e-spec.ts',
   ],
   testTimeout: 120000,
+  setupFilesAfterEnv: ['<rootDir>/test/setup-after-env.cjs'],
 };

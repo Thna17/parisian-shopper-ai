@@ -1,4 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import type { OutboxWriter } from '@parisian-shopper/common';
 import { Permission } from '../../auth/domain/permissions.js';
 import {
   BrandProfileNotFoundError,
@@ -16,6 +17,7 @@ export interface RollbackBrandProfileCommand {
   readonly reason: string;
   readonly authorizedUserId: string;
   readonly permissions: readonly string[];
+  readonly outboxWriter?: OutboxWriter;
 }
 
 export interface RollbackBrandProfileResult {
@@ -30,6 +32,9 @@ export class RollbackBrandProfileUseCase {
   public constructor(
     @Inject(BRAND_PROFILE_REPOSITORY)
     private readonly brandProfileRepo: BrandProfileRepository,
+    @Optional()
+    @Inject('OUTBOX_WRITER')
+    private readonly defaultOutboxWriter?: OutboxWriter,
   ) {}
 
   public async execute(command: RollbackBrandProfileCommand): Promise<RollbackBrandProfileResult> {
@@ -55,11 +60,33 @@ export class RollbackBrandProfileUseCase {
       command.authorizedUserId,
     );
 
+    const executedAt = new Date().toISOString();
+
+    const outbox = command.outboxWriter ?? this.defaultOutboxWriter;
+    if (outbox) {
+      await outbox.append({
+        topic: 'brand.profile.rollback_executed',
+        schemaVersion: 1,
+        idempotencyKey: `brand-profile-rollback-${restoredProfile.id}-${Date.now()}`,
+        aggregateType: 'BrandProfileVersion',
+        aggregateId: restoredProfile.id,
+        payload: {
+          previousProfileId: revokedProfile?.id ?? null,
+          restoredProfileId: restoredProfile.id,
+          reason: command.reason,
+          actorUserId: command.authorizedUserId,
+          executedAt,
+        },
+        occurredAt: new Date(),
+        availableAt: new Date(),
+      });
+    }
+
     return {
       revokedProfile,
       restoredProfile,
       rollbackReason: command.reason,
-      executedAt: new Date().toISOString(),
+      executedAt,
     };
   }
 }

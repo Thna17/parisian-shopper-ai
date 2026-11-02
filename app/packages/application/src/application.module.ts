@@ -14,6 +14,7 @@ import { ValidationModule } from './modules/validation/validation.module.js';
 import { CampaignsModule } from './modules/campaigns/campaigns.module.js';
 import { PublishingModule } from './modules/publishing/publishing.module.js';
 import { AnalyticsModule } from './modules/analytics/analytics.module.js';
+import { AdminApplicationModule } from './modules/admin/admin.module.js';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module.js';
     CreativeModule,
     PublishingModule,
     AnalyticsModule,
+    AdminApplicationModule,
   ],
   exports: [
     AuthModule,
@@ -47,6 +49,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module.js';
     CreativeModule,
     PublishingModule,
     AnalyticsModule,
+    AdminApplicationModule,
   ],
 })
 export class ApplicationModule {}

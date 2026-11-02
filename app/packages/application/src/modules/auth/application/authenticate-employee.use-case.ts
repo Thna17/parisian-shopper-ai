@@ -32,6 +32,10 @@ export interface AuthenticateEmployeeResult {
 const DEFAULT_SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
 const MAX_CONSECUTIVE_LOGIN_FAILURES = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const DUMMY_HASH =
+  process.env.NODE_ENV === 'test'
+    ? '$argon2id$v=19$m=1024,t=2,p=1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    : '$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 
 @Injectable()
 export class AuthenticateEmployeeUseCase {
@@ -56,10 +60,7 @@ export class AuthenticateEmployeeUseCase {
 
     // Constant-time mitigation against user enumeration
     if (account === null || account.passwordCredential === null) {
-      await this.passwordHasher.verify(
-        'dummy-constant-time-password',
-        '$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-      );
+      await this.passwordHasher.verify('dummy-constant-time-password', DUMMY_HASH);
       throw new InvalidCredentialsError();
     }
 
