@@ -48,11 +48,33 @@ export class UpdateSystemSettingsUseCase {
       });
     }
 
+    // Four-Eyes approval policies are mandatory server-side security invariants.
+    // They cannot be disabled or weakened through administrative configuration.
+    let sanitizedValue = request.value;
+    if (request.key === 'WORKFLOW_POLICIES') {
+      if (
+        request.value['requireFourEyesContent'] === false ||
+        request.value['requireFourEyesCreative'] === false
+      ) {
+        throw new ApplicationError({
+          code: 'SECURITY_POLICY_IMMUTABLE',
+          publicMessage:
+            'Four-eyes approval policy cannot be disabled: independent Four-Eyes separation of duties is a non-disableable server-side security invariant.',
+        });
+      }
+
+      sanitizedValue = {
+        ...request.value,
+        requireFourEyesContent: true,
+        requireFourEyesCreative: true,
+      };
+    }
+
     const previous = await this.settingRepo.findByKey(request.key);
 
     const updated = await this.settingRepo.upsert({
       key: request.key,
-      value: request.value,
+      value: sanitizedValue,
       category: request.category ?? 'GENERAL',
       description: request.description ?? null,
       updatedById: request.actorUserId,
@@ -66,7 +88,7 @@ export class UpdateSystemSettingsUseCase {
       metadata: {
         key: request.key,
         previousValue: previous?.value ?? null,
-        newValue: request.value,
+        newValue: sanitizedValue,
       },
     });
 

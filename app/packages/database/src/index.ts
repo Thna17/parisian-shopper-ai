@@ -29,3 +29,7 @@ export * from './admin/prisma-employee.repository.js';
 export * from './admin/prisma-employee-invitation.repository.js';
 export * from './admin/prisma-system-setting.repository.js';
 export * from './admin/prisma-admin-audit.repository.js';
+export * from './budget/prisma-usage-ledger.repository.js';
+export * from './budget/prisma-budget-policy.repository.js';
+export * from './budget/prisma-provider-pricing.repository.js';
+export * from './budget/prisma-provider-capability.repository.js';

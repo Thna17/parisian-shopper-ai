@@ -18,6 +18,10 @@ export const OnboardingClaimPage: React.FC = () => {
     const qToken = searchParams.get('token');
     if (qToken) {
       setToken(qToken);
+      // Immediately strip sensitive onboarding token from browser URL and navigation history
+      if (typeof window !== 'undefined' && window.history?.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
     }
   }, [searchParams]);
 

@@ -307,35 +307,46 @@ export const OrganizationSettingsPage: React.FC = () => {
             </div>
 
             <div className="space-y-2 pt-1">
-              <label className="p-2.5 rounded-xl border border-app-border bg-app-surface-subtle/40 flex items-center justify-between cursor-pointer">
+              <div className="p-2.5 rounded-xl border border-app-border bg-app-surface-subtle/40 flex items-center justify-between">
                 <div>
-                  <div className="font-semibold text-[#243746]">Four-Eyes Copy Approval</div>
+                  <div className="flex items-center gap-1.5 font-semibold text-[#243746]">
+                    <span>Four-Eyes Copy Approval</span>
+                    <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      Enforced Invariant
+                    </span>
+                  </div>
                   <div className="text-[10px] text-app-muted">
-                    Prohibit self-approval for content versions
+                    Prohibits self-approval for content versions (Mandatory Server-Side Policy)
                   </div>
                 </div>
                 <input
                   type="checkbox"
-                  checked={requireFourEyesContent}
-                  onChange={(e) => setRequireFourEyesContent(e.target.checked)}
-                  className="rounded border-app-border text-[#243746] focus:ring-[#B59761]"
+                  checked={true}
+                  disabled={true}
+                  className="rounded border-app-border text-[#243746] focus:ring-[#B59761] opacity-60 cursor-not-allowed"
                 />
-              </label>
+              </div>
 
-              <label className="p-2.5 rounded-xl border border-app-border bg-app-surface-subtle/40 flex items-center justify-between cursor-pointer">
+              <div className="p-2.5 rounded-xl border border-app-border bg-app-surface-subtle/40 flex items-center justify-between">
                 <div>
-                  <div className="font-semibold text-[#243746]">Four-Eyes Creative Approval</div>
+                  <div className="flex items-center gap-1.5 font-semibold text-[#243746]">
+                    <span>Four-Eyes Creative Approval</span>
+                    <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      Enforced Invariant
+                    </span>
+                  </div>
                   <div className="text-[10px] text-app-muted">
-                    Require independent signoff on exact creative scenes
+                    Requires independent signoff on exact creative scenes (Mandatory Server-Side
+                    Policy)
                   </div>
                 </div>
                 <input
                   type="checkbox"
-                  checked={requireFourEyesCreative}
-                  onChange={(e) => setRequireFourEyesCreative(e.target.checked)}
-                  className="rounded border-app-border text-[#243746] focus:ring-[#B59761]"
+                  checked={true}
+                  disabled={true}
+                  className="rounded border-app-border text-[#243746] focus:ring-[#B59761] opacity-60 cursor-not-allowed"
                 />
-              </label>
+              </div>
             </div>
 
             <div className="pt-2 flex justify-end">

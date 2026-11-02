@@ -1,0 +1,160 @@
+name: parisian-shopper-staging
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-parisian}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-staging_secure_pass_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-parisian_shopper_staging}
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5433}:5432'
+    volumes:
+      - staging_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - staging_internal_net
+
+  valkey:
+    image: valkey/valkey:8.1.3-alpine
+    restart: unless-stopped
+    command: ['valkey-server', '--appendonly', 'yes', '--protected-mode', 'no']
+    ports:
+      - '127.0.0.1:${VALKEY_PORT:-6380}:6379'
+    volumes:
+      - staging_valkey_data:/data
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - staging_internal_net
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: staging
+      APP_NAME: parisian-shopper-api
+      APP_HOST: 0.0.0.0
+      APP_PORT: 3000
+      APP_CORS_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+      DATABASE_URL: postgresql://${POSTGRES_USER:-parisian}:${POSTGRES_PASSWORD:-staging_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-parisian_shopper_staging}?schema=public
+      VALKEY_HOST: valkey
+      VALKEY_PORT: 6379
+      LOG_LEVEL: info
+      LOG_PRETTY: false
+      AI_PROVIDER: fake
+      CREATIVE_PROVIDER: fake
+      CREATIVE_ASSET_STORAGE_ROOT: /app/.data/assets
+      FEATURE_AI_TEXT_GENERATION: 'true'
+      FEATURE_AI_IMAGE_GENERATION: 'true'
+      FEATURE_CREATIVE_GENERATION: 'true'
+      FEATURE_TELEGRAM: 'false'
+      FEATURE_PRODUCT_API: 'false'
+      FEATURE_AUTO_PUBLISHING: 'false'
+      FEATURE_META_PUBLISHING: 'false'
+      FEATURE_TELEGRAM_CHANNEL_PUBLISHING: 'false'
+      FEATURE_ANALYTICS: 'true'
+      DEMO_MODE: 'true'
+    ports:
+      - '127.0.0.1:3000:3000'
+    volumes:
+      - staging_asset_data:/app/.data/assets
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--no-verbose',
+          '--tries=1',
+          '--spider',
+          'http://127.0.0.1:3000/health/live',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - staging_internal_net
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: staging
+      DATABASE_URL: postgresql://${POSTGRES_USER:-parisian}:${POSTGRES_PASSWORD:-staging_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-parisian_shopper_staging}?schema=public
+      VALKEY_HOST: valkey
+      VALKEY_PORT: 6379
+      LOG_LEVEL: info
+      LOG_PRETTY: false
+      AI_PROVIDER: fake
+      CREATIVE_PROVIDER: fake
+      CREATIVE_ASSET_STORAGE_ROOT: /app/.data/assets
+      FEATURE_AI_TEXT_GENERATION: 'true'
+      FEATURE_AI_IMAGE_GENERATION: 'true'
+      FEATURE_CREATIVE_GENERATION: 'true'
+      FEATURE_AUTO_PUBLISHING: 'false'
+      FEATURE_META_PUBLISHING: 'false'
+      FEATURE_TELEGRAM_CHANNEL_PUBLISHING: 'false'
+      DEMO_MODE: 'true'
+    volumes:
+      - staging_asset_data:/app/.data/assets
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - staging_internal_net
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:8080:80'
+    depends_on:
+      api:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - staging_internal_net
+
+volumes:
+  staging_postgres_data:
+  staging_valkey_data:
+  staging_asset_data:
+
+networks:
+  staging_internal_net:
+    driver: bridge

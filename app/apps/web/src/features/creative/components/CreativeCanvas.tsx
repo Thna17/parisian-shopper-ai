@@ -201,6 +201,18 @@ function renderLayerContent(layer: SceneLayerDraft | SceneLayerRecord): React.Re
       );
 
     case 'PRODUCT_HERO':
+      if (payload?.imageUrl) {
+        return (
+          <div className="w-full h-full relative flex items-center justify-center p-4">
+            <img
+              src={payload.imageUrl}
+              alt={layer.name}
+              className="w-full h-full object-contain filter drop-shadow-[0_25px_35px_rgba(0,0,0,0.6)]"
+              loading="lazy"
+            />
+          </div>
+        );
+      }
       return (
         <div className="w-full h-full relative flex items-center justify-center">
           <div className="w-4/5 h-4/5 rounded-2xl bg-gradient-to-b from-[#FFF5EA]/10 via-[#FFF5EA]/5 to-transparent border border-[#EAD9BD]/20 flex flex-col items-center justify-center p-6 shadow-2xl relative">

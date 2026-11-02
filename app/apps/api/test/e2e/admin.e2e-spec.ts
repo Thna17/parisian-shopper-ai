@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unsafe-member-access */
 import { type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import {
@@ -14,6 +14,7 @@ import {
   USER_SESSION_REPOSITORY,
   resolvePermissionsForRoles,
   type AdminAuditRepository,
+  type AuditEventRecord,
   type AuthenticatedUserAccount,
   type CreateEmployeeInput,
   type CreateInvitationInput,
@@ -72,7 +73,7 @@ describe('Admin & Employee Management (e2e)', () => {
   let employeesMap: Map<string, EmployeeDetail>;
   let invitationsMap: Map<string, EmployeeInvitationRecord>;
   let settingsMap: Map<string, SystemSettingRecord>;
-  let auditLogs: Array<any>;
+  let auditLogs: Array<AuditEventRecord>;
   let sessionsMap: Map<string, UserSessionRecord>;
   let credentialsMap: Map<string, PasswordCredentialRecord>;
 
@@ -269,7 +270,7 @@ describe('Admin & Employee Management (e2e)', () => {
   };
 
   const mockAuditRepo: AdminAuditRepository = {
-    async record(input): Promise<any> {
+    async record(input): Promise<AuditEventRecord> {
       const record = {
         id: `aud-${Date.now()}-${Math.random()}`,
         actorUserId: input.actorUserId ?? null,
@@ -283,7 +284,7 @@ describe('Admin & Employee Management (e2e)', () => {
       auditLogs.push(record);
       return record;
     },
-    async findPaginated(query): Promise<PaginatedResult<any>> {
+    async findPaginated(query): Promise<PaginatedResult<AuditEventRecord>> {
       return {
         items: auditLogs,
         total: auditLogs.length,
@@ -556,7 +557,7 @@ describe('Admin & Employee Management (e2e)', () => {
       .useValue({
         $connect: jest.fn(),
         $disconnect: jest.fn(),
-        $transaction: jest.fn().mockImplementation((fn: any) => fn({})),
+        $transaction: jest.fn().mockImplementation((fn: (tx: unknown) => unknown) => fn({})),
       })
       .overrideProvider(DatabaseHealthIndicator)
       .useValue({ ping: jest.fn().mockResolvedValue(undefined) })

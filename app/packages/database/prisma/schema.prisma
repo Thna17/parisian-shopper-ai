@@ -1551,23 +1551,36 @@ enum ReconciliationStatus {
 }
 
 model AiBudgetPolicy {
-  id                 String             @id @default(uuid()) @db.Uuid
-  scope              BudgetScope        @default(MONTHLY)
-  currency           String             @default("USD") @db.VarChar(10)
-  monthlyCeiling     Decimal            @map("monthly_ceiling") @db.Decimal(10, 2)
-  perRequestCeiling  Decimal            @default(2.00) @map("per_request_ceiling") @db.Decimal(10, 4)
-  softAlertThreshold Decimal            @default(80.00) @map("soft_alert_threshold") @db.Decimal(5, 2)
-  effectiveFrom      DateTime           @map("effective_from") @db.Timestamptz(3)
-  effectiveTo        DateTime?          @map("effective_to") @db.Timestamptz(3)
-  status             BudgetPolicyStatus @default(ACTIVE)
-  createdById        String             @map("created_by_id") @db.Uuid
-  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                    String             @id @default(uuid()) @db.Uuid
+  version               String             @default("1.0.0") @db.VarChar(20)
+  scope                 BudgetScope        @default(MONTHLY)
+  scopeType             BudgetScope        @default(GLOBAL) @map("scope_type")
+  scopeId               String             @default("GLOBAL") @map("scope_id") @db.VarChar(100)
+  currency              String             @default("USD") @db.VarChar(10)
+  monthlyCeiling        Decimal            @map("monthly_ceiling") @db.Decimal(10, 2)
+  dailyCeiling          Decimal            @default(10.00) @map("daily_ceiling") @db.Decimal(12, 4)
+  perRequestCeiling     Decimal            @default(2.00) @map("per_request_ceiling") @db.Decimal(10, 4)
+  perOperationMax       Decimal            @default(2.00) @map("per_operation_max") @db.Decimal(12, 4)
+  softAlertThreshold    Decimal            @default(80.00) @map("soft_alert_threshold") @db.Decimal(5, 2)
+  enforceHardCap        Boolean            @default(true) @map("enforce_hard_cap")
+  maxDailyRetries       Int                @default(3) @map("max_daily_retries")
+  reservationTtlSeconds Int                @default(300) @map("reservation_ttl_seconds")
+  rollingQuotaLimits    Json?              @map("rolling_quota_limits") @db.JsonB
+  allowedProviders      String[]           @default(["openai", "codex_cli", "fake"]) @map("allowed_providers")
+  allowedFallbacks      String[]           @default(["codex_cli", "fake"]) @map("allowed_fallbacks")
+  effectiveFrom         DateTime           @map("effective_from") @db.Timestamptz(3)
+  effectiveTo           DateTime?          @map("effective_to") @db.Timestamptz(3)
+  status                BudgetPolicyStatus @default(ACTIVE)
+  createdById           String             @map("created_by_id") @db.Uuid
+  approvedByUserId      String?            @map("approved_by_user_id") @db.Uuid
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   createdBy    User                @relation("UserCreatedBudgetPolicies", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "ai_budget_policies_created_by_id_fkey")
   reservations AiCostReservation[]
 
   @@index([status, effectiveFrom, effectiveTo], map: "ai_budget_policies_status_effective_idx")
+  @@index([scopeType, scopeId], map: "ai_budget_policies_scope_idx")
   @@map("ai_budget_policies")
 }
 
@@ -1621,6 +1634,217 @@ model AiUsageRecord {
   @@index([provider, model, createdAt], map: "ai_usage_records_provider_model_idx")
   @@index([reservationId], map: "ai_usage_records_reservation_id_idx")
   @@map("ai_usage_records")
+}
+
+enum ReservationLifecycleState {
+  RESERVED
+  DISPATCHED
+  RELEASED
+  EXPIRED
+  HELD_FOR_RECONCILIATION
+  SETTLED
+}
+
+enum ProviderAttemptOutcome {
+  IN_PROGRESS
+  SUCCEEDED
+  FAILED
+  CANCELLED_AFTER_DISPATCH
+  TIMED_OUT
+  UNKNOWN_OUTCOME
+}
+
+enum RetryRelationship {
+  INITIAL_ATTEMPT
+  RETRY_OF_FAILURE
+  NONE
+}
+
+enum LedgerEntryType {
+  RESERVATION_CREATED
+  RESERVATION_RELEASED
+  USAGE_COMMITTED
+  USAGE_CORRECTION
+  UNKNOWN_OUTCOME_HOLD
+  RECONCILIATION_CONFIRMED
+  RECONCILIATION_RELEASED
+}
+
+enum AiModality {
+  TEXT
+  IMAGE
+  VIDEO
+}
+
+enum PricingUnit {
+  PER_1K_TOKENS
+  PER_1M_TOKENS
+  PER_IMAGE
+  PER_VIDEO_SECOND
+  SUBSCRIPTION_FLAT
+}
+
+enum PricingApprovalStatus {
+  PROPOSED
+  APPROVED
+  SUPERSEDED
+  REJECTED
+}
+
+enum EnvironmentTier {
+  DEVELOPMENT
+  STAGING
+  PRODUCTION
+}
+
+model UsageReservation {
+  id                    String                    @id @default(uuid()) @db.Uuid
+  idempotencyKey        String                    @unique(map: "usage_reservations_idempotency_key") @map("idempotency_key") @db.VarChar(200)
+  budgetPolicyVersionId String                    @map("budget_policy_version_id") @db.VarChar(100)
+  userId                String                    @default("00000000-0000-0000-0000-000000000000") @map("user_id") @db.Uuid
+  tenantId              String                    @default("parisian-shopper-default") @map("tenant_id") @db.VarChar(100)
+  creativeJobId         String?                   @map("creative_job_id") @db.Uuid
+  contentJobId          String?                   @map("content_job_id") @db.Uuid
+  campaignId            String?                   @map("campaign_id") @db.Uuid
+  providerId            String                    @map("provider_id") @db.VarChar(100)
+  modelId               String                    @map("model_id") @db.VarChar(100)
+  estimatedCost         Decimal                   @map("estimated_cost") @db.Decimal(12, 4)
+  currency              String                    @default("USD") @db.VarChar(10)
+  capacityUnits         Int?                      @map("capacity_units")
+  state                 ReservationLifecycleState @default(RESERVED) @map("state")
+  createdAt             DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+  dispatchedAt          DateTime?                 @map("dispatched_at") @db.Timestamptz(3)
+  expiresAt             DateTime                  @map("expires_at") @db.Timestamptz(3)
+  closedAt              DateTime?                 @map("closed_at") @db.Timestamptz(3)
+  version               Int                       @default(1) @map("version")
+
+  attempts              ProviderAttempt[]
+  ledgerEntries         UsageLedgerEntry[]
+
+  @@index([state, expiresAt], map: "usage_reservations_state_expires_idx")
+  @@index([budgetPolicyVersionId, createdAt], map: "usage_reservations_policy_created_idx")
+  @@index([creativeJobId], map: "usage_reservations_creative_job_idx")
+  @@index([contentJobId], map: "usage_reservations_content_job_idx")
+  @@index([campaignId], map: "usage_reservations_campaign_idx")
+  @@map("usage_reservations")
+}
+
+model ProviderAttempt {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  reservationId        String                 @map("reservation_id") @db.Uuid
+  attemptNumber        Int                    @map("attempt_number")
+  providerId           String                 @map("provider_id") @db.VarChar(100)
+  modelId              String                 @map("model_id") @db.VarChar(100)
+  modality             AiModality             @map("modality")
+  providerRequestId    String?                @map("provider_request_id") @db.VarChar(200)
+  dispatchedAt         DateTime               @default(now()) @map("dispatched_at") @db.Timestamptz(3)
+  completedAt          DateTime?              @map("completed_at") @db.Timestamptz(3)
+  operationalOutcome   ProviderAttemptOutcome @default(IN_PROGRESS) @map("operational_outcome")
+  retryRelationship    RetryRelationship      @default(INITIAL_ATTEMPT) @map("retry_relationship")
+  inputTokens          Int?                   @map("input_tokens")
+  outputTokens         Int?                   @map("output_tokens")
+  imageCount           Int?                   @map("image_count")
+  resolutionTier       String?                @map("resolution_tier") @db.VarChar(100)
+  videoDurationSeconds Int?                   @map("video_duration_seconds")
+  cancellationReason   String?                @map("cancellation_reason") @db.VarChar(255)
+  durationMs           Int?                   @map("duration_ms")
+  safePromptDigest     String                 @map("safe_prompt_digest") @db.VarChar(64)
+  digestAlgorithm      String                 @default("HMAC-SHA256") @map("digest_algorithm") @db.VarChar(32)
+  digestKeyVersion     String                 @default("2026-v1") @map("digest_key_version") @db.VarChar(50)
+  outputDigest         String?                @map("output_digest") @db.VarChar(64)
+  errorCode            String?                @map("error_code") @db.VarChar(100)
+  errorMessage         String?                @map("error_message") @db.VarChar(1000)
+  createdAt            DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  reservation          UsageReservation       @relation(fields: [reservationId], references: [id], onDelete: Cascade, map: "provider_attempts_reservation_id_fkey")
+  ledgerEntries        UsageLedgerEntry[]
+
+  @@unique([reservationId, attemptNumber], map: "provider_attempts_reservation_attempt_key")
+  @@index([operationalOutcome, createdAt], map: "provider_attempts_outcome_created_idx")
+  @@index([providerId, modelId, createdAt], map: "provider_attempts_provider_model_idx")
+  @@index([safePromptDigest], map: "provider_attempts_prompt_digest_idx")
+  @@map("provider_attempts")
+}
+
+model UsageLedgerEntry {
+  id                         String              @id @default(uuid()) @db.Uuid
+  entryType                  LedgerEntryType     @map("entry_type")
+  reservationId              String              @map("reservation_id") @db.Uuid
+  attemptId                  String?             @map("attempt_id") @db.Uuid
+  settlementKey              String              @unique(map: "usage_ledger_entries_settlement_key") @map("settlement_key") @db.VarChar(200)
+  amount                     Decimal             @map("amount") @db.Decimal(12, 4)
+  currency                   String              @default("USD") @db.VarChar(10)
+  costKnowledge              CostKnowledgeState  @default(ESTIMATED) @map("cost_knowledge")
+  pricingVersionId           String?             @map("pricing_version_id") @db.VarChar(100)
+  exchangeRate               Decimal?            @map("exchange_rate") @db.Decimal(12, 6)
+  exchangeRateSource         String?             @map("exchange_rate_source") @db.VarChar(100)
+  exchangeRateSourceRecordId String?             @map("exchange_rate_source_record_id") @db.VarChar(100)
+  exchangeRateEffectiveAt    DateTime?           @map("exchange_rate_effective_at") @db.Timestamptz(3)
+  baseCurrency               String?             @map("base_currency") @db.VarChar(10)
+  quoteCurrency              String?             @map("quote_currency") @db.VarChar(10)
+  recordedAt                 DateTime            @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  reconciliationRef          String?             @map("reconciliation_ref") @db.VarChar(255)
+  correctionOfEntryId        String?             @map("correction_of_entry_id") @db.Uuid
+  actorUserId                String?             @map("actor_user_id") @db.Uuid
+  systemComponent            String              @default("usage-ledger-worker") @map("system_component") @db.VarChar(100)
+  createdAt                  DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  reservation                UsageReservation    @relation(fields: [reservationId], references: [id], onDelete: Restrict, map: "usage_ledger_entries_reservation_id_fkey")
+  attempt                    ProviderAttempt?    @relation(fields: [attemptId], references: [id], onDelete: SetNull, map: "usage_ledger_entries_attempt_id_fkey")
+  correctionOf               UsageLedgerEntry?   @relation("LedgerEntryCorrections", fields: [correctionOfEntryId], references: [id], onDelete: SetNull, map: "usage_ledger_entries_correction_id_fkey")
+  corrections                UsageLedgerEntry[]  @relation("LedgerEntryCorrections")
+
+  @@index([entryType, recordedAt], map: "usage_ledger_entries_type_recorded_idx")
+  @@index([reservationId], map: "usage_ledger_entries_reservation_idx")
+  @@index([attemptId], map: "usage_ledger_entries_attempt_idx")
+  @@index([costKnowledge], map: "usage_ledger_entries_cost_knowledge_idx")
+  @@map("usage_ledger_entries")
+}
+
+model ProviderPricingVersion {
+  id                    String                @id @db.VarChar(100)
+  providerId            String                @map("provider_id") @db.VarChar(100)
+  modelId               String                @map("model_id") @db.VarChar(100)
+  capability            String                @map("capability") @db.VarChar(100)
+  modality              AiModality            @map("modality")
+  pricingUnit           PricingUnit           @map("pricing_unit")
+  inputTokenRate        Decimal?              @map("input_token_rate") @db.Decimal(12, 6)
+  outputTokenRate       Decimal?              @map("output_token_rate") @db.Decimal(12, 6)
+  imageRateByResolution Json?                 @map("image_rate_by_resolution") @db.JsonB
+  videoRateByDuration   Json?                 @map("video_rate_by_duration") @db.JsonB
+  subscriptionRules     Json?                 @map("subscription_rules") @db.JsonB
+  currency              String                @default("USD") @db.VarChar(10)
+  source                String                @map("source") @db.VarChar(200)
+  pricingSourceUrl      String                @map("pricing_source_url") @db.VarChar(500)
+  sourceRetrievedAt     DateTime              @map("source_retrieved_at") @db.Timestamptz(3)
+  effectiveFrom         DateTime              @map("effective_from") @db.Timestamptz(3)
+  effectiveTo           DateTime?             @map("effective_to") @db.Timestamptz(3)
+  approvalStatus        PricingApprovalStatus @default(PROPOSED) @map("approval_status")
+  approvedByUserId      String?               @map("approved_by_user_id") @db.Uuid
+  createdAt             DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([providerId, modelId, approvalStatus], map: "provider_pricing_versions_lookup_idx")
+  @@index([approvalStatus, effectiveFrom, effectiveTo], map: "provider_pricing_versions_effective_idx")
+  @@map("provider_pricing_versions")
+}
+
+model ProviderCapabilityRegistration {
+  id                    String          @id @db.VarChar(100)
+  providerId            String          @map("provider_id") @db.VarChar(100)
+  modelId               String          @map("model_id") @db.VarChar(100)
+  modality              AiModality      @map("modality")
+  supportedCapabilities String[]        @map("supported_capabilities")
+  environment           EnvironmentTier @default(DEVELOPMENT) @map("environment")
+  supportsIdempotency   Boolean         @default(true) @map("supports_idempotency")
+  active                Boolean         @default(true) @map("active")
+  createdAt             DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([providerId, modelId, environment], map: "provider_capability_registrations_env_key")
+  @@index([active, modality], map: "provider_capability_registrations_active_modality_idx")
+  @@map("provider_capability_registrations")
 }
 
 model BrandProfileVersion {

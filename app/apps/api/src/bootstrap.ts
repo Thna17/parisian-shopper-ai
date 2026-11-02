@@ -2,11 +2,17 @@ import { type INestApplication, ValidationPipe, VersioningType } from '@nestjs/c
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppConfigService } from '@parisian-shopper/config';
 import { CorrelationContextService, PinoLoggerService } from '@parisian-shopper/logger';
-import { json, urlencoded } from 'express';
+import express, { json, urlencoded } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import helmet from 'helmet';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { GlobalExceptionFilter } from './http/global-exception.filter.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const appRoot = path.resolve(__dirname, '../../..');
 
 export function configureApi(application: INestApplication): void {
   const config = application.get(AppConfigService);
@@ -19,6 +25,10 @@ export function configureApi(application: INestApplication): void {
   application.use(helmet());
   application.use(json({ limit: config.application.bodyLimit, strict: true }));
   application.use(urlencoded({ extended: false, limit: config.application.bodyLimit }));
+
+  // Static assets serving for product cutouts and composites
+  application.use('/assets', express.static(path.resolve(appRoot, '.data/assets')));
+  application.use('/assets', express.static(path.resolve(appRoot, 'apps/web/public/assets')));
   application.use(
     rateLimit({
       legacyHeaders: false,
@@ -36,11 +46,25 @@ export function configureApi(application: INestApplication): void {
   );
   application.useGlobalFilters(new GlobalExceptionFilter(logger, correlation));
 
-  if (config.application.corsOrigins.length > 0) {
+  const corsOrigins = [...config.application.corsOrigins];
+  if (config.nodeEnvironment === 'development' || config.nodeEnvironment === 'test') {
+    for (const devOrigin of [
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+    ]) {
+      if (!corsOrigins.includes(devOrigin)) {
+        corsOrigins.push(devOrigin);
+      }
+    }
+  }
+
+  if (corsOrigins.length > 0) {
     application.enableCors({
       credentials: true,
       methods: ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'],
-      origin: [...config.application.corsOrigins],
+      origin: corsOrigins,
     });
   }
 

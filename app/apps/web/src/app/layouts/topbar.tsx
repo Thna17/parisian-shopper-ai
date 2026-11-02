@@ -9,8 +9,19 @@ export interface TopbarProps {
   readonly onToggleMobileMenu: () => void;
 }
 
+const ROLE_HIERARCHY = ['ADMIN', 'MARKETING_APPROVER', 'MARKETING_EDITOR', 'VIEWER'] as const;
+
+function getPrimaryDisplayRole(roles?: readonly string[]): string {
+  if (!roles || roles.length === 0) return 'Staff';
+  for (const r of ROLE_HIERARCHY) {
+    if (roles.includes(r)) return r === 'ADMIN' ? 'Administrator' : r.replace(/_/g, ' ');
+  }
+  return roles[0]?.replace(/_/g, ' ') ?? 'Staff';
+}
+
 export const Topbar: React.FC<TopbarProps> = ({ onToggleMobileMenu }) => {
   const { employee, logout, isLoggingOut } = useAuth();
+  const displayRole = getPrimaryDisplayRole(employee?.roles);
 
   return (
     <header className="h-16 px-4 sm:px-6 bg-app-surface border-b border-app-border flex items-center justify-between shrink-0 select-none z-10">
@@ -46,8 +57,8 @@ export const Topbar: React.FC<TopbarProps> = ({ onToggleMobileMenu }) => {
             <span className="text-xs font-semibold text-app-primary leading-tight">
               {employee?.displayName ?? 'Employee'}
             </span>
-            <span className="text-[10px] text-app-muted leading-tight">
-              {employee?.roles[0] ?? 'Staff'}
+            <span className="text-[10px] text-app-muted leading-tight font-medium">
+              {displayRole}
             </span>
           </div>
 

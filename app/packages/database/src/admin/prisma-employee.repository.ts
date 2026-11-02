@@ -9,6 +9,7 @@ import {
   type PaginatedResult,
   type RoleCode,
   type SafeUserSession,
+  LastActiveAdminError,
 } from '@parisian-shopper/application';
 import { PrismaService } from '../prisma.service.js';
 
@@ -91,8 +92,16 @@ export class PrismaEmployeeRepository implements EmployeeRepository {
       }),
     ]);
 
+    const rolePriority: Record<string, number> = {
+      ADMIN: 1,
+      MARKETING_APPROVER: 2,
+      MARKETING_EDITOR: 3,
+      VIEWER: 4,
+    };
     const items: EmployeeSummary[] = records.map((u) => {
-      const activeRoles = u.roles.map((r) => r.role.code as RoleCode);
+      const activeRoles = u.roles
+        .map((r) => r.role.code as RoleCode)
+        .sort((a, b) => (rolePriority[a] ?? 99) - (rolePriority[b] ?? 99));
       const telegramUsername = u.telegramIdentities[0]?.telegramUsername ?? null;
 
       return {
@@ -154,7 +163,15 @@ export class PrismaEmployeeRepository implements EmployeeRepository {
       select: { lastActiveAt: true },
     });
 
-    const activeRoles = user.roles.map((r) => r.role.code as RoleCode);
+    const rolePriority: Record<string, number> = {
+      ADMIN: 1,
+      MARKETING_APPROVER: 2,
+      MARKETING_EDITOR: 3,
+      VIEWER: 4,
+    };
+    const activeRoles = user.roles
+      .map((r) => r.role.code as RoleCode)
+      .sort((a, b) => (rolePriority[a] ?? 99) - (rolePriority[b] ?? 99));
     const telegramPrimary = user.telegramIdentities[0] ?? null;
 
     return {
@@ -238,6 +255,41 @@ export class PrismaEmployeeRepository implements EmployeeRepository {
     actorId: string,
   ): Promise<EmployeeDetail> {
     return this.prisma.$transaction(async (tx) => {
+      // 1. Transactional check for last active administrator lockout protection
+      const currentTarget = await tx.user.findUnique({
+        where: { id },
+        include: {
+          roles: {
+            where: { revokedAt: null },
+            include: { role: true },
+          },
+        },
+      });
+
+      const currentHasAdmin = currentTarget?.roles.some((r) => r.role.code === 'ADMIN') ?? false;
+      const newHasAdmin = roleCodes.includes('ADMIN');
+
+      if (currentHasAdmin && !newHasAdmin && currentTarget?.status === 'ACTIVE') {
+        // Acquire row-level lock on ADMIN role row to serialize concurrent demotions/suspensions
+        await tx.$queryRaw`SELECT id FROM roles WHERE code = 'ADMIN' FOR UPDATE`;
+
+        const activeAdminsCount = await tx.user.count({
+          where: {
+            status: 'ACTIVE',
+            roles: {
+              some: {
+                role: { code: 'ADMIN' },
+                revokedAt: null,
+              },
+            },
+          },
+        });
+
+        if (activeAdminsCount <= 1) {
+          throw new LastActiveAdminError();
+        }
+      }
+
       const now = new Date();
 
       await tx.userRole.updateMany({
@@ -290,19 +342,53 @@ export class PrismaEmployeeRepository implements EmployeeRepository {
   }
 
   public async suspend(id: string, _actorId: string): Promise<EmployeeDetail> {
-    await this.prisma.user.update({
-      where: { id },
-      data: {
-        status: 'DISABLED',
-        disabledAt: new Date(),
-      },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const currentTarget = await tx.user.findUnique({
+        where: { id },
+        include: {
+          roles: {
+            where: { revokedAt: null },
+            include: { role: true },
+          },
+        },
+      });
 
-    const updated = await this.findById(id);
-    if (!updated) {
-      throw new Error(`Employee not found after suspension: ${id}`);
-    }
-    return updated;
+      const hasAdmin = currentTarget?.roles.some((r) => r.role.code === 'ADMIN') ?? false;
+      if (hasAdmin && currentTarget?.status === 'ACTIVE') {
+        // Acquire row-level lock on ADMIN role row to serialize concurrent demotions/suspensions
+        await tx.$queryRaw`SELECT id FROM roles WHERE code = 'ADMIN' FOR UPDATE`;
+
+        const activeAdminsCount = await tx.user.count({
+          where: {
+            status: 'ACTIVE',
+            roles: {
+              some: {
+                role: { code: 'ADMIN' },
+                revokedAt: null,
+              },
+            },
+          },
+        });
+
+        if (activeAdminsCount <= 1) {
+          throw new LastActiveAdminError();
+        }
+      }
+
+      await tx.user.update({
+        where: { id },
+        data: {
+          status: 'DISABLED',
+          disabledAt: new Date(),
+        },
+      });
+
+      const updated = await this.findById(id);
+      if (!updated) {
+        throw new Error(`Employee not found after suspension: ${id}`);
+      }
+      return updated;
+    });
   }
 
   public async reactivate(id: string, _actorId: string): Promise<EmployeeDetail> {

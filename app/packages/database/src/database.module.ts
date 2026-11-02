@@ -33,6 +33,10 @@ import {
   VALIDATION_REPOSITORY,
   VISUAL_ASSET_REPOSITORY,
   VISUAL_VALIDATION_REPOSITORY,
+  BUDGET_POLICY_REPOSITORY,
+  USAGE_LEDGER_REPOSITORY,
+  PROVIDER_PRICING_REPOSITORY,
+  PROVIDER_CAPABILITY_REPOSITORY,
 } from '@parisian-shopper/application';
 
 import { DatabaseHealthIndicator } from './database-health.indicator.js';
@@ -68,6 +72,10 @@ import { PrismaEmployeeRepository } from './admin/prisma-employee.repository.js'
 import { PrismaEmployeeInvitationRepository } from './admin/prisma-employee-invitation.repository.js';
 import { PrismaSystemSettingRepository } from './admin/prisma-system-setting.repository.js';
 import { PrismaAdminAuditRepository } from './admin/prisma-admin-audit.repository.js';
+import { PrismaUsageLedgerRepository } from './budget/prisma-usage-ledger.repository.js';
+import { PrismaBudgetPolicyRepository } from './budget/prisma-budget-policy.repository.js';
+import { PrismaProviderPricingRepository } from './budget/prisma-provider-pricing.repository.js';
+import { PrismaProviderCapabilityRepository } from './budget/prisma-provider-capability.repository.js';
 import {
   PrismaCreativeApprovalRepository,
   PrismaCreativeExportRepository,
@@ -117,6 +125,10 @@ import {
     PrismaEmployeeInvitationRepository,
     PrismaSystemSettingRepository,
     PrismaAdminAuditRepository,
+    PrismaUsageLedgerRepository,
+    PrismaBudgetPolicyRepository,
+    PrismaProviderPricingRepository,
+    PrismaProviderCapabilityRepository,
     {
       provide: PrismaStandaloneOutboxWriter,
       inject: [PrismaService],
@@ -160,6 +172,10 @@ import {
     { provide: EMPLOYEE_INVITATION_REPOSITORY, useExisting: PrismaEmployeeInvitationRepository },
     { provide: SYSTEM_SETTING_REPOSITORY, useExisting: PrismaSystemSettingRepository },
     { provide: ADMIN_AUDIT_REPOSITORY, useExisting: PrismaAdminAuditRepository },
+    { provide: BUDGET_POLICY_REPOSITORY, useExisting: PrismaBudgetPolicyRepository },
+    { provide: USAGE_LEDGER_REPOSITORY, useExisting: PrismaUsageLedgerRepository },
+    { provide: PROVIDER_PRICING_REPOSITORY, useExisting: PrismaProviderPricingRepository },
+    { provide: PROVIDER_CAPABILITY_REPOSITORY, useExisting: PrismaProviderCapabilityRepository },
     { provide: CREATIVE_JOB_REPOSITORY, useExisting: PrismaCreativeJobRepository },
     { provide: VISUAL_ASSET_REPOSITORY, useExisting: PrismaVisualAssetRepository },
     { provide: VISUAL_VALIDATION_REPOSITORY, useExisting: PrismaVisualValidationRepository },
@@ -184,6 +200,10 @@ import {
     PrismaEmployeeInvitationRepository,
     PrismaSystemSettingRepository,
     PrismaAdminAuditRepository,
+    PrismaUsageLedgerRepository,
+    PrismaBudgetPolicyRepository,
+    PrismaProviderPricingRepository,
+    PrismaProviderCapabilityRepository,
     PrismaProductFreshnessAssessmentRepository,
     PrismaFreshnessPolicyRepository,
     PrismaProductRevalidationUnitOfWork,
@@ -234,6 +254,10 @@ import {
     EMPLOYEE_INVITATION_REPOSITORY,
     SYSTEM_SETTING_REPOSITORY,
     ADMIN_AUDIT_REPOSITORY,
+    BUDGET_POLICY_REPOSITORY,
+    USAGE_LEDGER_REPOSITORY,
+    PROVIDER_PRICING_REPOSITORY,
+    PROVIDER_CAPABILITY_REPOSITORY,
     CREATIVE_JOB_REPOSITORY,
     VISUAL_ASSET_REPOSITORY,
     VISUAL_VALIDATION_REPOSITORY,

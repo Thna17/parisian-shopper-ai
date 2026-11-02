@@ -4,6 +4,7 @@ import {
   type AITextGenerationResult,
   type AITextProvider,
   ContentGenerationError,
+  FakeAITextProvider,
   validateOutputForLanguage,
 } from '@parisian-shopper/application';
 import {
