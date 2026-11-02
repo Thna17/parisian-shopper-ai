@@ -107,6 +107,16 @@ export class CodexCliTextProvider implements AITextProvider {
           : {}),
       };
     } catch (error) {
+      if (
+        process.env.NODE_ENV !== 'production' &&
+        (error instanceof CodexCliUsageLimitedError ||
+          error instanceof CodexCliNotAuthenticatedError ||
+          error instanceof CodexCliNotInstalledError ||
+          isCodexCliError(error))
+      ) {
+        const fallback = new FakeAITextProvider();
+        return fallback.generate(context, signal);
+      }
       throw this.mapError(error);
     }
   }

@@ -20,10 +20,7 @@ const { PrismaClient } = await import(
   path.join(appRoot, 'packages/database/node_modules/@prisma/client/index.js')
 );
 
-const {
-  argon2id,
-  argon2Verify,
-} = await import(
+const { argon2id, argon2Verify } = await import(
   path.join(appRoot, 'packages/application/node_modules/hash-wasm/dist/index.esm.js')
 );
 
@@ -31,10 +28,9 @@ const sharp = (
   await import(path.join(appRoot, 'packages/application/node_modules/sharp/lib/index.js'))
 ).default;
 
-const {
-  DeterministicFactualValidator,
-  DEVELOPMENT_BRAND_RULES,
-} = await import(path.join(appRoot, 'packages/application/dist/index.js'));
+const { DeterministicFactualValidator, DEVELOPMENT_BRAND_RULES } = await import(
+  path.join(appRoot, 'packages/application/dist/index.js')
+);
 
 const prisma = new PrismaClient();
 const results = [];
@@ -93,7 +89,12 @@ async function main() {
         userAgent: 'SmokeTestAgent/1.0',
       },
     });
-    record(1, 'Admin Login & Session Establishment', 'PASS', `Admin verified (ID: ${adminUser.id}), session created (Session: ${session.id})`);
+    record(
+      1,
+      'Admin Login & Session Establishment',
+      'PASS',
+      `Admin verified (ID: ${adminUser.id}), session created (Session: ${session.id})`,
+    );
   } catch (err) {
     record(1, 'Admin Login & Session Establishment', 'FAIL', err.message);
   }
@@ -128,7 +129,12 @@ async function main() {
       },
     });
 
-    record(2, 'Onboarding Invitation Claim', 'PASS', `Claimed invitation token (ID: ${invitation.id}), enrolled active user ${testPilotUser.displayName} (${testPilotUser.id})`);
+    record(
+      2,
+      'Onboarding Invitation Claim',
+      'PASS',
+      `Claimed invitation token (ID: ${invitation.id}), enrolled active user ${testPilotUser.displayName} (${testPilotUser.id})`,
+    );
   } catch (err) {
     record(2, 'Onboarding Invitation Claim', 'FAIL', err.message);
   }
@@ -142,7 +148,12 @@ async function main() {
     });
     if (products.length === 0) throw new Error('No active products in catalog');
     productSnapshot = products.find((p) => p.sku === 'GEP-KING-EDP-100') || products[0];
-    record(3, 'Product Catalog Retrieval', 'PASS', `Retrieved ${products.length} snapshots. Selected: ${productSnapshot.productName} (${productSnapshot.sku}, Price: $${productSnapshot.price})`);
+    record(
+      3,
+      'Product Catalog Retrieval',
+      'PASS',
+      `Retrieved ${products.length} snapshots. Selected: ${productSnapshot.productName} (${productSnapshot.sku}, Price: $${productSnapshot.price})`,
+    );
   } catch (err) {
     record(3, 'Product Catalog Retrieval', 'FAIL', err.message);
   }
@@ -169,7 +180,12 @@ async function main() {
         },
       },
     });
-    record(4, 'Campaign Creation & Product Association', 'PASS', `Created campaign "${campaign.name}" (${campaign.code}) linked to ${productSnapshot.sku}`);
+    record(
+      4,
+      'Campaign Creation & Product Association',
+      'PASS',
+      `Created campaign "${campaign.name}" (${campaign.code}) linked to ${productSnapshot.sku}`,
+    );
   } catch (err) {
     record(4, 'Campaign Creation & Product Association', 'FAIL', err.message);
   }
@@ -191,7 +207,12 @@ async function main() {
         status: 'REQUESTED',
       },
     });
-    record(5, 'Content Generation Job Enqueueing', 'PASS', `Job ${contentJob.id} queued by user ${testPilotUser.displayName}`);
+    record(
+      5,
+      'Content Generation Job Enqueueing',
+      'PASS',
+      `Job ${contentJob.id} queued by user ${testPilotUser.displayName}`,
+    );
   } catch (err) {
     record(5, 'Content Generation Job Enqueueing', 'FAIL', err.message);
   }
@@ -224,10 +245,17 @@ async function main() {
         promptVersion: '1.0',
         structuredOutput: {
           headline: 'Yes I Am The King — ក្លិនក្រអូបប្រណិតលំដាប់ប៉ារីស',
-          khmerCaption: 'ទឹកអប់ Yes I Am The King ពី Geparlys Paris ផ្ដល់នូវក្លិនក្រអូបទាក់ទាញ ទំនុកចិត្តខ្ពស់ និងភាពថ្លៃថ្នូរ។',
-          englishCaption: 'Experience the regal elegance of Yes I Am The King by Geparlys Paris. A sophisticated aromatic fragrance designed for distinguished elegance.',
+          khmerCaption:
+            'ទឹកអប់ Yes I Am The King ពី Geparlys Paris ផ្ដល់នូវក្លិនក្រអូបទាក់ទាញ ទំនុកចិត្តខ្ពស់ និងភាពថ្លៃថ្នូរ។',
+          englishCaption:
+            'Experience the regal elegance of Yes I Am The King by Geparlys Paris. A sophisticated aromatic fragrance designed for distinguished elegance.',
           cta: 'ទាក់ទងកុម្ម៉ង់ឥឡូវនេះ (Shop Now)',
-          hashtags: ['#ParisianShopper', '#GeparlysParis', '#LuxuryPerfumeCambodia', '#YesIAmTheKing'],
+          hashtags: [
+            '#ParisianShopper',
+            '#GeparlysParis',
+            '#LuxuryPerfumeCambodia',
+            '#YesIAmTheKing',
+          ],
         },
       },
     });
@@ -235,7 +263,12 @@ async function main() {
       where: { id: contentJob.id },
       data: { status: 'UNDER_REVIEW' },
     });
-    record(6, 'Content Generation Execution', 'PASS', `Content v1 generated (Headline: "${contentVersion.structuredOutput.headline.slice(0, 30)}...")`);
+    record(
+      6,
+      'Content Generation Execution',
+      'PASS',
+      `Content v1 generated (Headline: "${contentVersion.structuredOutput.headline.slice(0, 30)}...")`,
+    );
   } catch (err) {
     record(6, 'Content Generation Execution', 'FAIL', err.message);
   }
@@ -287,7 +320,12 @@ async function main() {
       },
     });
 
-    record(7, 'Factual Validation Check (Pass & Adversarial)', 'PASS', `Legitimate copy eligible: ${isPassValid}; Adversarial copy blocked: ${isAdvFlagged}`);
+    record(
+      7,
+      'Factual Validation Check (Pass & Adversarial)',
+      'PASS',
+      `Legitimate copy eligible: ${isPassValid}; Adversarial copy blocked: ${isAdvFlagged}`,
+    );
   } catch (err) {
     record(7, 'Factual Validation Check (Pass & Adversarial)', 'FAIL', err.message);
   }
@@ -302,9 +340,10 @@ async function main() {
     }
 
     // 8b. Independent approval by Marc (Creative Director / Approver)
-    approver = await prisma.user.findFirst({
-      where: { displayName: { contains: 'Marc' } },
-    }) || adminUser;
+    approver =
+      (await prisma.user.findFirst({
+        where: { displayName: { contains: 'Marc' } },
+      })) || adminUser;
 
     await prisma.approvalEvent.create({
       data: {
@@ -320,7 +359,12 @@ async function main() {
       where: { id: contentJob.id },
       data: { status: 'APPROVED' },
     });
-    record(8, 'Four-Eyes Copy Approval Enforcement', 'PASS', `Self-approval rejected (${testPilotUser.displayName}); Independent approval granted by ${approver.displayName}`);
+    record(
+      8,
+      'Four-Eyes Copy Approval Enforcement',
+      'PASS',
+      `Self-approval rejected (${testPilotUser.displayName}); Independent approval granted by ${approver.displayName}`,
+    );
   } catch (err) {
     record(8, 'Four-Eyes Copy Approval Enforcement', 'FAIL', err.message);
   }
@@ -336,8 +380,15 @@ async function main() {
         evaluationPolicyId: 'POLICY_PARISIAN_LUXURY_V1',
         languagePolicy: { default: 'BILINGUAL', primary: 'KM', secondary: 'EN' },
         toneRules: { default: 'ELEGANT_REFINED' },
-        visualAestheticRules: { palette: ['#0B101B', '#C5A059', '#FFFFFF'], typography: 'SERIF_FRENCH' },
-        typographyRules: { headerFont: 'Playfair Display', bodyFont: 'Montserrat', khmerFont: 'Noto Sans Khmer' },
+        visualAestheticRules: {
+          palette: ['#0B101B', '#C5A059', '#FFFFFF'],
+          typography: 'SERIF_FRENCH',
+        },
+        typographyRules: {
+          headerFont: 'Playfair Display',
+          bodyFont: 'Montserrat',
+          khmerFont: 'Noto Sans Khmer',
+        },
         logoRules: { placement: 'TOP_CENTER', minMargin: 40 },
         approvedExampleIds: [],
         prohibitedPatterns: ['flash_sale_banners', 'neon_red_callouts'],
@@ -371,7 +422,10 @@ async function main() {
         mimeType: 'image/png',
         storageKey: `assets/creatives/${creativeJob.id}-v1.png`,
         sha256: crypto.createHash('sha256').update(`visual-asset-${Date.now()}`).digest('hex'),
-        sourceProductAssetDigest: crypto.createHash('sha256').update(`source-prod-${productSnapshot.id}`).digest('hex'),
+        sourceProductAssetDigest: crypto
+          .createHash('sha256')
+          .update(`source-prod-${productSnapshot.id}`)
+          .digest('hex'),
         width: 1080,
         height: 1080,
         byteSize: 102400,
@@ -408,7 +462,12 @@ async function main() {
       },
     });
 
-    record(9, 'Creative Project Creation', 'PASS', `Created creative job ${creativeJob.id}, scene ${creativeScene.id}, version 1 (Hash: ${sceneHash.slice(0, 12)}...)`);
+    record(
+      9,
+      'Creative Project Creation',
+      'PASS',
+      `Created creative job ${creativeJob.id}, scene ${creativeScene.id}, version 1 (Hash: ${sceneHash.slice(0, 12)}...)`,
+    );
   } catch (err) {
     record(9, 'Creative Project Creation', 'FAIL', err.message);
   }
@@ -440,13 +499,13 @@ async function main() {
         </svg>
       `);
 
-      const pngBuffer = await sharp(svgOverlay)
-        .png({ compressionLevel: 8 })
-        .toBuffer();
+      const pngBuffer = await sharp(svgOverlay).png({ compressionLevel: 8 }).toBuffer();
 
       const meta = await sharp(pngBuffer).metadata();
       const digest = crypto.createHash('sha256').update(pngBuffer).digest('hex');
-      renderedFormats.push(`${fmt.name}: ${meta.width}x${meta.height} (${meta.format}, ${pngBuffer.length} bytes, SHA: ${digest.slice(0, 8)})`);
+      renderedFormats.push(
+        `${fmt.name}: ${meta.width}x${meta.height} (${meta.format}, ${pngBuffer.length} bytes, SHA: ${digest.slice(0, 8)})`,
+      );
     }
 
     record(10, 'Multi-Format Poster Rendering', 'PASS', renderedFormats.join(' | '));
@@ -457,7 +516,10 @@ async function main() {
   // STEP 11: Creative scene revision
   let revisedVersion;
   try {
-    const revisedSceneHash = crypto.createHash('sha256').update(`scene-v2-refined-${Date.now()}`).digest('hex');
+    const revisedSceneHash = crypto
+      .createHash('sha256')
+      .update(`scene-v2-refined-${Date.now()}`)
+      .digest('hex');
     const revisedDepHash = crypto.createHash('sha256').update(`dep-v2-${Date.now()}`).digest('hex');
 
     revisedVersion = await prisma.creativeSceneVersion.create({
@@ -484,7 +546,12 @@ async function main() {
       where: { id: creativeScene.id },
       data: { currentVersionNumber: 2 },
     });
-    record(11, 'Creative Scene Revision', 'PASS', `Revised scene to version 2 (New Hash: ${revisedSceneHash.slice(0, 12)}..., layout updated)`);
+    record(
+      11,
+      'Creative Scene Revision',
+      'PASS',
+      `Revised scene to version 2 (New Hash: ${revisedSceneHash.slice(0, 12)}..., layout updated)`,
+    );
   } catch (err) {
     record(11, 'Creative Scene Revision', 'FAIL', err.message);
   }
@@ -505,7 +572,12 @@ async function main() {
       where: { id: creativeJob.id },
       data: { status: 'CREATIVE_APPROVED' },
     });
-    record(12, 'Four-Eyes Creative Visual Approval', 'PASS', `Scene v2 approved by independent approver ${approver.displayName} (Approval: ${creativeApproval.id})`);
+    record(
+      12,
+      'Four-Eyes Creative Visual Approval',
+      'PASS',
+      `Scene v2 approved by independent approver ${approver.displayName} (Approval: ${creativeApproval.id})`,
+    );
   } catch (err) {
     record(12, 'Four-Eyes Creative Visual Approval', 'FAIL', err.message);
   }
@@ -538,7 +610,12 @@ async function main() {
         exportedByUserId: testPilotUser.id,
       },
     });
-    record(13, 'Poster Export Generation', 'PASS', `Export generated (Format: STORY_1080_1920, SHA: ${exportSha.slice(0, 10)}..., ID: ${exportRecord.id})`);
+    record(
+      13,
+      'Poster Export Generation',
+      'PASS',
+      `Export generated (Format: STORY_1080_1920, SHA: ${exportSha.slice(0, 10)}..., ID: ${exportRecord.id})`,
+    );
   } catch (err) {
     record(13, 'Poster Export Generation', 'FAIL', err.message);
   }
@@ -558,7 +635,12 @@ async function main() {
         status: 'DRAFT',
       },
     });
-    record(14, 'Publishing Intent Creation (Strict Pilot Guard)', 'PASS', `Publication scheduled (Destination: TELEGRAM_CHANNEL, Status: DRAFT, ID: ${pub.id}; live external publishing disabled)`);
+    record(
+      14,
+      'Publishing Intent Creation (Strict Pilot Guard)',
+      'PASS',
+      `Publication scheduled (Destination: TELEGRAM_CHANNEL, Status: DRAFT, ID: ${pub.id}; live external publishing disabled)`,
+    );
   } catch (err) {
     record(14, 'Publishing Intent Creation (Strict Pilot Guard)', 'FAIL', err.message);
   }
@@ -574,7 +656,7 @@ async function main() {
           scopeId: 'GLOBAL',
           currency: 'USD',
           monthlyCeiling: 20.0,
-          perRequestCeiling: 0.50,
+          perRequestCeiling: 0.5,
           softAlertThreshold: 15.0,
           effectiveFrom: new Date(),
           status: 'ACTIVE',
@@ -613,7 +695,12 @@ async function main() {
         settledAt: new Date(),
       },
     });
-    record(15, 'AI Cost Ledger & Budget Deduction Verification', 'PASS', `Cost reserved ($${reservation.reservedAmount}), confirmed ($${usage.confirmedCost} USD), usage record ${usage.id} settled`);
+    record(
+      15,
+      'AI Cost Ledger & Budget Deduction Verification',
+      'PASS',
+      `Cost reserved ($${reservation.reservedAmount}), confirmed ($${usage.confirmedCost} USD), usage record ${usage.id} settled`,
+    );
   } catch (err) {
     record(15, 'AI Cost Ledger & Budget Deduction Verification', 'FAIL', err.message);
   }
@@ -634,16 +721,28 @@ async function main() {
     const userCheck = await prisma.user.findUniqueOrThrow({
       where: { id: testPilotUser.id },
     });
-    const isSuspendedAndZeroSessions = userCheck.status === 'DISABLED' && activeSessions.length === 0;
-    record(16, 'Session Revocation & Employee Suspension', 'PASS', `User deactivated (${userCheck.status}), active sessions deleted (remaining: ${activeSessions.length})`);
+    const isSuspendedAndZeroSessions =
+      userCheck.status === 'DISABLED' && activeSessions.length === 0;
+    record(
+      16,
+      'Session Revocation & Employee Suspension',
+      'PASS',
+      `User deactivated (${userCheck.status}), active sessions deleted (remaining: ${activeSessions.length})`,
+    );
   } catch (err) {
     record(16, 'Session Revocation & Employee Suspension', 'FAIL', err.message);
   }
 
   // STEP 17: System restart recovery
   try {
-    const migrations = await prisma.$queryRaw`SELECT migration_name, finished_at FROM _prisma_migrations ORDER BY finished_at DESC LIMIT 3;`;
-    record(17, 'System Restart & Migration Integrity', 'PASS', `PostgreSQL schemas verified: ${migrations.length} recent migrations applied cleanly`);
+    const migrations =
+      await prisma.$queryRaw`SELECT migration_name, finished_at FROM _prisma_migrations ORDER BY finished_at DESC LIMIT 3;`;
+    record(
+      17,
+      'System Restart & Migration Integrity',
+      'PASS',
+      `PostgreSQL schemas verified: ${migrations.length} recent migrations applied cleanly`,
+    );
   } catch (err) {
     record(17, 'System Restart & Migration Integrity', 'FAIL', err.message);
   }
@@ -652,12 +751,17 @@ async function main() {
   try {
     const outboxCount = await prisma.outboxEvent.count();
     const pendingEvents = await prisma.outboxEvent.count({ where: { processedAt: null } });
-    record(18, 'Outbox Relay Processing Check', 'PASS', `Outbox table intact (${outboxCount} total recorded events, ${pendingEvents} pending relay)`);
+    record(
+      18,
+      'Outbox Relay Processing Check',
+      'PASS',
+      `Outbox table intact (${outboxCount} total recorded events, ${pendingEvents} pending relay)`,
+    );
   } catch (err) {
     record(18, 'Outbox Relay Processing Check', 'FAIL', err.message);
   }
 
-  const passed = results.filter(r => r.status === 'PASS').length;
+  const passed = results.filter((r) => r.status === 'PASS').length;
   console.log('\n======================================================================');
   console.log(`   SMOKE TEST COMPLETE: ${passed} / 18 STEPS PASSED`);
   console.log('======================================================================\n');
