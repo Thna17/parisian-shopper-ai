@@ -9,6 +9,8 @@ import {
   BookOpen,
   Send,
   Shield,
+  Users,
+  Settings,
   BarChart3,
   DollarSign,
   X,
@@ -190,10 +192,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseM
             </div>
             <div className="space-y-0.5">
               <SidebarItem
-                to="/audit"
+                to="/admin/employees"
+                label="Staff Directory"
+                icon={<Users className="w-4 h-4" />}
+                onClick={onCloseMobile}
+              />
+              <SidebarItem
+                to="/admin/settings"
+                label="System Settings"
+                icon={<Settings className="w-4 h-4" />}
+                onClick={onCloseMobile}
+              />
+              <SidebarItem
+                to="/admin/audit"
                 label="Security & Audit"
                 icon={<Shield className="w-4 h-4" />}
-                isComingSoon
+                onClick={onCloseMobile}
               />
             </div>
           </div>

@@ -157,6 +157,19 @@ export class PrismaBrandProfileRepository implements BrandProfileRepository {
     });
   }
 
+  public async updateBenchmarkReport(
+    id: string,
+    benchmarkReport: Record<string, unknown>,
+  ): Promise<BrandProfileVersionRecord> {
+    const updated = await this.prisma.brandProfileVersion.update({
+      where: { id },
+      data: {
+        benchmarkReport: benchmarkReport as Prisma.InputJsonValue,
+      },
+    });
+    return this.mapRecord(updated);
+  }
+
   private mapRecord(r: PrismaBrandProfileVersion): BrandProfileVersionRecord {
     return {
       id: r.id,

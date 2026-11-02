@@ -4,6 +4,7 @@ import {
   BRAND_PROFILE_REPOSITORY,
   BRAND_RULE_REPOSITORY,
   BRAND_SOURCE_REPOSITORY,
+  BRAND_DATASET_REPOSITORY,
   CAMPAIGN_REPOSITORY,
   CONTENT_GENERATION_REPOSITORY,
   CREATIVE_APPROVAL_REPOSITORY,
@@ -22,6 +23,10 @@ import {
   PUBLISHING_REPOSITORY,
   ANALYTICS_REPOSITORY,
   BUDGET_LEDGER_REPOSITORY,
+  EMPLOYEE_REPOSITORY,
+  EMPLOYEE_INVITATION_REPOSITORY,
+  SYSTEM_SETTING_REPOSITORY,
+  ADMIN_AUDIT_REPOSITORY,
   TELEGRAM_WORKFLOW_REPOSITORY,
   USER_ACCOUNT_REPOSITORY,
   USER_SESSION_REPOSITORY,
@@ -41,6 +46,7 @@ import { PrismaService } from './prisma.service.js';
 import { PrismaBrandRuleRepository } from './brand/prisma-brand-rule.repository.js';
 import { PrismaBrandProfileRepository } from './brand/prisma-brand-profile.repository.js';
 import { PrismaBrandSourceRepository } from './brand/prisma-brand-source.repository.js';
+import { PrismaBrandDatasetRepository } from './brand/prisma-brand-dataset.repository.js';
 import { PrismaContentGenerationRepository } from './content/prisma-content-generation.repository.js';
 import { PrismaFreshnessPolicyRepository } from './product-snapshot/prisma-freshness-policy.repository.js';
 import { PrismaProductFreshnessAssessmentRepository } from './product-snapshot/prisma-product-freshness-assessment.repository.js';
@@ -58,6 +64,10 @@ import { PrismaCampaignRepository } from './campaigns/prisma-campaign.repository
 import { PrismaPublishingRepository } from './publishing/prisma-publishing.repository.js';
 import { PrismaAnalyticsRepository } from './analytics/prisma-analytics.repository.js';
 import { PrismaBudgetLedgerRepository } from './analytics/prisma-budget-ledger.repository.js';
+import { PrismaEmployeeRepository } from './admin/prisma-employee.repository.js';
+import { PrismaEmployeeInvitationRepository } from './admin/prisma-employee-invitation.repository.js';
+import { PrismaSystemSettingRepository } from './admin/prisma-system-setting.repository.js';
+import { PrismaAdminAuditRepository } from './admin/prisma-admin-audit.repository.js';
 import {
   PrismaCreativeApprovalRepository,
   PrismaCreativeExportRepository,
@@ -102,6 +112,11 @@ import {
     PrismaProductAssetRegistrationUnitOfWork,
     PrismaBrandProfileRepository,
     PrismaBrandSourceRepository,
+    PrismaBrandDatasetRepository,
+    PrismaEmployeeRepository,
+    PrismaEmployeeInvitationRepository,
+    PrismaSystemSettingRepository,
+    PrismaAdminAuditRepository,
     {
       provide: PrismaStandaloneOutboxWriter,
       inject: [PrismaService],
@@ -129,6 +144,7 @@ import {
     { provide: BRAND_RULE_REPOSITORY, useExisting: PrismaBrandRuleRepository },
     { provide: BRAND_PROFILE_REPOSITORY, useExisting: PrismaBrandProfileRepository },
     { provide: BRAND_SOURCE_REPOSITORY, useExisting: PrismaBrandSourceRepository },
+    { provide: BRAND_DATASET_REPOSITORY, useExisting: PrismaBrandDatasetRepository },
     { provide: CONTENT_GENERATION_REPOSITORY, useExisting: PrismaContentGenerationRepository },
     { provide: VALIDATION_REPOSITORY, useExisting: PrismaValidationRepository },
     { provide: TELEGRAM_WORKFLOW_REPOSITORY, useExisting: PrismaTelegramWorkflowRepository },
@@ -140,6 +156,10 @@ import {
     { provide: PUBLISHING_REPOSITORY, useExisting: PrismaPublishingRepository },
     { provide: ANALYTICS_REPOSITORY, useExisting: PrismaAnalyticsRepository },
     { provide: BUDGET_LEDGER_REPOSITORY, useExisting: PrismaBudgetLedgerRepository },
+    { provide: EMPLOYEE_REPOSITORY, useExisting: PrismaEmployeeRepository },
+    { provide: EMPLOYEE_INVITATION_REPOSITORY, useExisting: PrismaEmployeeInvitationRepository },
+    { provide: SYSTEM_SETTING_REPOSITORY, useExisting: PrismaSystemSettingRepository },
+    { provide: ADMIN_AUDIT_REPOSITORY, useExisting: PrismaAdminAuditRepository },
     { provide: CREATIVE_JOB_REPOSITORY, useExisting: PrismaCreativeJobRepository },
     { provide: VISUAL_ASSET_REPOSITORY, useExisting: PrismaVisualAssetRepository },
     { provide: VISUAL_VALIDATION_REPOSITORY, useExisting: PrismaVisualValidationRepository },
@@ -159,6 +179,11 @@ import {
     PrismaProductAssetRegistrationUnitOfWork,
     PrismaBrandProfileRepository,
     PrismaBrandSourceRepository,
+    PrismaBrandDatasetRepository,
+    PrismaEmployeeRepository,
+    PrismaEmployeeInvitationRepository,
+    PrismaSystemSettingRepository,
+    PrismaAdminAuditRepository,
     PrismaProductFreshnessAssessmentRepository,
     PrismaFreshnessPolicyRepository,
     PrismaProductRevalidationUnitOfWork,
@@ -193,6 +218,7 @@ import {
     BRAND_RULE_REPOSITORY,
     BRAND_PROFILE_REPOSITORY,
     BRAND_SOURCE_REPOSITORY,
+    BRAND_DATASET_REPOSITORY,
     CONTENT_GENERATION_REPOSITORY,
     VALIDATION_REPOSITORY,
     TELEGRAM_WORKFLOW_REPOSITORY,
@@ -204,6 +230,10 @@ import {
     PUBLISHING_REPOSITORY,
     ANALYTICS_REPOSITORY,
     BUDGET_LEDGER_REPOSITORY,
+    EMPLOYEE_REPOSITORY,
+    EMPLOYEE_INVITATION_REPOSITORY,
+    SYSTEM_SETTING_REPOSITORY,
+    ADMIN_AUDIT_REPOSITORY,
     CREATIVE_JOB_REPOSITORY,
     VISUAL_ASSET_REPOSITORY,
     VISUAL_VALIDATION_REPOSITORY,

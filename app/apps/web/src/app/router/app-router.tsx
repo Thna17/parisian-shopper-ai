@@ -31,12 +31,22 @@ import { ContentAnalyticsPage } from '../../features/analytics/pages/ContentAnal
 import { CampaignAnalyticsPage } from '../../features/analytics/pages/CampaignAnalyticsPage.js';
 import { CreativeAnalyticsPage } from '../../features/analytics/pages/CreativeAnalyticsPage.js';
 import { PublishingAnalyticsPage } from '../../features/analytics/pages/PublishingAnalyticsPage.js';
+import { AdminOverviewPage } from '../../features/admin/pages/AdminOverviewPage.js';
+import { EmployeeDirectoryPage } from '../../features/admin/pages/EmployeeDirectoryPage.js';
+import { EmployeeDetailPage } from '../../features/admin/pages/EmployeeDetailPage.js';
+import { OrganizationSettingsPage } from '../../features/admin/pages/OrganizationSettingsPage.js';
+import { AdministrativeAuditPage } from '../../features/admin/pages/AdministrativeAuditPage.js';
+import { OnboardingClaimPage } from '../../features/admin/pages/OnboardingClaimPage.js';
 import { Permission } from '../../types/auth.types.js';
 
 export const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/onboarding',
+    element: <OnboardingClaimPage />,
   },
   {
     path: '/403',
@@ -259,6 +269,46 @@ export const router = createBrowserRouter([
         element: (
           <RequirePermission permission={Permission.VIEW_OPERATIONAL_ANALYTICS}>
             <PublishingAnalyticsPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: 'admin',
+        element: (
+          <RequirePermission permission={Permission.ADMIN}>
+            <AdminOverviewPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: 'admin/employees',
+        element: (
+          <RequirePermission permission={Permission.ADMIN}>
+            <EmployeeDirectoryPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: 'admin/employees/:id',
+        element: (
+          <RequirePermission permission={Permission.ADMIN}>
+            <EmployeeDetailPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: 'admin/settings',
+        element: (
+          <RequirePermission permission={Permission.ADMIN}>
+            <OrganizationSettingsPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: 'admin/audit',
+        element: (
+          <RequirePermission permission={Permission.ADMIN}>
+            <AdministrativeAuditPage />
           </RequirePermission>
         ),
       },

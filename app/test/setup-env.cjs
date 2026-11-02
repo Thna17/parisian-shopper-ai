@@ -6,3 +6,4 @@ process.env.FEATURE_TELEGRAM ??= 'false';
 process.env.FEATURE_TELEGRAM_CHANNEL_PUBLISHING = 'false';
 process.env.AI_PROVIDER ??= 'fake';
 process.env.FEATURE_AI_TEXT_GENERATION ??= 'false';
+process.env.LOG_PRETTY = 'false';

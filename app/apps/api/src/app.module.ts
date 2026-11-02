@@ -20,6 +20,7 @@ import { CreativeApiModule } from './creative/creative.module.js';
 import { PublishingApiModule } from './publishing/publishing.module.js';
 import { AnalyticsApiModule } from './analytics/analytics.module.js';
 import { BrandApiModule } from './brand/brand.module.js';
+import { AdminApiModule } from './admin/admin.module.js';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { BrandApiModule } from './brand/brand.module.js';
     PublishingApiModule,
     AnalyticsApiModule,
     BrandApiModule,
+    AdminApiModule,
   ],
 })
 export class AppModule {}

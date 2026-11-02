@@ -50,3 +50,27 @@ export class InsufficientBrandPermissionError extends BrandIntelligenceError {
     super(`User lacks required permission for brand intelligence operation: ${requiredPermission}`);
   }
 }
+
+export class DuplicateBrandDatasetVersionError extends BrandIntelligenceError {
+  public constructor(versionString: string) {
+    super(`Brand dataset version already exists with version string '${versionString}'.`);
+  }
+}
+
+export class BrandDatasetNotFoundError extends BrandIntelligenceError {
+  public constructor(identifier: string) {
+    super(`Brand dataset version not found: ${identifier}`);
+  }
+}
+
+export class EmptyFeedbackBatchError extends BrandIntelligenceError {
+  public constructor() {
+    super('Human feedback batch cannot be empty.');
+  }
+}
+
+export class InvalidFeedbackRecordError extends BrandIntelligenceError {
+  public constructor(reason: string) {
+    super(`Feedback record invalid: ${reason}`);
+  }
+}

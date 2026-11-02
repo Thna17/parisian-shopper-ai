@@ -111,6 +111,6 @@ export function resolvePermissionsForRoles(roles: readonly string[]): readonly P
   return Array.from(permissionsSet);
 }
 
-function isRoleCode(value: string): value is RoleCode {
+export function isRoleCode(value: string): value is RoleCode {
   return Object.values(RoleCode).some((role) => role === value);
 }

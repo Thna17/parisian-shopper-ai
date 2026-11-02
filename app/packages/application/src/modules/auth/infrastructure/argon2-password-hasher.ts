@@ -59,7 +59,7 @@ export class Argon2PasswordHasher implements PasswordHasher {
         salt,
         iterations: t,
         memorySize: m,
-        parallelism: p,
+        parallelism: process.env.NODE_ENV === 'test' ? 1 : p,
         hashLength: this.defaultHashLength,
         outputType: 'encoded',
       });
