@@ -75,9 +75,14 @@ export class ApprovalsController {
 
     return {
       items: result.items.map((item) => {
-        const { latestApproval, ...rest } = item;
+        const { latestApproval, imageUrl, ...rest } = item;
+        const resolvedImageUrl =
+          imageUrl && !imageUrl.includes('.invalid')
+            ? imageUrl
+            : `/assets/products/${item.sku}.png`;
         return {
           ...rest,
+          imageUrl: resolvedImageUrl,
           submittedAt: item.submittedAt.toISOString(),
           ...(latestApproval
             ? {
@@ -160,7 +165,13 @@ export class ApprovalsController {
         createdAt: detail.job.createdAt.toISOString(),
         updatedAt: detail.job.updatedAt.toISOString(),
       },
-      productSnapshot: detail.productSnapshot,
+      productSnapshot: {
+        ...detail.productSnapshot,
+        imageUrl:
+          detail.productSnapshot.imageUrl && !detail.productSnapshot.imageUrl.includes('.invalid')
+            ? detail.productSnapshot.imageUrl
+            : `/assets/products/${detail.productSnapshot.sku}.png`,
+      },
       ...(detail.campaign ? { campaign: detail.campaign } : {}),
       versions: detail.versions.map((v) => ({
         ...v,

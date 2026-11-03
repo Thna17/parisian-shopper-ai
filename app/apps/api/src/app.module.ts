@@ -21,6 +21,7 @@ import { PublishingApiModule } from './publishing/publishing.module.js';
 import { AnalyticsApiModule } from './analytics/analytics.module.js';
 import { BrandApiModule } from './brand/brand.module.js';
 import { AdminApiModule } from './admin/admin.module.js';
+import { BudgetApiModule } from './budget/budget.module.js';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { AdminApiModule } from './admin/admin.module.js';
     AnalyticsApiModule,
     BrandApiModule,
     AdminApiModule,
+    BudgetApiModule,
   ],
 })
 export class AppModule {}

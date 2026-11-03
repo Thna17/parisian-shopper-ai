@@ -1,4 +1,5 @@
 export * from './application.module.js';
+export { BudgetModule } from './modules/budget/budget.module.js';
 export * from './modules/ai/ai.module.js';
 export * from './modules/ai/application/ai-context.js';
 export * from './modules/ai/application/ai-context-builder.js';
@@ -133,7 +134,25 @@ export * from './modules/publishing/application/list-eligible-assets.use-case.js
 export * from './modules/publishing/application/list-destinations.use-case.js';
 export * from './modules/analytics/analytics.module.js';
 export * from './modules/analytics/domain/analytics.types.js';
-export * from './modules/analytics/domain/budget.types.js';
+export {
+  BudgetScope,
+  BudgetPolicyStatus,
+  ReservationStatus,
+  ReconciliationStatus,
+  type AiBudgetPolicyRecord,
+  type AiCostReservationRecord,
+  type AiUsageRecordData,
+  type BudgetUtilizationResult,
+  type CreateBudgetPolicyInput,
+  type UpdateBudgetPolicyInput,
+  type ReserveBudgetInput,
+  type SettleReservationInput,
+  type CostLedgerItem,
+  type PaginatedCostLedger,
+  type UnreconciledUsageRecord,
+  type ReconcileUsageInput,
+  type CostLedgerQuery,
+} from './modules/analytics/domain/budget.types.js';
 export * from './modules/analytics/domain/pricing-catalog.js';
 export * from './modules/analytics/domain/analytics-errors.js';
 export * from './modules/analytics/application/analytics.repository.js';
@@ -175,13 +194,6 @@ export * from './modules/admin/application/ports/employee.repository.js';
 export * from './modules/admin/application/ports/employee-invitation.repository.js';
 export * from './modules/admin/application/ports/admin-audit.repository.js';
 export * from './modules/admin/application/ports/system-setting.repository.js';
-export * from './modules/admin/admin.module.js';
-export * from './modules/admin/domain/employee.types.js';
-export * from './modules/admin/domain/admin-errors.js';
-export * from './modules/admin/application/ports/employee.repository.js';
-export * from './modules/admin/application/ports/employee-invitation.repository.js';
-export * from './modules/admin/application/ports/system-setting.repository.js';
-export * from './modules/admin/application/ports/admin-audit.repository.js';
 export * from './modules/admin/application/use-cases/list-employees.use-case.js';
 export * from './modules/admin/application/use-cases/get-employee-detail.use-case.js';
 export * from './modules/admin/application/use-cases/create-employee.use-case.js';
@@ -196,3 +208,4 @@ export * from './modules/admin/application/use-cases/claim-onboarding-invitation
 export * from './modules/admin/application/use-cases/get-system-settings.use-case.js';
 export * from './modules/admin/application/use-cases/update-system-settings.use-case.js';
 export * from './modules/admin/application/use-cases/list-admin-audit-logs.use-case.js';
+export * from './modules/budget/index.js';

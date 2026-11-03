@@ -80,7 +80,15 @@ export class PrismaUserAccountRepository implements UserAccountRepository {
       updatedAt: Date;
     } | null;
   }): AuthenticatedUserAccount {
-    const roleCodes = record.roles.map((r) => r.role.code as RoleCode);
+    const rolePriority: Record<string, number> = {
+      ADMIN: 1,
+      MARKETING_APPROVER: 2,
+      MARKETING_EDITOR: 3,
+      VIEWER: 4,
+    };
+    const roleCodes = record.roles
+      .map((r) => r.role.code as RoleCode)
+      .sort((a, b) => (rolePriority[a] ?? 99) - (rolePriority[b] ?? 99));
     const permissions = resolvePermissionsForRoles(roleCodes);
 
     return {

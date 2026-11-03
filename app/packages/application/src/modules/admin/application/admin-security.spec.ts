@@ -744,4 +744,65 @@ describe('Admin & Employee Management Security Suite (ADMIN-01 - ADMIN-20)', () 
       limit: 20,
     });
   });
+
+  // ADMIN-21: Rejects attempts to disable Four-Eyes content or creative approval via system settings
+  it('ADMIN-21: prevents disabling Four-Eyes policies with SECURITY_POLICY_IMMUTABLE', async () => {
+    const updateUseCase = new UpdateSystemSettingsUseCase(mockSettingRepo, mockAuditRepo);
+
+    await expect(
+      updateUseCase.execute({
+        key: 'WORKFLOW_POLICIES',
+        value: { requireFourEyesContent: false },
+        actorUserId: adminUserId,
+      }),
+    ).rejects.toMatchObject({
+      code: 'SECURITY_POLICY_IMMUTABLE',
+    });
+
+    await expect(
+      updateUseCase.execute({
+        key: 'WORKFLOW_POLICIES',
+        value: { requireFourEyesCreative: false },
+        actorUserId: adminUserId,
+      }),
+    ).rejects.toMatchObject({
+      code: 'SECURITY_POLICY_IMMUTABLE',
+    });
+  });
+
+  // ADMIN-22: System setting upsert forces requireFourEyesContent and requireFourEyesCreative to true
+  it('ADMIN-22: enforces non-disableable Four-Eyes invariant on workflow setting upsert', async () => {
+    mockSettingRepo.upsert.mockImplementationOnce((input) =>
+      Promise.resolve({
+        id: 'set-003',
+        key: input.key,
+        category: input.category ?? 'WORKFLOW',
+        value: input.value,
+        description: input.description ?? null,
+        updatedById: input.updatedById ?? null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+    );
+
+    const updateUseCase = new UpdateSystemSettingsUseCase(mockSettingRepo, mockAuditRepo);
+    const result = await updateUseCase.execute({
+      key: 'WORKFLOW_POLICIES',
+      value: { sessionTtlHours: 16 },
+      actorUserId: adminUserId,
+    });
+
+    expect(mockSettingRepo.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: 'WORKFLOW_POLICIES',
+        value: expect.objectContaining({
+          sessionTtlHours: 16,
+          requireFourEyesContent: true,
+          requireFourEyesCreative: true,
+        }),
+      }),
+    );
+    expect(result.value['requireFourEyesContent']).toBe(true);
+    expect(result.value['requireFourEyesCreative']).toBe(true);
+  });
 });

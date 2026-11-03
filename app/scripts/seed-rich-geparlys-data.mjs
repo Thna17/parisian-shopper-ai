@@ -89,7 +89,8 @@ async function main() {
     create: {
       code: 'CAMP-GEPARLYS-ROYAL-2026',
       name: 'Geparlys Royal Collection Launch',
-      objective: 'Establish Geparlys Yes I Am The King as the flagship masculine luxury fragrance for Q4 2026 in Phnom Penh',
+      objective:
+        'Establish Geparlys Yes I Am The King as the flagship masculine luxury fragrance for Q4 2026 in Phnom Penh',
       description: 'Exclusive Phnom Penh launch campaign for Yes I Am The King EDP and Le Parfum',
       status: 'ACTIVE',
       startDate: new Date('2026-11-01T00:00:00Z'),
@@ -177,7 +178,6 @@ async function main() {
     bodyEn,
     ctaKm,
     ctaEn,
-    notes,
     hashtags,
     approverUser = null,
   }) {
@@ -190,7 +190,9 @@ async function main() {
     });
 
     if (existing) {
-      console.log(`Job already exists for ${productSnapshot.productSku} (${existing.id}), skipping creation.`);
+      console.log(
+        `Job already exists for ${productSnapshot.sku} (${existing.id}), skipping creation.`,
+      );
       const existingVersion = await prisma.contentVersion.findFirst({
         where: { contentJobId: existing.id },
       });
@@ -231,16 +233,19 @@ async function main() {
 
     const structuredOutput = {
       headline,
-      bodyKm,
-      bodyEn,
-      ctaKm,
-      ctaEn,
-      notes,
-      hashtags,
-      sku: productSnapshot.productSku,
-      productName: productSnapshot.productName,
-      price: productSnapshot.price,
-      currency: productSnapshot.currency,
+      khmer_caption: bodyKm || null,
+      english_caption: bodyEn || null,
+      cta: ctaEn || ctaKm || 'Order now at Parisian Shopper.',
+      hashtags: Array.isArray(hashtags) ? hashtags : ['#ParisianShopper'],
+      creative_brief: `Luxury campaign poster emphasizing ${productSnapshot.productName} by ${productSnapshot.brand}. Authentic bottle aesthetics and noble accords.`,
+      facts_used: [
+        `Product: ${productSnapshot.productName}`,
+        `Brand: ${productSnapshot.brand}`,
+        `Price: ${productSnapshot.price} USD`,
+        `SKU: ${productSnapshot.sku}`,
+      ],
+      warnings: [],
+      missing_information: [],
     };
 
     const version = await prisma.contentVersion.create({
@@ -265,7 +270,7 @@ async function main() {
         findingCount: 0,
         blockingCount: 0,
         warningCount: 0,
-        infoCount: 1,
+        infoCount: 0,
       },
     });
 
@@ -277,13 +282,14 @@ async function main() {
           contentVersionId: version.id,
           approverUserId: approverUser.id,
           decision: 'APPROVED',
-          comment: 'Exquisite bilingual luxury phrasing adhering fully to Parisian Shopper editorial guidelines.',
+          comment:
+            'Exquisite bilingual luxury phrasing adhering fully to Parisian Shopper editorial guidelines.',
           validationResultId: valResult.id,
         },
       });
     }
 
-    console.log(`Created ContentJob [${status}] for ${productSnapshot.productSku} (Job ID: ${job.id})`);
+    console.log(`Created ContentJob [${status}] for ${productSnapshot.sku} (Job ID: ${job.id})`);
     return { job, version };
   }
 
@@ -296,12 +302,22 @@ async function main() {
     language: 'BILINGUAL',
     platform: 'TELEGRAM',
     headline: 'Yes I Am The King — The Sovereign Scent of Paris',
-    bodyKm: 'ស្វែងរកភាពថ្លៃថ្នូរ និងអំណាចនៃក្លិនក្រអូបពីប៉ារីសជាមួយ Yes I Am The King Eau de Parfum។ ផ្សំឡើងពីផ្លែក្រូចឆ្មាស្រស់ និងឈើក្រអូបដ៏ប្រណិត សាកសមបំផុតសម្រាប់សុភាពបុរសជោគជ័យ។',
-    bodyEn: 'Command every room with Yes I Am The King Eau de Parfum by Geparlys Paris. A radiant burst of Sicilian bergamot settles into noble cedarwood and amber.',
+    bodyKm:
+      'ស្វែងរកភាពថ្លៃថ្នូរ និងអំណាចនៃក្លិនក្រអូបពីប៉ារីសជាមួយ Yes I Am The King Eau de Parfum។ ផ្សំឡើងពីផ្លែក្រូចឆ្មាស្រស់ និងឈើក្រអូបដ៏ប្រណិត សាកសមបំផុតសម្រាប់សុភាពបុរសជោគជ័យ។',
+    bodyEn:
+      'Command every room with Yes I Am The King Eau de Parfum by Geparlys Paris. A radiant burst of Sicilian bergamot settles into noble cedarwood and amber.',
     ctaKm: 'កុម្ម៉ង់ទិញឥឡូវនេះនៅ Parisian Shopper (ដឹកជញ្ជូនរហ័សទូទាំងប្រទេសកម្ពុជា)',
-    ctaEn: 'Order directly with Parisian Shopper. Complimentary nationwide express delivery in Cambodia.',
-    notes: 'Top: Bergamot, Grapefruit | Heart: Geranium, Lavender | Base: Amber, Cedarwood, Vetiver',
-    hashtags: ['#GeparlysParis', '#YesIAmTheKing', '#ParisianShopper', '#PhnomPenhLuxury', '#PerfumeCambodia'],
+    ctaEn:
+      'Order directly with Parisian Shopper. Complimentary nationwide express delivery in Cambodia.',
+    notes:
+      'Top: Bergamot, Grapefruit | Heart: Geranium, Lavender | Base: Amber, Cedarwood, Vetiver',
+    hashtags: [
+      '#GeparlysParis',
+      '#YesIAmTheKing',
+      '#ParisianShopper',
+      '#PhnomPenhLuxury',
+      '#PerfumeCambodia',
+    ],
     approverUser: marc,
   });
 
@@ -358,7 +374,7 @@ async function main() {
       const sceneHash = crypto.randomBytes(32).toString('hex');
       const depHash = crypto.randomBytes(32).toString('hex');
 
-      await prisma.creativeSceneVersion.create({
+      const createdSceneVersion = await prisma.creativeSceneVersion.create({
         data: {
           sceneId: scene.id,
           versionNumber: 1,
@@ -379,6 +395,123 @@ async function main() {
           requestedByUserId: sophie.id,
         },
       });
+
+      const initialLayers = [
+        {
+          layerKey: 'background-atelier',
+          layerGroup: 'BACKGROUND',
+          layerType: 'GENERATED_BACKGROUND',
+          name: 'Parisian Atelier Background',
+          zIndex: 10,
+          sortOrder: 1,
+          visible: true,
+          opacity: 1.0,
+          blendMode: 'NORMAL',
+          bounds: { x: 0, y: 0, width: 1080, height: 1080 },
+          payload: {
+            assetType: 'GENERATED_BACKGROUND',
+            casStorageKey: 'mock/bg/king-edp.png',
+            sha256: '60136f208cf5da313ea5a0f3568f1a0d6fcc6ec06275938fedea562bc7479232',
+          },
+          payloadSchemaVersion: 1,
+          layerHash: crypto.randomBytes(32).toString('hex'),
+        },
+        {
+          layerKey: 'pedestal-shadow',
+          layerGroup: 'SURFACE_SHADOW',
+          layerType: 'PEDESTAL_SURFACE',
+          name: 'Pedestal Contact Shadow',
+          zIndex: 110,
+          sortOrder: 2,
+          visible: true,
+          opacity: 0.6,
+          blendMode: 'MULTIPLY',
+          bounds: { x: 240, y: 780, width: 600, height: 120 },
+          payload: {},
+          payloadSchemaVersion: 1,
+          layerHash: crypto.randomBytes(32).toString('hex'),
+        },
+        {
+          layerKey: 'hero-product-bottle',
+          layerGroup: 'PRODUCT_HERO',
+          layerType: 'HERO_CUTOUT',
+          name: 'Yes I Am The King EDP Cutout',
+          zIndex: 210,
+          sortOrder: 3,
+          visible: true,
+          opacity: 1.0,
+          blendMode: 'NORMAL',
+          bounds: { x: 290, y: 220, width: 500, height: 600 },
+          payload: { sku: 'GEP-KING-EDP-100', imageUrl: '/assets/products/GEP-KING-EDP-100.png' },
+          payloadSchemaVersion: 1,
+          layerHash: crypto.randomBytes(32).toString('hex'),
+        },
+        {
+          layerKey: 'editorial-copy-block',
+          layerGroup: 'TYPOGRAPHY',
+          layerType: 'TYPOGRAPHY_BLOCK',
+          name: 'Editorial Headline & Price Callout',
+          zIndex: 310,
+          sortOrder: 4,
+          visible: true,
+          opacity: 1.0,
+          blendMode: 'NORMAL',
+          bounds: { x: 72, y: 72, width: 936, height: 912 },
+          payload: {
+            headline: {
+              text: 'Yes I Am The King',
+              fontFamily: 'Playfair Display',
+              fontSize: 52,
+              fontWeight: 700,
+              color: '#FFFFFF',
+            },
+            subheadline: {
+              text: 'The Sovereign Scent of Paris — Eau de Parfum',
+              fontFamily: 'Montserrat',
+              fontSize: 20,
+              fontWeight: 500,
+              color: '#C5BCB3',
+            },
+            priceBadge: { regularPrice: '$48.00 USD' },
+            cta: { text: 'Order via Telegram' },
+          },
+          payloadSchemaVersion: 1,
+          layerHash: crypto.randomBytes(32).toString('hex'),
+        },
+        {
+          layerKey: 'brand-crest-frame',
+          layerGroup: 'BRAND_DECORATION',
+          layerType: 'BRAND_FRAME',
+          name: 'Parisian Haute Parfumerie Crest',
+          zIndex: 410,
+          sortOrder: 5,
+          visible: true,
+          opacity: 0.8,
+          blendMode: 'NORMAL',
+          bounds: { x: 72, y: 72, width: 936, height: 936 },
+          payload: {},
+          payloadSchemaVersion: 1,
+          layerHash: crypto.randomBytes(32).toString('hex'),
+        },
+      ];
+
+      for (const layer of initialLayers) {
+        await prisma.sceneLayer.create({
+          data: {
+            sceneVersionId: createdSceneVersion.id,
+            ...layer,
+          },
+        });
+      }
+
+      await prisma.sceneVersionState.create({
+        data: {
+          sceneVersionId: createdSceneVersion.id,
+          status: 'DRAFT',
+          isExportEligible: true,
+        },
+      });
+
       console.log('Created Creative Project and Scene for King EDP.');
     }
   }
@@ -392,11 +525,14 @@ async function main() {
     language: 'BILINGUAL',
     platform: 'TELEGRAM',
     headline: 'Yes I Am The King Le Parfum — The Ultimate Concentration of Royalty',
-    bodyKm: 'កម្រិតកំហាប់ Parfum ដ៏វិសេសវិសាល! Yes I Am The King Le Parfum ផ្ដល់នូវក្លិនឈ្ងុយជាប់បានយូរជាង ២៤ ម៉ោង ជាមួយក្លិនក្រអូបបែបអភិជន។',
-    bodyEn: 'Intense, magnetic, and deeply opulent. Yes I Am The King Le Parfum represents the zenith of the royal line, with rich leather, warm resin, and tonka bean.',
+    bodyKm:
+      'កម្រិតកំហាប់ Parfum ដ៏វិសេសវិសាល! Yes I Am The King Le Parfum ផ្ដល់នូវក្លិនឈ្ងុយជាប់បានយូរជាង ២៤ ម៉ោង ជាមួយក្លិនក្រអូបបែបអភិជន។',
+    bodyEn:
+      'Intense, magnetic, and deeply opulent. Yes I Am The King Le Parfum represents the zenith of the royal line, with rich leather, warm resin, and tonka bean.',
     ctaKm: 'ពិគ្រោះជាមួយអ្នកឯកទេសក្លិនក្រអូបរបស់យើងឥឡូវនេះ',
     ctaEn: 'Consult our Parisian fragrance specialists today.',
-    notes: 'Top: Apple, Bergamot, Cardamom | Heart: Iris, Violet, Coriander | Base: Tonka Bean, Leather, Guaiac Wood',
+    notes:
+      'Top: Apple, Bergamot, Cardamom | Heart: Iris, Violet, Coriander | Base: Tonka Bean, Leather, Guaiac Wood',
     hashtags: ['#YesIAmTheKing', '#LeParfum', '#GeparlysCambodia', '#HauteParfumerie'],
   });
 
@@ -410,11 +546,14 @@ async function main() {
       language: 'BILINGUAL',
       platform: 'FACEBOOK',
       headline: 'Unpredictable Noir — Parisian Seduction After Dark',
-      bodyKm: 'Glenn Perri Unpredictable Noir បង្ហាញពីអាថ៌កំបាំងរាត្រីនៅទីក្រុងប៉ារីស។ ក្លិនឈើក្រអូប និងគ្រឿងទេសក្ដៅឧណ្ហៗ បង្កើតបាននូវភាពទាក់ទាញដែលមិនអាចទាយទុកជាមុនបាន។',
-      bodyEn: 'When twilight embraces Paris, Unpredictable Noir awakens. An alluring, mysterious blend of midnight amber, black pepper, and precious woods.',
+      bodyKm:
+        'Glenn Perri Unpredictable Noir បង្ហាញពីអាថ៌កំបាំងរាត្រីនៅទីក្រុងប៉ារីស។ ក្លិនឈើក្រអូប និងគ្រឿងទេសក្ដៅឧណ្ហៗ បង្កើតបាននូវភាពទាក់ទាញដែលមិនអាចទាយទុកជាមុនបាន។',
+      bodyEn:
+        'When twilight embraces Paris, Unpredictable Noir awakens. An alluring, mysterious blend of midnight amber, black pepper, and precious woods.',
       ctaKm: 'ទទួលបានការបញ្ចុះតម្លៃពិសេសសម្រាប់ការកុម្ម៉ង់មុន',
       ctaEn: 'Discover your signature nighttime fragrance at Parisian Shopper.',
-      notes: 'Top: Cardamom, Black Pepper | Heart: Smoked Incense, Nutmeg | Base: Dark Amber, Vanilla, Patchouli',
+      notes:
+        'Top: Cardamom, Black Pepper | Heart: Smoked Incense, Nutmeg | Base: Dark Amber, Vanilla, Patchouli',
       hashtags: ['#GlennPerri', '#UnpredictableNoir', '#ParisianShopper', '#LuxuryNight'],
     });
   }
@@ -429,8 +568,10 @@ async function main() {
       language: 'EN',
       platform: 'INSTAGRAM',
       headline: 'Pure Couture — The Essence of Parisian High Fashion',
-      bodyKm: 'សម្រស់នៃម៉ូដសម្លៀកបំពាក់ជាន់ខ្ពស់នៅប៉ារីស ត្រូវបានចម្រាញ់ចូលក្នុង Karen Low Pure Couture។ ក្លិនផ្កាស្រស់ស្រាយ និងទន់ភ្លន់។',
-      bodyEn: 'Woven with the finesse of French Haute Couture, Pure Couture envelops you in peony petals, juicy white peach, and silken white musk.',
+      bodyKm:
+        'សម្រស់នៃម៉ូដសម្លៀកបំពាក់ជាន់ខ្ពស់នៅប៉ារីស ត្រូវបានចម្រាញ់ចូលក្នុង Karen Low Pure Couture។ ក្លិនផ្កាស្រស់ស្រាយ និងទន់ភ្លន់។',
+      bodyEn:
+        'Woven with the finesse of French Haute Couture, Pure Couture envelops you in peony petals, juicy white peach, and silken white musk.',
       ctaKm: 'ទិញឥឡូវនេះដើម្បីទទួលបានកាដូពិសេស',
       ctaEn: 'Embrace effortless elegance. Shop now with nationwide delivery.',
       notes: 'Top: White Peach, Mandarin | Heart: Peony, Pink Lily | Base: White Musk, Sandalwood',
@@ -471,8 +612,10 @@ async function main() {
       language: 'KM',
       platform: 'TELEGRAM',
       headline: 'Be Seduced — ភាពផ្អែមល្ហែម និងទាក់ទាញដែលមិនអាចបំភ្លេចបាន',
-      bodyKm: 'Johan B. Be Seduced Eau de Parfum ជាជម្រើសដ៏ល្អឥតខ្ចោះសម្រាប់នារីសម័យថ្មី។ ក្លិនផ្កា និងផ្លែឈើក្រអូបឈ្ងុយឈ្ងប់ ផ្ដល់នូវទំនុកចិត្តពេញមួយថ្ងៃ។',
-      bodyEn: 'Sweet, charming, and irresistible. Johan B. Be Seduced captures youthful Parisian enchantment in an unforgettable bottle.',
+      bodyKm:
+        'Johan B. Be Seduced Eau de Parfum ជាជម្រើសដ៏ល្អឥតខ្ចោះសម្រាប់នារីសម័យថ្មី។ ក្លិនផ្កា និងផ្លែឈើក្រអូបឈ្ងុយឈ្ងប់ ផ្ដល់នូវទំនុកចិត្តពេញមួយថ្ងៃ។',
+      bodyEn:
+        'Sweet, charming, and irresistible. Johan B. Be Seduced captures youthful Parisian enchantment in an unforgettable bottle.',
       ctaKm: 'ទាក់ទងមកយើងឥឡូវនេះដើម្បីសាកល្បងតេស្តក្លិន',
       ctaEn: 'Sample and purchase at our Parisian Shopper showroom.',
       notes: 'Top: Sweet Praline, Bergamot | Heart: Rose, Jasmine | Base: Vanilla, Musk',

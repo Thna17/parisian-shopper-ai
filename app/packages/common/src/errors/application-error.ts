@@ -69,6 +69,7 @@ export type ApplicationErrorCode =
   | 'DUPLICATE_LOGIN_IDENTIFIER'
   | 'INVALID_ROLE_ASSIGNMENT'
   | 'SETTING_NOT_FOUND'
+  | 'SECURITY_POLICY_IMMUTABLE'
   | 'ADMIN_FORBIDDEN';
 
 export interface ApplicationErrorOptions {

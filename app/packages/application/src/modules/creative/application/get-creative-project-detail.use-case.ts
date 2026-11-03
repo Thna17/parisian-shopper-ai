@@ -198,7 +198,17 @@ export class GetCreativeProjectDetailUseCase {
           ...(snap.product?.product?.description
             ? { description: snap.product.product.description }
             : {}),
-          ...(snap.product?.product?.images ? { images: snap.product.product.images } : {}),
+          ...(snap.product?.product?.images
+            ? {
+                images: snap.product.product.images.map((img) => ({
+                  ...img,
+                  url:
+                    img.url && !img.url.includes('.invalid')
+                      ? img.url
+                      : `/assets/products/${snap.product.product.sku}.png`,
+                })),
+              }
+            : {}),
         };
       }
     }

@@ -15,6 +15,7 @@ import { CampaignsModule } from './modules/campaigns/campaigns.module.js';
 import { PublishingModule } from './modules/publishing/publishing.module.js';
 import { AnalyticsModule } from './modules/analytics/analytics.module.js';
 import { AdminApplicationModule } from './modules/admin/admin.module.js';
+import { BudgetModule } from './modules/budget/budget.module.js';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { AdminApplicationModule } from './modules/admin/admin.module.js';
     PublishingModule,
     AnalyticsModule,
     AdminApplicationModule,
+    BudgetModule,
   ],
   exports: [
     AuthModule,
@@ -50,6 +52,7 @@ import { AdminApplicationModule } from './modules/admin/admin.module.js';
     PublishingModule,
     AnalyticsModule,
     AdminApplicationModule,
+    BudgetModule,
   ],
 })
 export class ApplicationModule {}

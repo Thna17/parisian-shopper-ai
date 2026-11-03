@@ -37,6 +37,12 @@ export class CsrfGuard implements CanActivate {
     const host = request.headers['host'];
 
     const allowedOrigins = new Set(this.config.application.corsOrigins);
+    if (this.config.nodeEnvironment === 'development' || this.config.nodeEnvironment === 'test') {
+      allowedOrigins.add('http://localhost:5173');
+      allowedOrigins.add('http://127.0.0.1:5173');
+      allowedOrigins.add('http://localhost:3000');
+      allowedOrigins.add('http://127.0.0.1:3000');
+    }
 
     if (origin && typeof origin === 'string') {
       const originMatch = allowedOrigins.has(origin) || (host && origin.includes(host));

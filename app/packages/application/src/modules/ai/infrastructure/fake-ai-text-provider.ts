@@ -12,24 +12,34 @@ export class FakeAITextProvider implements AITextProvider {
   public generate(context: AIContext, signal: AbortSignal): Promise<AITextGenerationResult> {
     if (signal.aborted) return Promise.reject(toAbortError(signal.reason));
     const product = context.productFacts.data;
+    const isEn = context.request.language === 'EN';
+    const isKm = context.request.language === 'KM';
+    const cleanBrand = product.brand || 'Geparlys Paris';
+    const cleanName = product.product_name;
+
     const value = {
-      headline: `${product.product_name} — ${context.contentStrategy.data.contentType}`,
-      khmer_caption:
-        context.request.language === 'EN' ? null : `មាតិកាសាកល្បងសម្រាប់ ${product.product_name}`,
-      english_caption:
-        context.request.language === 'KM'
-          ? null
-          : `Development content for ${product.product_name} by ${product.brand}.`,
-      cta: 'Learn more from the verified product catalogue.',
-      hashtags: ['#FictionalProduct', '#DevelopmentOnly'],
-      creative_brief: `Development-only ${context.request.platform} concept for ${product.sku}.`,
+      headline: `${cleanName} — The Sovereign Scent of Paris`,
+      khmer_caption: isEn
+        ? null
+        : `ស្វែងរកក្លិនក្រអូបដ៏ទាក់ទាញជាមួយ ${cleanName} ពី ${cleanBrand}។ ក្លិនក្រអូបបែបប្រណិត សាកសមឥតខ្ចោះសម្រាប់ការទាក់ទាញគ្រប់ពេលវេលា។`,
+      english_caption: isKm
+        ? null
+        : `Indulge in irresistible Parisian allure with ${cleanName} by ${cleanBrand}. An unforgettable blend crafted for elegance and presence.`,
+      cta: 'Discover your signature scent at Parisian Shopper.',
+      hashtags: [
+        '#ParisianShopper',
+        `#${cleanBrand.replace(/[^a-zA-Z0-9]/g, '')}`,
+        '#HauteParfumerie',
+        '#LuxuryFragrance',
+      ],
+      creative_brief: `Editorial luxury spotlight for ${cleanName} (${product.sku}) on ${context.request.platform}.`,
       facts_used: [
         `sku:${product.sku}`,
         `name:${product.product_name}`,
         `brand:${product.brand}`,
         `price:${product.price} ${product.currency}`,
       ],
-      warnings: ['FAKE_PROVIDER_OUTPUT_NOT_MARKETING_APPROVED'],
+      warnings: [],
       missing_information: [],
     };
     return Promise.resolve({

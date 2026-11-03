@@ -29,11 +29,21 @@ export interface SidebarProps {
   readonly onCloseMobile?: () => void;
 }
 
+const ROLE_HIERARCHY = ['ADMIN', 'MARKETING_APPROVER', 'MARKETING_EDITOR', 'VIEWER'] as const;
+
+function getPrimaryDisplayRole(roles: readonly string[]): string {
+  for (const r of ROLE_HIERARCHY) {
+    if (roles.includes(r)) return r;
+  }
+  return roles[0] ?? 'STAFF';
+}
+
 export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseMobile }) => {
   const { employee, logout, isLoggingOut } = useAuth();
   const { hasPermission, roles } = usePermissions();
 
-  const primaryRole = roles[0] ?? 'STAFF';
+  const primaryRole = getPrimaryDisplayRole(roles);
+  const isSuperAdmin = roles.includes('ADMIN');
 
   return (
     <aside
@@ -223,7 +233,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseM
               {employee?.displayName ?? 'Employee'}
             </div>
             <div className="mt-0.5">
-              <Badge variant="navy" className="text-[9px] py-0 px-1.5 font-medium">
+              <Badge
+                variant={isSuperAdmin ? 'gold' : 'navy'}
+                className="text-[9px] py-0 px-1.5 font-medium"
+              >
                 {primaryRole}
               </Badge>
             </div>

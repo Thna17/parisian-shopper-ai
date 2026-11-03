@@ -115,13 +115,17 @@ export class ProductsService {
       }
     }
 
-    const images: ProductDetailDto['images'] = (product.images ?? []).map((img, idx) => ({
-      url: img.url,
-      role: img.role,
-      altText: img.alt_text ?? `${product.brand} ${product.product_name}`,
-      rightsState: 'VERIFIED',
-      isHeroCutout: img.role === 'primary' && heroAssetRegistered && idx === 0,
-    }));
+    const images: ProductDetailDto['images'] = (product.images ?? []).map((img, idx) => {
+      const resolvedUrl =
+        img.url && !img.url.includes('.invalid') ? img.url : `/assets/products/${product.sku}.png`;
+      return {
+        url: resolvedUrl,
+        role: img.role,
+        altText: img.alt_text ?? `${product.brand} ${product.product_name}`,
+        rightsState: 'VERIFIED',
+        isHeroCutout: img.role === 'primary' && heroAssetRegistered && idx === 0,
+      };
+    });
 
     const scentPyramid = this.extractScentPyramid(product.fragrance_notes);
 
@@ -382,6 +386,9 @@ export class ProductsService {
   private toSummaryDto(snapshot: ProductSnapshot): ProductSummaryDto {
     const p = snapshot.product.product;
     const primaryImg = p.images?.find((img) => img.role === 'primary') ?? p.images?.[0];
+    const rawUrl = primaryImg?.url ?? null;
+    const primaryImageUrl =
+      rawUrl && !rawUrl.includes('.invalid') ? rawUrl : `/assets/products/${p.sku}.png`;
 
     return {
       id: snapshot.id,
@@ -401,7 +408,7 @@ export class ProductsService {
         : null,
       stockStatus: p.stock_status,
       lifecycleStatus: snapshot.product.lifecycle_status,
-      primaryImageUrl: primaryImg?.url ?? null,
+      primaryImageUrl,
       capturedAt: snapshot.createdAt.toISOString(),
     };
   }
