@@ -95,32 +95,34 @@ export const CreativeValidationPanel: React.FC<CreativeValidationPanelProps> = (
               </div>
 
               {/* Breakdown metrics */}
-              <div className="grid grid-cols-2 gap-2 text-[11px] pt-2 border-t border-app-border/40">
-                <div className="flex justify-between">
-                  <span className="text-app-muted">Typography:</span>
-                  <span className="font-mono text-app-primary">
-                    {validationResult.scoreBreakdown.typographyLegibility.toFixed(1)}
-                  </span>
+              {validationResult.scoreBreakdown && (
+                <div className="grid grid-cols-2 gap-2 text-[11px] pt-2 border-t border-app-border/40">
+                  <div className="flex justify-between">
+                    <span className="text-app-muted">Typography:</span>
+                    <span className="font-mono text-app-primary">
+                      {validationResult.scoreBreakdown.typographyLegibility.toFixed(1)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-app-muted">Spatial Balance:</span>
+                    <span className="font-mono text-app-primary">
+                      {validationResult.scoreBreakdown.spatialBalance.toFixed(1)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-app-muted">Focal Prominence:</span>
+                    <span className="font-mono text-app-primary">
+                      {validationResult.scoreBreakdown.focalProminence.toFixed(1)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-app-muted">Color Harmony:</span>
+                    <span className="font-mono text-app-primary">
+                      {validationResult.scoreBreakdown.colorHarmony.toFixed(1)}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-app-muted">Spatial Balance:</span>
-                  <span className="font-mono text-app-primary">
-                    {validationResult.scoreBreakdown.spatialBalance.toFixed(1)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-app-muted">Focal Prominence:</span>
-                  <span className="font-mono text-app-primary">
-                    {validationResult.scoreBreakdown.focalProminence.toFixed(1)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-app-muted">Color Harmony:</span>
-                  <span className="font-mono text-app-primary">
-                    {validationResult.scoreBreakdown.colorHarmony.toFixed(1)}
-                  </span>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Findings List */}

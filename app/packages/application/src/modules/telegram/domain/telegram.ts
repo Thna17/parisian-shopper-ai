@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
 export const TelegramAction = {
+  EDIT_POST: 'EDIT_POST',
+  FEEDBACK_POST: 'FEEDBACK_POST',
+  PREPARE_POST: 'PREPARE_POST',
+  VIEW_POST: 'VIEW_POST',
+  SUBMIT_POST: 'SUBMIT_POST',
+  APPROVE_POST: 'APPROVE_POST',
+  CHANGES_POST: 'CHANGES_POST',
   SELECT_PRODUCT: 'SELECT_PRODUCT',
   SELECT_CONTENT_TYPE: 'SELECT_CONTENT_TYPE',
   SELECT_LANGUAGE: 'SELECT_LANGUAGE',
@@ -98,7 +105,21 @@ export interface TelegramResponse {
 
 export interface ParsedTelegramCommand {
   name:
-    'start' | 'help' | 'create' | 'search' | 'status' | 'history' | 'cancel' | 'resume' | 'unknown';
+    | 'start'
+    | 'help'
+    | 'newproducts'
+    | 'promo'
+    | 'create'
+    | 'search'
+    | 'status'
+    | 'history'
+    | 'cancel'
+    | 'resume'
+    | 'post'
+    | 'posts'
+    | 'postchanges'
+    | 'postprepare'
+    | 'unknown';
   argument: string;
 }
 
@@ -109,9 +130,22 @@ export function parseTelegramCommand(text: string): ParsedTelegramCommand {
   const command = match[1]?.toLowerCase() ?? '';
   const argument = match[2]?.trim() ?? '';
   return {
-    name: ['start', 'help', 'create', 'search', 'status', 'history', 'cancel', 'resume'].includes(
-      command,
-    )
+    name: [
+      'start',
+      'help',
+      'newproducts',
+      'promo',
+      'create',
+      'search',
+      'status',
+      'history',
+      'cancel',
+      'resume',
+      'post',
+      'posts',
+      'postchanges',
+      'postprepare',
+    ].includes(command)
       ? (command as ParsedTelegramCommand['name'])
       : 'unknown',
     argument,

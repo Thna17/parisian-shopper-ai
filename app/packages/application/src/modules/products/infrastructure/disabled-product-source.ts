@@ -1,5 +1,6 @@
 import { ProductSourceUnavailableError } from '../domain/product-errors.js';
 import {
+  type ProductCatalogPageResult,
   type ProductSearchResult,
   type ProductSource,
   type ProductSourceSearchInput,
@@ -14,6 +15,10 @@ export class DisabledProductSource implements ProductSource {
   }
 
   public search(_input: ProductSourceSearchInput): Promise<ProductSearchResult> {
+    return Promise.reject(new ProductSourceUnavailableError());
+  }
+
+  public fetchCatalogPage(_page?: number, _limit?: number): Promise<ProductCatalogPageResult> {
     return Promise.reject(new ProductSourceUnavailableError());
   }
 }

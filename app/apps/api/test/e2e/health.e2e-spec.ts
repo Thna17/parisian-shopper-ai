@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { DatabaseHealthIndicator, PrismaService } from '@parisian-shopper/database';
 import {
   ContentGenerationQueue,
+  ProductCatalogSyncQueue,
   CreativeGenerationQueue,
   ValkeyConnectionService,
 } from '@parisian-shopper/jobs';
@@ -33,6 +34,8 @@ describe('API foundation (e2e)', () => {
       .useValue(valkeyHealth)
       .overrideProvider(CreativeGenerationQueue)
       .useValue({ enqueue: jest.fn(), onModuleInit: jest.fn() })
+      .overrideProvider(ProductCatalogSyncQueue)
+      .useValue({ enqueue: jest.fn(), onModuleInit: jest.fn() })
       .overrideProvider(ContentGenerationQueue)
       .useValue({ enqueue: jest.fn(), onModuleInit: jest.fn() })
       .compile();
@@ -58,6 +61,16 @@ describe('API foundation (e2e)', () => {
   beforeEach(() => {
     databaseHealth.ping.mockReset().mockResolvedValue(undefined);
     valkeyHealth.ping.mockReset().mockResolvedValue(undefined);
+  });
+
+  it('registers brand, budget and analytics routes under one API version', async () => {
+    for (const path of [
+      '/v1/brand/profile/active',
+      '/v1/ai/budget/active',
+      '/v1/analytics/overview',
+    ]) {
+      await request(server).get(path).expect(401);
+    }
   });
 
   it('boots and reports liveness without probing dependencies', async () => {

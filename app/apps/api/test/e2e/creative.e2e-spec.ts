@@ -42,6 +42,7 @@ import {
 import { DatabaseHealthIndicator, PrismaService } from '@parisian-shopper/database';
 import {
   ContentGenerationQueue,
+  ProductCatalogSyncQueue,
   CreativeGenerationQueue,
   ValkeyConnectionService,
 } from '@parisian-shopper/jobs';
@@ -694,6 +695,8 @@ describe('Production Creative Studio & Composition API Integration (e2e)', () =>
         onModuleInit: jest.fn(),
         onModuleDestroy: jest.fn(),
       })
+      .overrideProvider(ProductCatalogSyncQueue)
+      .useValue({ enqueue: jest.fn(), onModuleInit: jest.fn() })
       .overrideProvider(ContentGenerationQueue)
       .useValue({ enqueue: jest.fn(), onModuleInit: jest.fn(), onModuleDestroy: jest.fn() })
       .overrideProvider(CreativeGenerationQueue)

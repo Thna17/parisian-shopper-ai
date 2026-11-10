@@ -51,6 +51,8 @@ export * from './modules/content/domain/content-errors.js';
 export * from './modules/content/domain/content-strategy.js';
 export * from './modules/products/products.module.js';
 export * from './modules/products/application/create-product-snapshot.use-case.js';
+export * from './modules/products/application/sync-mekhla-catalog.use-case.js';
+export * from './modules/products/application/product-catalog-sync-enqueuer.port.js';
 export * from './modules/products/application/get-product-by-sku.use-case.js';
 export * from './modules/products/application/product-eligibility-evaluator.js';
 export * from './modules/products/application/product-freshness-assessment.repository.js';
@@ -88,6 +90,7 @@ export * from './modules/products/infrastructure/mekhla-product-source.js';
 export * from './modules/products/infrastructure/mock-product-source.js';
 export * from './modules/products/infrastructure/normalization-boundary.js';
 export * from './modules/products/testing/fictional-products.js';
+export * from './modules/creative/infrastructure/fixtures/fake-product-fixtures.js';
 export * from './modules/telegram/telegram.module.js';
 export * from './modules/telegram/application/content-generation-enqueuer.port.js';
 export * from './modules/telegram/application/telegram-action-token.service.js';
@@ -123,7 +126,9 @@ export * from './modules/campaigns/application/remove-campaign-product.use-case.
 export * from './modules/publishing/publishing.module.js';
 export * from './modules/publishing/domain/publication.types.js';
 export * from './modules/publishing/domain/publishing-errors.js';
+export * from './modules/publishing/domain/publishing-safety.js';
 export * from './modules/publishing/application/publishing.repository.js';
+export * from './modules/publishing/application/publishing-gateway.port.js';
 export * from './modules/publishing/application/create-publication.use-case.js';
 export * from './modules/publishing/application/confirm-publication.use-case.js';
 export * from './modules/publishing/application/retry-publication.use-case.js';
@@ -209,3 +214,33 @@ export * from './modules/admin/application/use-cases/get-system-settings.use-cas
 export * from './modules/admin/application/use-cases/update-system-settings.use-case.js';
 export * from './modules/admin/application/use-cases/list-admin-audit-logs.use-case.js';
 export * from './modules/budget/index.js';
+export * from './modules/posts/post-policy.js';
+
+export * from './modules/posts/post-image-provider.js';
+
+export * from './modules/posts/verify-post-image.js';
+export * from './modules/posts/post-creation-plan.js';
+
+export * from './modules/posts/post-workflow.port.js';
+export * from './modules/posts/post-workflow.service.js';
+export * from './modules/posts/posts.module.js';
+
+export * from './modules/telegram/application/telegram-post-workflow.js';
+
+export * from './modules/posts/post-generation.commands.js';
+
+export * from './modules/posts/post-caption.port.js';
+export * from './modules/posts/post-caption.service.js';
+
+export * from './modules/brand/domain/brand-guidance.schema.js';
+export * from './modules/brand/application/brand-guidance.repository.js';
+export * from './modules/brand/application/brand-guidance.service.js';
+export * from './modules/brand/brand-guidance.module.js';
+
+export * from './modules/products/application/product-marketing-eligibility.service.js';
+export * from './modules/products/application/product-marketing-history.port.js';
+
+export * from './modules/publishing/application/publication-product.guard.js';
+export * from './modules/products/application/product-marketing-facts.js';
+
+export * from './modules/products/domain/promotion-eligibility.js';

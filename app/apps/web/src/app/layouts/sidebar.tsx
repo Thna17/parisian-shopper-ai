@@ -2,9 +2,9 @@ import React from 'react';
 import {
   LayoutDashboard,
   Package,
-  Layers,
+  CalendarDays,
   Sparkles,
-  Palette,
+  Image,
   CheckSquare,
   BookOpen,
   Send,
@@ -13,245 +13,158 @@ import {
   Settings,
   BarChart3,
   DollarSign,
+  FileText,
+  LayoutGrid,
+  PanelsTopLeft,
   X,
   LogOut,
+  ChevronDown,
+  Layers,
+  Database,
+  FlaskConical,
+  FileCheck,
 } from 'lucide-react';
 import { useAuth } from '../../features/auth/context/auth-context.js';
 import { usePermissions } from '../../features/auth/hooks/use-permissions.js';
 import { AppLogo } from '../../components/ui/app-logo.js';
 import { Avatar } from '../../components/ui/avatar.js';
-import { Badge } from '../../components/ui/badge.js';
 import { SidebarItem } from '../../components/navigation/sidebar-item.js';
 import { Permission } from '../../types/auth.types.js';
-
+import { workspaceNavigation } from './workspace-navigation.js';
 export interface SidebarProps {
   readonly isMobileOpen?: boolean;
   readonly onCloseMobile?: () => void;
 }
-
-const ROLE_HIERARCHY = ['ADMIN', 'MARKETING_APPROVER', 'MARKETING_EDITOR', 'VIEWER'] as const;
-
-function getPrimaryDisplayRole(roles: readonly string[]): string {
-  for (const r of ROLE_HIERARCHY) {
-    if (roles.includes(r)) return r;
-  }
-  return roles[0] ?? 'STAFF';
-}
-
+const icons = {
+  overview: LayoutDashboard,
+  campaign: CalendarDays,
+  product: Package,
+  sparkles: Sparkles,
+  caption: FileText,
+  creative: Image,
+  library: LayoutGrid,
+  template: PanelsTopLeft,
+  review: CheckSquare,
+  brand: BookOpen,
+  publish: Send,
+  analytics: BarChart3,
+  budget: DollarSign,
+  cost: DollarSign,
+  team: Users,
+  settings: Settings,
+  audit: Shield,
+};
 export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseMobile }) => {
   const { employee, logout, isLoggingOut } = useAuth();
   const { hasPermission, roles } = usePermissions();
-
-  const primaryRole = getPrimaryDisplayRole(roles);
-  const isSuperAdmin = roles.includes('ADMIN');
-
+  const item = (to: string, label: string, Icon: typeof Layers) => (
+    <SidebarItem
+      key={to}
+      to={to}
+      label={label}
+      icon={<Icon className="h-4 w-4" />}
+      onClick={onCloseMobile}
+    />
+  );
   return (
     <aside
       aria-label="Main Navigation"
-      className="w-[260px] min-w-[260px] h-full bg-app-surface border-r border-app-border flex flex-col z-20 select-none overflow-y-auto"
+      className="workspace-sidebar flex h-full w-[min(280px,90vw)] lg:w-[252px] shrink-0 flex-col border-r border-app-border bg-app-surface"
     >
-      {/* Top Brand Lockup */}
-      <div className="p-5 pb-4 flex items-center justify-between border-b border-app-border/60">
+      <div className="flex min-h-[80px] items-center justify-between px-[18px] py-4">
         <AppLogo />
-        {isMobileOpen && onCloseMobile && (
+        {isMobileOpen && (
           <button
             type="button"
             onClick={onCloseMobile}
             aria-label="Close sidebar navigation"
-            className="lg:hidden p-1 rounded-md text-app-muted hover:text-app-primary"
+            className="min-h-11 min-w-11 p-2 lg:hidden"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         )}
       </div>
-
-      {/* Workspace Switcher / Badge */}
-      <div className="mx-3.5 my-3 p-2.5 rounded-lg bg-app-surface-subtle border border-app-border/80 flex items-center gap-2.5">
-        <div className="w-6 h-6 rounded-md bg-[#EAD9BD] text-[#5F4A2C] font-bold text-[10px] flex items-center justify-center shrink-0">
-          PR
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-xs font-semibold text-app-primary truncate">Parisian Retail Ops</div>
-          <div className="text-[10px] text-app-muted truncate">Phnom Penh Flagship</div>
+      <div className="mx-4 mb-3 flex items-center gap-2 rounded-lg border border-app-border bg-app-bg px-3 py-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#eadbc0] text-xs font-bold text-[#685238]">
+          PS
+        </span>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold">Parisian Shopper</p>
+          <p className="mt-1 text-[10px] text-app-muted">Internal marketing workspace</p>
         </div>
       </div>
-
-      {/* Navigation Sections */}
-      <div className="flex-1 px-3 space-y-5 overflow-y-auto py-2">
-        {/* Workspace */}
-        <div>
-          <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-app-muted/80">
-            Workspace
-          </div>
-          <div className="space-y-0.5">
-            <SidebarItem
-              to="/"
-              label="Overview"
-              icon={<LayoutDashboard className="w-4 h-4" />}
-              onClick={onCloseMobile}
-            />
-            <SidebarItem
-              to="/products"
-              label="Products Catalog"
-              icon={<Package className="w-4 h-4" />}
-              onClick={onCloseMobile}
-            />
-            <SidebarItem
-              to="/campaigns"
-              label="Campaigns"
-              icon={<Layers className="w-4 h-4" />}
-              onClick={onCloseMobile}
-            />
-          </div>
-        </div>
-
-        {/* Studio & Creation */}
-        <div>
-          <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-app-muted/80">
-            Creative Creation
-          </div>
-          <div className="space-y-0.5">
-            <SidebarItem
-              to="/content"
-              label="Content Studio"
-              icon={<Sparkles className="w-4 h-4" />}
-              onClick={onCloseMobile}
-            />
-            <SidebarItem
-              to="/creative"
-              label="Creative Studio"
-              icon={<Palette className="w-4 h-4" />}
-              onClick={onCloseMobile}
-            />
-          </div>
-        </div>
-
-        {/* Governance & Approvals */}
-        <div>
-          <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-app-muted/80">
-            Governance
-          </div>
-          <div className="space-y-0.5">
-            {(hasPermission(Permission.APPROVE_CONTENT) ||
-              hasPermission(Permission.VIEW_ALL_CONTENT) ||
-              hasPermission(Permission.VIEW_OWN_CONTENT)) && (
-              <SidebarItem
-                to="/reviews"
-                label="Four-Eyes Reviews"
-                icon={<CheckSquare className="w-4 h-4" />}
-                onClick={onCloseMobile}
-              />
+      <nav
+        aria-label="Workspace navigation"
+        className="flex-1 space-y-5 overflow-y-auto px-2.5 py-3"
+      >
+        {workspaceNavigation.map((group) => {
+          const available = group.items.filter((entry) => hasPermission(entry.permission));
+          return (
+            available.length > 0 && (
+              <section key={group.title}>
+                <h2 className="flex items-center justify-between px-3 pb-2 text-[10px] font-bold uppercase tracking-[.12em] text-app-muted">
+                  {group.title}
+                  <ChevronDown aria-hidden="true" className="h-3 w-3" />
+                </h2>
+                <div className="space-y-0.5">
+                  {available.map((entry) => item(entry.to, entry.label, icons[entry.icon]))}
+                </div>
+              </section>
+            )
+          );
+        })}
+        <details>
+          <summary className="cursor-pointer rounded-lg px-3 py-2 text-xs text-app-muted">
+            Additional tools & saved work
+          </summary>
+          <div className="mt-2 space-y-0.5">
+            {hasPermission(Permission.VIEW_OWN_CONTENT) && (
+              <>
+                {item('/posts', 'My posts', Layers)}
+                {item('/posts/approved', 'Approved posts', FileCheck)}
+                {item('/reviews', 'Standalone reviews', CheckSquare)}
+                {item('/posts/all', 'All accessible posts', LayoutGrid)}
+              </>
             )}
-            <SidebarItem
-              to="/brand-rules"
-              label="Brand Guidelines"
-              icon={<BookOpen className="w-4 h-4" />}
-              isComingSoon
-            />
+            {hasPermission(Permission.MANAGE_BRAND_PROFILE) && (
+              <>
+                {item('/brand/benchmarks', 'Benchmark lab', FlaskConical)}
+                {item('/brand/datasets', 'Curated datasets', Database)}
+              </>
+            )}
+            {hasPermission(Permission.ADMIN) && (
+              <>
+                {item('/brand/guidance', 'Brand guidance & references', BookOpen)}
+                {item('/admin/product-policy', 'Product source policy', Settings)}
+              </>
+            )}
+            {hasPermission(Permission.FINANCE_READ) &&
+              item('/budget/ledger', 'Usage ledger', FileText)}
+            {hasPermission(Permission.FINANCE_WRITE) &&
+              item('/budget/reconcile', 'Reconciliation', FileCheck)}
           </div>
+        </details>
+      </nav>
+      <div className="flex items-center gap-3 border-t border-app-border p-4">
+        <Avatar name={employee?.displayName} size="sm" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-semibold">{employee?.displayName ?? 'Employee'}</p>
+          <p className="mt-1 text-[10px] text-app-muted">
+            {roles.includes('ADMIN') ? 'Administrator' : 'Team member'}
+          </p>
         </div>
-
-        {/* Distribution */}
-        <div>
-          <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-app-muted/80">
-            Distribution
-          </div>
-          <div className="space-y-0.5">
-            <SidebarItem
-              to="/publishing"
-              label="Publishing Desk"
-              icon={<Send className="w-4 h-4" />}
-              onClick={onCloseMobile}
-            />
-          </div>
-        </div>
-
-        {/* Intelligence & Cost Control */}
-        {(hasPermission(Permission.VIEW_OPERATIONAL_ANALYTICS) ||
-          hasPermission(Permission.VIEW_AI_COSTS)) && (
-          <div>
-            <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-app-muted/80">
-              Intelligence & Cost
-            </div>
-            <div className="space-y-0.5">
-              {hasPermission(Permission.VIEW_OPERATIONAL_ANALYTICS) && (
-                <SidebarItem
-                  to="/analytics"
-                  label="Analytics Hub"
-                  icon={<BarChart3 className="w-4 h-4" />}
-                  onClick={onCloseMobile}
-                />
-              )}
-              {hasPermission(Permission.VIEW_AI_COSTS) && (
-                <SidebarItem
-                  to="/analytics/costs"
-                  label="AI Cost Ledger"
-                  icon={<DollarSign className="w-4 h-4" />}
-                  onClick={onCloseMobile}
-                />
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Administration */}
-        {roles.includes('ADMIN') && (
-          <div>
-            <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-app-muted/80">
-              System Admin
-            </div>
-            <div className="space-y-0.5">
-              <SidebarItem
-                to="/admin/employees"
-                label="Staff Directory"
-                icon={<Users className="w-4 h-4" />}
-                onClick={onCloseMobile}
-              />
-              <SidebarItem
-                to="/admin/settings"
-                label="System Settings"
-                icon={<Settings className="w-4 h-4" />}
-                onClick={onCloseMobile}
-              />
-              <SidebarItem
-                to="/admin/audit"
-                label="Security & Audit"
-                icon={<Shield className="w-4 h-4" />}
-                onClick={onCloseMobile}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Bottom User Profile Section */}
-      <div className="p-3.5 border-t border-app-border/80 bg-app-surface-subtle/40">
-        <div className="flex items-center gap-3">
-          <Avatar name={employee?.displayName} size="md" />
-          <div className="min-w-0 flex-1">
-            <div className="text-xs font-semibold text-app-primary truncate">
-              {employee?.displayName ?? 'Employee'}
-            </div>
-            <div className="mt-0.5">
-              <Badge
-                variant={isSuperAdmin ? 'gold' : 'navy'}
-                className="text-[9px] py-0 px-1.5 font-medium"
-              >
-                {primaryRole}
-              </Badge>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={logout}
-            disabled={isLoggingOut}
-            aria-label="Sign out of employee session"
-            title="Sign Out"
-            className="p-1.5 rounded-lg text-app-muted hover:text-status-bad hover:bg-status-bad/10 transition-colors focus-visible:outline-2 focus-visible:outline-gold-500"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
+        <button
+          type="button"
+          disabled={isLoggingOut}
+          aria-label="Sign out of employee session"
+          className="min-h-11 min-w-11 rounded-lg p-2 text-app-muted"
+          onClick={() => {
+            if (window.dispatchEvent(new Event('parisian:before-signout', { cancelable: true })))
+              void logout();
+          }}
+        >
+          <LogOut className="h-4 w-4" />
+        </button>
       </div>
     </aside>
   );

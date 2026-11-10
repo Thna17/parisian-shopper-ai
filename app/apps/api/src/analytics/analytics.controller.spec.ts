@@ -286,9 +286,16 @@ describe('AnalyticsController', () => {
 
   it('GET /budgets returns active policy and utilization', async () => {
     const result = await controller.getBudgetUtilization(mockAdminEmployee);
+    if ('configured' in result) throw new Error('Expected configured fixture budget');
     expect(result.monthlyCeiling).toBe(20.0);
     expect(result.remainingHeadroomUsd).toBe(18.45);
     expect(result.isExhausted).toBe(false);
+  });
+
+  it('GET /budgets explicitly represents missing policy without creating spending authority',async()=>{
+    mockActiveBudgetUseCase.execute.mockResolvedValueOnce(null);
+    expect(await controller.getBudgetUtilization(mockAdminEmployee)).toEqual({configured:false});
+    expect(mockManageBudgetUseCase.create).not.toHaveBeenCalled();
   });
 
   it('POST /budgets creates a new budget policy', async () => {

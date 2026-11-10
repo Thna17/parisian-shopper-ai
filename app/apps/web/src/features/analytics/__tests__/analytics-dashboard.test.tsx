@@ -272,11 +272,18 @@ describe('Web Analytics & Cost Control Workstation (WEB-ANALYTICS-01 to 15)', ()
   // WEB-ANALYTICS-01
   it('WEB-ANALYTICS-01: Renders Analytics Dashboard with tabs/cards and KPIs', async () => {
     renderWithProviders(<AnalyticsOverviewPage />);
-    expect(screen.getByText('Operational Analytics & Telemetry')).toBeInTheDocument();
+    expect(screen.getByText('Analytics & Operations')).toBeInTheDocument();
     expect(screen.getByTestId('date-range-filter')).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByTestId('nav-cost-control-btn')).toBeInTheDocument();
     });
+  });
+
+  it('shows a missing budget honestly without presenting invented spending authority',async()=>{
+    vi.mocked(analyticsApi.getBudgetUtilization).mockResolvedValue(null);
+    renderWithProviders(<AnalyticsOverviewPage/>);
+    expect(await screen.findByText(/No active budget policy is configured/)).toBeInTheDocument();
+    expect(screen.queryByTestId('budget-utilization-card')).not.toBeInTheDocument();
   });
 
   // WEB-ANALYTICS-02

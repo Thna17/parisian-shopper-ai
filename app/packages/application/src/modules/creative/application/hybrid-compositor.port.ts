@@ -1,7 +1,7 @@
 import { type CreativeSceneVersionRecord } from '../domain/scene/creative-scene.types.js';
 
 export const HYBRID_COMPOSITOR = Symbol('HYBRID_COMPOSITOR');
-export const HYBRID_COMPOSITOR_VERSION = 'ps-hybrid-compositor-v1';
+export const HYBRID_COMPOSITOR_VERSION = 'ps-hybrid-compositor-v2';
 
 export type HybridCompositorAspectRatio = '1:1' | '4:5' | '9:16';
 

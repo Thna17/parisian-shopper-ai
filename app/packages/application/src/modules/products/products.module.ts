@@ -1,9 +1,11 @@
+import { ProductMarketingEligibilityService } from './application/product-marketing-eligibility.service.js';
 import { Module } from '@nestjs/common';
 import { CLOCK, SystemClock } from '@parisian-shopper/common';
 import { AppConfigService, FeatureFlag, FeatureFlagService } from '@parisian-shopper/config';
 
 import { AuthModule } from '../auth/auth.module.js';
 import { CreateProductSnapshotUseCase } from './application/create-product-snapshot.use-case.js';
+import { SyncMekhlaCatalogUseCase } from './application/sync-mekhla-catalog.use-case.js';
 import { GetProductBySkuUseCase } from './application/get-product-by-sku.use-case.js';
 import { NoopProductMetrics, PRODUCT_METRICS } from './application/product-metrics.port.js';
 import { PRODUCT_SOURCE, type ProductSource } from './application/product-source.port.js';
@@ -81,8 +83,10 @@ import { MockProductSource } from './infrastructure/mock-product-source.js';
     GetProductBySkuUseCase,
     SearchProductsUseCase,
     CreateProductSnapshotUseCase,
+    SyncMekhlaCatalogUseCase,
     RevalidateProductSnapshotUseCase,
     FreshnessEvaluator,
+    ProductMarketingEligibilityService,
   ],
   exports: [
     PRODUCT_SOURCE,
@@ -98,8 +102,10 @@ import { MockProductSource } from './infrastructure/mock-product-source.js';
     GetProductBySkuUseCase,
     SearchProductsUseCase,
     CreateProductSnapshotUseCase,
+    SyncMekhlaCatalogUseCase,
     RevalidateProductSnapshotUseCase,
     FreshnessEvaluator,
+    ProductMarketingEligibilityService,
   ],
 })
 export class ProductsModule {}

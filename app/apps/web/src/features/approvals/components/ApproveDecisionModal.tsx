@@ -20,13 +20,19 @@ export const ApproveDecisionModal: React.FC<ApproveDecisionModalProps> = ({
   isPending,
 }) => {
   const [comment, setComment] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onConfirm(comment.trim() ? comment.trim() : undefined);
-    onClose();
+    try {
+      setError(null);
+      await onConfirm(comment.trim() ? comment.trim() : undefined);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not approve the caption.');
+    }
   };
 
   return (
@@ -85,6 +91,11 @@ export const ApproveDecisionModal: React.FC<ApproveDecisionModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <p role="alert" className="text-sm text-rose-300">
+              {error}
+            </p>
+          )}
           <div>
             <label className="block text-xs font-medium text-zinc-400 mb-1">
               Reviewer Note / Approval Comment (Optional)

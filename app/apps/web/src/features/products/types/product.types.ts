@@ -102,7 +102,7 @@ export interface ProductReadinessFinding {
 export interface ProductReadiness {
   productId: string;
   sku: string;
-  freshnessState: 'FRESH' | 'AGING' | 'STALE' | 'INVALID' | 'UNASSESSED';
+  freshnessState: 'FRESH' | 'AGING' | 'STALE' | 'INVALID' | 'SOURCE_UNAVAILABLE' | 'UNASSESSED';
   isReadyForContent: boolean;
   hasApprovedAssets: boolean;
   assetCount: number;

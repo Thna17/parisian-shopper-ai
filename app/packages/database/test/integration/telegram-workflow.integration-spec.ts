@@ -240,7 +240,9 @@ describe('Phase 1E durable Telegram workflow', () => {
 
     const gateway = new FakeTelegramGateway();
     await dispatcher(gateway).dispatchOnce();
-    const notification = gateway.sent.at(-1)?.message;
+    const notification =
+      gateway.sent.find((item) => item.userId === editorProfile.telegramUserId)?.message ??
+      gateway.sent.at(0)?.message;
     expect(notification?.text).toContain('Draft Copy Review');
     expect(notification?.text).toContain('Facts checked');
     expect(notification?.buttons?.flat().map((item) => item.text)).toEqual([
@@ -433,6 +435,14 @@ describe('Phase 1E durable Telegram workflow', () => {
     const identityId = actor?.identityId;
     if (identityId === undefined) throw new Error('Identity missing');
 
+    await getPrisma().telegramCreateFlow.updateMany({
+      where: {
+        telegramIdentityId: identityId,
+        status: { notIn: ['COMPLETED', 'CANCELLED', 'EXPIRED'] },
+      },
+      data: { status: 'CANCELLED', completedAt: new Date() },
+    });
+
     const product = FICTIONAL_PRODUCTS[0];
     if (product === undefined) throw new Error('Product fixture missing');
 
@@ -457,6 +467,13 @@ describe('Phase 1E durable Telegram workflow', () => {
   });
 
   it('W30-E: recovers wizard state upon simulated process restart and /resume', async () => {
+    const actor = await getWorkflow().resolveActor(editorProfile);
+    if (actor) {
+      await getPrisma().telegramRateLimitBucket.deleteMany({
+        where: { telegramIdentityId: actor.identityId },
+      });
+    }
+
     // 1. User starts /create and advances to Step 3
     const startRes = await command(editorProfile, '/create FIC-PERF-001');
     expect(startRes.messages[0]?.text).toContain('Step 2 of 6');
@@ -487,8 +504,16 @@ describe('Phase 1E durable Telegram workflow', () => {
     });
 
     expect(resumeRes.messages).toHaveLength(1);
-    expect(resumeRes.messages[0]?.text).toContain('Resumed Creation Wizard');
+    expect(resumeRes.messages[0]?.text).toContain('Draft in Progress Found');
     expect(resumeRes.messages[0]?.text).toContain('Step 3 of 6');
+
+    const resumeToken = button(resumeRes, 'Resume Draft');
+    const wizardRes = await freshCommandCenter.handleCallback({
+      updateId: nextUpdateId(),
+      profile: editorProfile,
+      callbackData: resumeToken,
+    });
+    expect(wizardRes.messages[0]?.text).toContain('Step 3 of 6');
   });
 
   it('W30-E: handles concurrent action token race condition atomically in PostgreSQL', async () => {
@@ -496,9 +521,11 @@ describe('Phase 1E durable Telegram workflow', () => {
     if (!actor) throw new Error('Actor missing');
 
     const tokenService = new TelegramActionTokenService(getWorkflow());
-    const [rawToken] = await tokenService.create(actor.identityId, [
-      { action: TelegramAction.CONFIRM_APPROVE_VISUAL, resourceId: 'test-job-conc' },
-    ]);
+    const [rawToken] = await tokenService.create(
+      actor.identityId,
+      [{ action: TelegramAction.CONFIRM_APPROVE_VISUAL, resourceId: 'test-job-conc' }],
+      new Date(Date.now() + 86400_000),
+    );
     if (!rawToken) throw new Error('Token creation failed');
     const tokenHash = hashTelegramActionToken(rawToken);
 
@@ -508,7 +535,7 @@ describe('Phase 1E durable Telegram workflow', () => {
       getWorkflow().consumeActionToken(tokenHash, editorProfile.telegramUserId, new Date()),
     ]);
 
-    const resolved = [result1, result2].filter((r) => r.disposition === 'RESOLVED');
+    const resolved = [result1, result2].filter((r) => r.disposition === 'VALID');
     const consumed = [result1, result2].filter((r) => r.disposition === 'CONSUMED');
 
     expect(resolved).toHaveLength(1);
@@ -516,7 +543,7 @@ describe('Phase 1E durable Telegram workflow', () => {
   });
 
   it('W30-E: enforces webhook update deduplication atomically via claimInboundUpdate in PostgreSQL', async () => {
-    const updateId = `inbound-race-${Date.now()}`;
+    const updateId = `${Date.now()}`;
     const [res1, res2] = await Promise.all([
       getWorkflow().claimInboundUpdate(updateId, editorProfile.telegramUserId, 'message'),
       getWorkflow().claimInboundUpdate(updateId, editorProfile.telegramUserId, 'message'),

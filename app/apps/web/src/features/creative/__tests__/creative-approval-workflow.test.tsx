@@ -94,6 +94,14 @@ describe('Creative Approval Workflow & Security Governance (WEB-CREATIVE-SEC-01 
       updatedAt: '2026-10-29T10:00:00.000Z',
     },
     currentVersion: sampleSceneVersionV1,
+    contentVersion: {
+      id: 'cv-001',
+      headline: 'A Paris evening',
+      englishCaption: 'A warm fragrance.',
+      khmerCaption: 'ក្លិនក្រអូប',
+      cta: 'Discover',
+      hashtags: ['#ParisianShopper'],
+    },
     productSnapshot: {
       id: 'snap-001',
       sku: 'MM-REPLICA-JC-100',
@@ -172,6 +180,15 @@ describe('Creative Approval Workflow & Security Governance (WEB-CREATIVE-SEC-01 
     expect(screen.getByTestId('status-review-badge')).toBeInTheDocument();
   });
 
+  it('shows both captions, product and campaign alongside an honest preview state', async () => {
+    renderComponent();
+    expect(await screen.findByRole('heading', { name: 'Review the post' })).toBeInTheDocument();
+    expect(screen.getByText('A warm fragrance.')).toBeInTheDocument();
+    expect(screen.getByText('ក្លិនក្រអូប')).toBeInTheDocument();
+    expect(screen.getByText(/Campaign: Autumn Paris Elegance 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/No rendered preview is shown yet/)).toBeInTheDocument();
+  });
+
   it('WEB-CREATIVE-SEC-02: Displays disabled self-approval button when user is creator or reviser', async () => {
     vi.mocked(creativeApi.getProjectById).mockResolvedValueOnce({
       ...sampleProjectDetailReady,
@@ -188,11 +205,13 @@ describe('Creative Approval Workflow & Security Governance (WEB-CREATIVE-SEC-01 
     });
 
     const disabledBtn = screen.getByTestId('self-approval-disabled-button');
+    expect(screen.getByText(/second account used by the same person/i)).toBeInTheDocument();
     expect(disabledBtn).toBeDisabled();
     expect(screen.queryByTestId('approve-scene-button')).not.toBeInTheDocument();
   });
 
-  it('WEB-CREATIVE-SEC-03: Displays enabled approve button for eligible independent reviewer', async () => {
+  it('requires an eligible independent reviewer to open the poster preview before approval', async () => {
+    const user = userEvent.setup();
     renderComponent();
 
     await waitFor(() => {
@@ -200,7 +219,10 @@ describe('Creative Approval Workflow & Security Governance (WEB-CREATIVE-SEC-01 
     });
 
     const approveBtn = screen.getByTestId('approve-scene-button');
-    expect(approveBtn).not.toBeDisabled();
+    expect(approveBtn).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Render Preview' }));
+    expect(await screen.findByAltText('Rendered poster preview')).toBeInTheDocument();
+    expect(approveBtn).toBeEnabled();
   });
 
   it('WEB-CREATIVE-SEC-04: Independent reviewer approves scene and triggers success feedback', async () => {
@@ -217,6 +239,8 @@ describe('Creative Approval Workflow & Security Governance (WEB-CREATIVE-SEC-01 
       expect(screen.getByTestId('approve-scene-button')).toBeInTheDocument();
     });
 
+    await user.click(screen.getByRole('button', { name: 'Render Preview' }));
+    await screen.findByAltText('Rendered poster preview');
     await user.click(screen.getByTestId('approve-scene-button'));
 
     await waitFor(() => {
@@ -312,8 +336,8 @@ describe('Creative Approval Workflow & Security Governance (WEB-CREATIVE-SEC-01 
       expect(screen.getByText('MM-REPLICA-JC-100')).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/Maison Margiela/)).toBeInTheDocument();
-    expect(screen.getByText(/Replica Jazz Club Fragrance/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Maison Margiela/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Replica Jazz Club Fragrance/).length).toBeGreaterThan(0);
   });
 
   it('WEB-CREATIVE-SEC-10: Renders version history entries with version attribution', async () => {
@@ -382,6 +406,8 @@ describe('Creative Approval Workflow & Security Governance (WEB-CREATIVE-SEC-01 
       expect(screen.getByTestId('approve-scene-button')).toBeInTheDocument();
     });
 
+    await user.click(screen.getByRole('button', { name: 'Render Preview' }));
+    await screen.findByAltText('Rendered poster preview');
     await user.click(screen.getByTestId('approve-scene-button'));
 
     await waitFor(() => {

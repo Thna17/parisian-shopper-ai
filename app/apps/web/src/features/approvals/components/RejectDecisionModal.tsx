@@ -29,8 +29,12 @@ export const RejectDecisionModal: React.FC<RejectDecisionModalProps> = ({
       return;
     }
     setError(null);
-    await onConfirm(reason.trim());
-    onClose();
+    try {
+      await onConfirm(reason.trim());
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not request changes.');
+    }
   };
 
   return (
@@ -46,7 +50,7 @@ export const RejectDecisionModal: React.FC<RejectDecisionModalProps> = ({
           <div className="flex items-center gap-2 text-rose-400">
             <ShieldAlert className="h-5 w-5" />
             <h3 className="text-base font-semibold text-white">
-              Reject Content Version {targetVersion.versionNumber}
+              Request changes to caption (Version {targetVersion.versionNumber})
             </h3>
           </div>
           <button
@@ -71,7 +75,7 @@ export const RejectDecisionModal: React.FC<RejectDecisionModalProps> = ({
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-xs font-medium text-zinc-300">
-                Mandatory Rejection Reason <span className="text-rose-400">*</span>
+                What needs to change? <span className="text-rose-400">*</span>
               </label>
               <span className="text-[10px] text-zinc-500">{reason.length}/1000 characters</span>
             </div>

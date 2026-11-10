@@ -431,7 +431,11 @@ export class SharpHybridCompositorAdapter implements HybridCompositor {
       if (logoLayer) {
         const maxLogoW = logoLayer.placement?.width ?? Math.min(180, Math.round(canvasWidth * 0.2));
         const resizedLogo = await sharp(logoLayer.buffer)
-          .resize({ width: maxLogoW, fit: 'inside' })
+          .resize({
+            width: maxLogoW,
+            height: logoLayer.placement?.height ?? maxLogoW,
+            fit: 'inside',
+          })
           .toColorspace('srgb')
           .png({ compressionLevel: 9 })
           .toBuffer();

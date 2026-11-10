@@ -96,7 +96,7 @@ describe('Campaign List Feature (WEB-CAMP-01 to WEB-CAMP-06)', () => {
 
     renderWithProviders(<CampaignListPage />);
 
-    expect(screen.getByText('Campaign Management')).toBeInTheDocument();
+    expect(screen.getByText('Campaigns')).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByText('No campaigns yet')).toBeInTheDocument();

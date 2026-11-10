@@ -1,3 +1,4 @@
+import { PublicationProductGuard } from './publication-product.guard.js';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { Permission } from '../../auth/domain/permissions.js';
 import { ValidationError } from '@parisian-shopper/common';
@@ -44,6 +45,7 @@ export class CreatePublicationUseCase {
     @Optional()
     @Inject(CREATIVE_APPROVAL_REPOSITORY)
     private readonly creativeApprovalRepository?: CreativeApprovalRepository,
+    @Optional() private readonly productGuard?: PublicationProductGuard,
   ) {}
 
   public async execute(input: CreatePublicationInput): Promise<PublicationRecord> {
@@ -104,6 +106,12 @@ export class CreatePublicationUseCase {
       }
     }
 
+    if (this.productGuard)
+      await this.productGuard.check(
+        version.id,
+        input.destinationChannel === 'MANUAL_EXPORT' ? 'EXPORT' : 'SCHEDULE',
+        { id: input.actingUserId, permissions: input.permissions },
+      );
     // Manual export can immediately be set to READY; other destinations start in DRAFT
     const status =
       input.destinationChannel === PublicationChannel.MANUAL_EXPORT

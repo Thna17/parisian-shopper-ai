@@ -8,6 +8,7 @@ import helmet from 'helmet';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { publicCatalogOnly } from './posts/public-catalog-only.js';
 import { GlobalExceptionFilter } from './http/global-exception.filter.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -27,8 +28,10 @@ export function configureApi(application: INestApplication): void {
   application.use(urlencoded({ extended: false, limit: config.application.bodyLimit }));
 
   // Static assets serving for product cutouts and composites
-  application.use('/assets', express.static(path.resolve(appRoot, '.data/assets')));
-  application.use('/assets', express.static(path.resolve(appRoot, 'apps/web/public/assets')));
+  const staticCatalog = express.static(path.resolve(appRoot, '.data/assets'));
+  const bundledCatalog = express.static(path.resolve(appRoot, 'apps/web/public/assets'));
+  application.use('/assets', publicCatalogOnly(staticCatalog));
+  application.use('/assets', publicCatalogOnly(bundledCatalog));
   application.use(
     rateLimit({
       legacyHeaders: false,
@@ -65,6 +68,7 @@ export function configureApi(application: INestApplication): void {
       credentials: true,
       methods: ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'],
       origin: corsOrigins,
+      exposedHeaders: ['Content-Disposition', 'X-Content-SHA256', 'X-Post-Revision'],
     });
   }
 

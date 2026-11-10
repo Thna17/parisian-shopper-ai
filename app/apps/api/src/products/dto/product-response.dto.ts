@@ -104,7 +104,16 @@ export interface ProductReadinessFinding {
 export interface ProductReadinessResponseDto {
   productId: string;
   sku: string;
-  freshnessState: 'FRESH' | 'AGING' | 'STALE' | 'INVALID' | 'UNASSESSED';
+  freshnessState: 'FRESH' | 'AGING' | 'STALE' | 'INVALID' | 'SOURCE_UNAVAILABLE' | 'UNASSESSED';
+  sourceCheck?: {
+    system: string;
+    url: string | null;
+    asOf: string;
+    sourceUpdatedAt: string;
+    checkedAt: string | null;
+    status: string;
+    freshness: string;
+  };
   isReadyForContent: boolean;
   hasApprovedAssets: boolean;
   assetCount: number;

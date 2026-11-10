@@ -34,6 +34,7 @@ export class PrismaVisualAssetRepository implements VisualAssetRepository {
         const created = await tx.visualAsset.create({
           data: {
             creativeJobId: input.creativeJobId,
+            sceneVersionId: input.sceneVersionId ?? null,
             versionNumber: nextVersion,
             assetRole: input.assetRole,
             mimeType: input.mimeType,

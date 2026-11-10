@@ -156,6 +156,7 @@ export class RenderCreativePreviewUseCase {
     // 4. Save VisualAsset in repository
     const visualAsset = await this.assetRepo.createAsset({
       creativeJobId: job.id,
+      sceneVersionId: version.id,
       assetRole: 'COMPOSITED_CREATIVE',
       mimeType: 'image/png',
       width,

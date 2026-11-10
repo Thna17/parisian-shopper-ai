@@ -1,5 +1,11 @@
 import { type TelegramButton } from '@parisian-shopper/application';
 
+export interface FragrancePyramid {
+  readonly top?: readonly string[] | undefined;
+  readonly heart?: readonly string[] | undefined;
+  readonly base?: readonly string[] | undefined;
+}
+
 export interface ChannelBroadcastDetails {
   readonly productName: string;
   readonly brand?: string | undefined;
@@ -7,8 +13,10 @@ export interface ChannelBroadcastDetails {
   readonly price?: string | number | undefined;
   readonly currency?: string | undefined;
   readonly headline?: string | undefined;
+  readonly khmerCaption?: string | null | undefined;
   readonly frenchCaption?: string | null | undefined;
   readonly englishCaption?: string | null | undefined;
+  readonly fragranceNotes?: FragrancePyramid | undefined;
   readonly cta?: string | undefined;
   readonly hashtags?: readonly string[] | undefined;
 }
@@ -23,23 +31,25 @@ export class ChannelBroadcastRenderer {
   public static renderCaption(details: ChannelBroadcastDetails): string {
     const lines: string[] = [];
 
-    // Luxury Header
+    // Localized Khmer and Latin Luxury Header
     lines.push('✨ *PARISIAN LUXURY SELECTION* ✨');
+    lines.push('🇰🇭 *ភ្នាក់ងារទិញទំនិញប៉ារីស — នាំចូលផ្ទាល់ពីប្រទេសបារាំង*');
     lines.push('');
 
     // Product Title
     lines.push(`💎 *${escapeMarkdownV2(details.productName)}*`);
 
-    // Metadata line (Brand • Price • SKU)
+    // Metadata line (Brand • Verified Price • SKU)
     const metaParts: string[] = [];
     if (details.brand) {
       metaParts.push(`_${escapeMarkdownV2(details.brand)}_`);
     }
     if (details.price !== undefined) {
+      const cleanPrice = String(details.price).replace(/^\$/, '');
       const priceStr =
-        details.currency === 'USD'
-          ? `$${String(details.price)}`
-          : `${String(details.price)} ${details.currency ?? 'EUR'}`;
+        details.currency === 'USD' || !details.currency
+          ? `$${cleanPrice} USD`
+          : `${cleanPrice} ${details.currency}`;
       metaParts.push(`*${escapeMarkdownV2(priceStr)}*`);
     }
     if (details.sku) {
@@ -57,8 +67,36 @@ export class ChannelBroadcastRenderer {
       lines.push('');
     }
 
-    // Bilingual Copy:
-    // French caption (or primary copy)
+    // Scent Pyramid breakdown (Top, Heart, Base)
+    if (details.fragranceNotes) {
+      const { top, heart, base } = details.fragranceNotes;
+      const hasTop = top && top.length > 0;
+      const hasHeart = heart && heart.length > 0;
+      const hasBase = base && base.length > 0;
+
+      if (hasTop || hasHeart || hasBase) {
+        lines.push('🌿 *កំណត់ចំណាំក្លិនក្រអូប • Fragrance Notes:*');
+        if (hasTop) {
+          lines.push(`• *Top Notes:* ${escapeMarkdownV2(top.join(', '))}`);
+        }
+        if (hasHeart) {
+          lines.push(`• *Heart Notes:* ${escapeMarkdownV2(heart.join(', '))}`);
+        }
+        if (hasBase) {
+          lines.push(`• *Base Notes:* ${escapeMarkdownV2(base.join(', '))}`);
+        }
+        lines.push('');
+      }
+    }
+
+    // Localized Bilingual Copy
+    // Khmer caption
+    if (details.khmerCaption) {
+      lines.push(`🇰🇭 ${escapeMarkdownV2(details.khmerCaption)}`);
+      lines.push('');
+    }
+
+    // French caption (if provided)
     if (details.frenchCaption) {
       lines.push(`🇫🇷 ${escapeMarkdownV2(details.frenchCaption)}`);
       lines.push('');
@@ -69,6 +107,10 @@ export class ChannelBroadcastRenderer {
       lines.push(`🇬🇧 ${escapeMarkdownV2(details.englishCaption)}`);
       lines.push('');
     }
+
+    // Verified Authentic Badge
+    lines.push('✅ *Verified Parisian Authentic* • *100% ធានាសុទ្ធពីប៉ារីស*');
+    lines.push('');
 
     // Call to action
     if (details.cta) {

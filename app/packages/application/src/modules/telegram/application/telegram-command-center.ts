@@ -1,3 +1,6 @@
+import { hasApprovedCurrentPromotion } from '../../products/domain/promotion-eligibility.js';
+import { TelegramPostWorkflow } from './telegram-post-workflow.js';
+import { readPostCreationPlan } from '../../posts/post-creation-plan.js';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ForbiddenError } from '@parisian-shopper/common';
 
@@ -133,11 +136,6 @@ export interface TelegramCallbackInput {
 
 @Injectable()
 export class TelegramCommandCenter {
-  private readonly pendingEditFields = new Map<
-    string,
-    { field: CopyEditableField; versionId: string; jobId: string }
-  >();
-
   public constructor(
     @Inject(TELEGRAM_WORKFLOW_REPOSITORY) private readonly repository: TelegramWorkflowRepository,
     private readonly permissions: PermissionService,
@@ -160,6 +158,7 @@ export class TelegramCommandCenter {
     private readonly visualCallbackHandler?: TelegramVisualCallbackHandler,
     @Optional()
     private readonly reviseContent?: ReviseContentUseCase,
+    @Optional() private readonly postWorkflow?: TelegramPostWorkflow,
   ) {}
 
   private get formatOptions(): TelegramFormatOptions {
@@ -184,11 +183,25 @@ export class TelegramCommandCenter {
 
     const command = parseTelegramCommand(input.text);
     const now = new Date();
+    if (this.postWorkflow) {
+      try {
+        const response = await this.postWorkflow.handleText(actor, input.text);
+        if (response) return response;
+      } catch (error) {
+        return one(telegramSafeError(error));
+      }
+    }
     const pending = await this.repository.findActivePendingInteraction(actor.identityId, now);
 
-    if (pending !== null) {
+    if (
+      pending !== null &&
+      (command.name === 'unknown' || command.name === 'cancel' || command.name === 'resume')
+    ) {
+      if (pending.actorUserId && pending.actorUserId !== actor.internalUserId)
+        return one(
+          'This editing request belongs to another staff member. Open the current draft again.',
+        );
       if (command.name === 'cancel' || input.text.trim().toLowerCase() === '/cancel') {
-        this.pendingEditFields.delete(actor.identityId);
         await this.repository.cancelPendingInteraction(pending.id, now);
         await this.repository.appendAudit({
           actor,
@@ -199,12 +212,15 @@ export class TelegramCommandCenter {
         return one('Action cancelled.');
       }
 
+      if (command.name === 'resume')
+        return one(
+          `Continue your saved Caption edit for #${short(pending.contentJobId)}${pending.field ? ' · ' + pending.field : ''}. Send the replacement text, or /cancel.`,
+        );
       if (pending.action === 'EDIT') {
         const text = input.text.trim();
-        const pendingField = this.pendingEditFields.get(actor.identityId);
-        this.pendingEditFields.delete(actor.identityId);
 
-        let fieldToEdit: CopyEditableField | undefined = pendingField?.field;
+        let fieldToEdit: CopyEditableField | undefined = pending.field as
+          CopyEditableField | undefined;
         let newValueToSet = text;
 
         if (fieldToEdit === undefined) {
@@ -249,9 +265,9 @@ export class TelegramCommandCenter {
               fieldToEdit === 'headline'
                 ? 'Headline'
                 : fieldToEdit === 'englishCaption'
-                  ? 'English copy'
+                  ? 'English Caption'
                   : fieldToEdit === 'khmerCaption'
-                    ? 'Khmer copy'
+                    ? 'Khmer Caption'
                     : 'CTA';
             return await this.renderDraftCardResponse(
               actor,
@@ -263,28 +279,9 @@ export class TelegramCommandCenter {
           }
         }
 
-        try {
-          const revision = await this.requestContentEdit.execute({
-            contentJobId: pending.contentJobId,
-            contentVersionId: pending.contentVersionId,
-            actorUserId: actor.internalUserId,
-            actorRoles: actor.roles,
-            instruction: input.text.trim(),
-          });
-          await this.repository.completePendingInteraction(pending.id, now);
-          await this.repository.appendAudit({
-            actor,
-            action: 'TELEGRAM_CONTENT_EDIT_REQUESTED',
-            resourceType: 'RevisionRequest',
-            resourceId: revision.id,
-            metadata: { contentJobId: pending.contentJobId, instruction: input.text.trim() },
-          });
-          return one(
-            `✏️ Revision requested with instructions:\n"${input.text.trim()}"\n\nA new draft is being generated. You will be notified when it is ready.`,
-          );
-        } catch (error) {
-          return one(telegramSafeError(error));
-        }
+        return one(
+          `Proposed Caption edit: ${input.text.trim()}\nNo generation started. Send an exact replacement prefixed by headline:, english:, khmer: or cta:, or /cancel. Use the web to review any regeneration cost.`,
+        );
       }
 
       if (pending.action === 'REJECT') {
@@ -314,7 +311,6 @@ export class TelegramCommandCenter {
     }
 
     if (command.name === 'cancel') {
-      this.pendingEditFields.delete(actor.identityId);
       const activeFlow = await this.repository.findActiveFlowByIdentity(actor.identityId);
       if (activeFlow != null) {
         await this.repository.cancelFlow(activeFlow.id);
@@ -335,10 +331,35 @@ export class TelegramCommandCenter {
 
     try {
       switch (command.name) {
+        case 'post':
+        case 'posts':
+        case 'postchanges':
+        case 'postprepare':
+          return this.postWorkflow
+            ? await this.postWorkflow.command(actor, command.name, command.argument)
+            : one('Complete posts are unavailable. Legacy captions use /status.');
         case 'start':
-          return one(welcomeText(actor));
+          return one(
+            welcomeText(actor) +
+              (this.postWorkflow
+                ? '\n\n/create SKU saves a complete Post shared with the web. /posts shows your complete posts; /post ID opens one. /status and /history retain legacy caption jobs.'
+                : ''),
+          );
         case 'help':
-          return one(helpText(actor, this.permissions));
+          return one(
+            helpText(actor, this.permissions) +
+              (this.postWorkflow
+                ? '\n\nComplete Posts: /create SKU, /posts, /posts reviews, /posts approved, /post ID. Prepare an image request with /postprepare ID REVISION, then check its quote and confirm spending in the web. Legacy caption/creative records remain separate.'
+                : ''),
+          );
+        case 'newproducts':
+          return one(
+            'New arrivals are unavailable: the catalog does not supply verified arrival dates. Use /search NAME or /create SKU for a product spotlight.',
+          );
+        case 'promo':
+          return one(
+            'Use /search NAME, then /create SKU and choose Promotion. Only approved current promotions with valid dates can be prepared. A complete promotion feed is not connected; no discount is inferred.',
+          );
         case 'create':
           return await this.beginCreate(actor, command.argument);
         case 'resume':
@@ -359,7 +380,7 @@ export class TelegramCommandCenter {
               return visualRes;
             }
           }
-          return one('Unknown command. Use /help to see available commands.');
+          return one('Unknown command or no active editing prompt. Use /posts to reopen your post, /resume for a saved selection, or /help.');
         }
       }
     } catch (error) {
@@ -406,7 +427,49 @@ export class TelegramCommandCenter {
     }
     try {
       const token = resolved.token;
+      if (
+        [
+          TelegramAction.SELECT_CONTENT_TYPE,
+          TelegramAction.SELECT_LANGUAGE,
+          TelegramAction.SELECT_PLATFORM,
+          TelegramAction.SELECT_STYLE_PRESET,
+          TelegramAction.CONFIRM_GENERATION,
+          TelegramAction.WIZARD_BACK,
+          TelegramAction.WIZARD_RESUME,
+          TelegramAction.WIZARD_START_NEW,
+          TelegramAction.WIZARD_CANCEL,
+        ].includes(token.action as never)
+      ) {
+        const flow = await this.repository.findFlowById(token.resourceId);
+        if (
+          !flow ||
+          flow.telegramIdentityId !== actor.identityId ||
+          flow.expiresAt <= new Date() ||
+          ['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(flow.status)
+        )
+          return one('This selection is no longer active. Use /resume or /posts to continue.');
+        if (
+          typeof token.metadata?.expectedStep === 'number' &&
+          flow.metadata?.step !== token.metadata.expectedStep
+        )
+          return one('This selection changed. Use /resume for the current step.');
+      }
       switch (token.action) {
+        case TelegramAction.EDIT_POST:
+        case TelegramAction.FEEDBACK_POST:
+        case TelegramAction.PREPARE_POST:
+        case TelegramAction.VIEW_POST:
+        case TelegramAction.SUBMIT_POST:
+        case TelegramAction.APPROVE_POST:
+        case TelegramAction.CHANGES_POST:
+          if (!this.postWorkflow) return one('Complete posts are unavailable.');
+          return await this.postWorkflow.callback(
+            actor,
+            token.action,
+            token.resourceId,
+            token.metadata,
+          );
+
         case TelegramAction.SELECT_PRODUCT:
           return {
             ...(await this.selectProduct(actor, token.resourceId)),
@@ -576,6 +639,9 @@ export class TelegramCommandCenter {
           const expiresAt = this.expiry();
           const flow = await this.repository.createFlow(actor.identityId, product, expiresAt);
           await this.repository.setFlowMetadata?.(flow.id, {
+            ...(this.postWorkflow
+              ? { postWorkflow: true, postSnapshotId: (await this.snapshots.execute(product)).id }
+              : {}),
             step: 2,
             stepHistory: [1],
             history: [1],
@@ -704,6 +770,9 @@ export class TelegramCommandCenter {
     const expiresAt = this.expiry();
     const flow = await this.repository.createFlow(actor.identityId, product, expiresAt);
     await this.repository.setFlowMetadata?.(flow.id, {
+      ...(this.postWorkflow
+        ? { postWorkflow: true, postSnapshotId: (await this.snapshots.execute(product)).id }
+        : {}),
       step: 2,
       stepHistory: [1],
       history: [1],
@@ -729,7 +798,7 @@ export class TelegramCommandCenter {
       choices.map((value) => ({
         action: TelegramAction.SELECT_CONTENT_TYPE,
         resourceId: flow.id,
-        metadata: { value },
+        metadata: { value, ...(flow.metadata?.postWorkflow ? { expectedStep: 2 } : {}) },
       })),
       expiresAt,
     );
@@ -798,7 +867,7 @@ export class TelegramCommandCenter {
       LANGUAGE_CHOICES.map((c) => ({
         action: TelegramAction.SELECT_LANGUAGE,
         resourceId: flow.id,
-        metadata: { value: c.value },
+        metadata: { value: c.value, ...(flow.metadata?.postWorkflow ? { expectedStep: 3 } : {}) },
       })),
       expiresAt,
     );
@@ -865,7 +934,11 @@ export class TelegramCommandCenter {
       CHANNEL_CHOICES.map((c) => ({
         action: TelegramAction.SELECT_PLATFORM,
         resourceId: flow.id,
-        metadata: { value: c.platform, format: c.format },
+        metadata: {
+          value: c.platform,
+          format: c.format,
+          ...(flow.metadata?.postWorkflow ? { expectedStep: 4 } : {}),
+        },
       })),
       expiresAt,
     );
@@ -935,7 +1008,7 @@ export class TelegramCommandCenter {
       STYLE_CHOICES.map((c) => ({
         action: TelegramAction.SELECT_STYLE_PRESET,
         resourceId: flow.id,
-        metadata: { value: c.key },
+        metadata: { value: c.key, ...(flow.metadata?.postWorkflow ? { expectedStep: 5 } : {}) },
       })),
       expiresAt,
     );
@@ -1012,7 +1085,10 @@ export class TelegramCommandCenter {
         {
           action: TelegramAction.CONFIRM_GENERATION,
           resourceId: flow.id,
-          metadata: { stylePreset: presetKey },
+          metadata: {
+            stylePreset: presetKey,
+            ...(flow.metadata?.postWorkflow ? { expectedStep: 6 } : {}),
+          },
           singleUse: true,
         },
       ],
@@ -1020,15 +1096,22 @@ export class TelegramCommandCenter {
     );
 
     const buttons: TelegramButton[][] = [
-      [{ text: '🚀 Generate Poster & Copy', callbackData: callbackData(required(confirmToken)) }],
+      [
+        {
+          text: flow.metadata?.postWorkflow ? 'Save complete post draft' : 'Prepare legacy Caption',
+          callbackData: callbackData(required(confirmToken)),
+        },
+      ],
     ];
 
     const navRow = await this.buildNavRow(actor.identityId, flow.id, 5, expiresAt);
     buttons.push(navRow);
 
-    const price = flow.product.product.promo_price
-      ? `$${flow.product.product.promo_price} USD (Regular: $${flow.product.product.price} USD)`
-      : `$${flow.product.product.price} USD`;
+    const price =
+      hasApprovedCurrentPromotion(flow.product.product, new Date()) &&
+      flow.product.product.promo_price
+        ? `${flow.product.product.currency} ${flow.product.product.promo_price} (Regular: ${flow.product.product.currency} ${flow.product.product.price})`
+        : `${flow.product.product.currency} ${flow.product.product.price}`;
 
     const text = formatWizardStep({
       step: 6,
@@ -1045,7 +1128,10 @@ export class TelegramCommandCenter {
     return {
       messages: [
         {
-          text,
+          text: flow.metadata?.postWorkflow
+            ? text +
+              '\n\nSaving this post starts no AI request and uses no credits. Next: prepare your Caption and poster in the same saved post. You can edit them before independent review.'
+            : text,
           buttons,
           action,
           resourceKey: flow.id,
@@ -1066,8 +1152,49 @@ export class TelegramCommandCenter {
   ): Promise<TelegramResponse> {
     this.require(actor, Permission.CREATE_CONTENT);
     const flow = await this.repository.findFlowById(flowId);
-    if (flow === null || flow.expiresAt <= new Date()) {
+    if (
+      flow === null ||
+      flow.expiresAt <= new Date() ||
+      flow.telegramIdentityId !== actor.identityId
+    ) {
       return one(ACTION_EXPIRED);
+    }
+    if (this.postWorkflow && flow.metadata?.postWorkflow === true) {
+      assertCompleteSelections(flow);
+      const productSnapshotId = flow.metadata.postSnapshotId;
+      if (typeof productSnapshotId !== 'string')
+        return one('The saved product selection is incomplete. Start a new /create request.');
+      const purpose =
+        flow.contentType === 'SCENT_PYRAMID'
+          ? 'EDUCATIONAL'
+          : flow.contentType === 'ENGAGEMENT'
+            ? 'LIFESTYLE'
+            : flow.contentType;
+      const selectedPreset = resolveStylePreset(
+        typeof flow.metadata.stylePreset === 'string'
+          ? flow.metadata.stylePreset
+          : 'NOCTURNE_OBSIDIAN',
+      );
+      const style =
+        selectedPreset.id === 'CAMBODIAN_IVORY_CELEBRATION'
+          ? 'FESTIVE'
+          : selectedPreset.id === 'CLEAN_EDITORIAL_STUDIO'
+            ? 'EDITORIAL'
+            : 'LUXURY';
+      const response = await this.postWorkflow.create(actor, {
+        requestKey: `telegram-flow:${flow.id}`,
+        productSnapshotId,
+        brief: `Prepare ${flow.contentType.toLowerCase().replaceAll('_', ' ')} content using verified product facts. Visual direction: ${selectedPreset.name} — ${selectedPreset.description}`,
+        channel: flow.platform,
+        language: flow.language,
+        creationPlan: readPostCreationPlan({
+          purpose,
+          style,
+          ...(flow.contentType === 'SCENT_PYRAMID' ? { educationMode: 'FRAGRANCE_NOTES' } : {}),
+        }),
+      });
+      await this.repository.completeFlow(flow.id);
+      return response;
     }
     const existing = await this.repository.findJobByFlowId(flow.id);
     if (existing !== null) {
@@ -1207,7 +1334,10 @@ export class TelegramCommandCenter {
     this.require(actor, Permission.CREATE_CONTENT);
     const activeFlow = await this.repository.findActiveFlowByIdentity(actor.identityId);
     if (activeFlow === null) {
-      return one('No active draft in progress. Start one with /create.', action);
+      return one(
+        'No active product selection. Use /posts to continue a saved post, or /create SKU to start one.',
+        action,
+      );
     }
     return this.renderResumePrompt(actor, activeFlow, action);
   }
@@ -1580,15 +1710,15 @@ export class TelegramCommandCenter {
     return {
       messages: [
         {
-          text: `✏️ *Request Revision / Revise Content Copy for #${short(jobId)}*\n\nPlease reply with your instructions for the revision, or select a field to edit, change language, or restore a prior version below:\n\nType /cancel to abort.`,
+          text: `✏️ *Request Revision / Revise Caption for #${short(jobId)}*\n\nPlease reply with your instructions for the revision, or select a field to edit, change language, or restore a prior version below:\n\nType /cancel to abort.`,
           buttons: [
             [
               { text: '✍️ Headline', callbackData: callbackData(required(tokens[0])) },
               { text: '✍️ CTA', callbackData: callbackData(required(tokens[1])) },
             ],
             [
-              { text: '✍️ English Copy', callbackData: callbackData(required(tokens[2])) },
-              { text: '✍️ Khmer Copy', callbackData: callbackData(required(tokens[3])) },
+              { text: '✍️ English Caption', callbackData: callbackData(required(tokens[2])) },
+              { text: '✍️ Khmer Caption', callbackData: callbackData(required(tokens[3])) },
             ],
             [
               { text: '🌐 Change Language', callbackData: callbackData(required(tokens[4])) },
@@ -1616,12 +1746,13 @@ export class TelegramCommandCenter {
     const field = (metadata?.field as CopyEditableField | undefined) ?? 'headline';
 
     const expiresAt = new Date(Date.now() + 15 * 60 * 1_000);
-    this.pendingEditFields.set(actor.identityId, { field, versionId, jobId });
     await this.repository.createPendingInteraction({
       telegramIdentityId: actor.identityId,
       contentJobId: jobId,
       contentVersionId: versionId,
       action: 'EDIT',
+      field,
+      intendedAction: 'CAPTION_FIELD',
       expiresAt,
     });
 
@@ -1635,9 +1766,9 @@ export class TelegramCommandCenter {
       field === 'headline'
         ? 'Headline'
         : field === 'englishCaption'
-          ? 'English copy'
+          ? 'English Caption'
           : field === 'khmerCaption'
-            ? 'Khmer copy'
+            ? 'Khmer Caption'
             : 'CTA';
 
     return {
@@ -2107,7 +2238,6 @@ export class TelegramCommandCenter {
   }
 
   private async cancelAction(actor: TelegramActor): Promise<TelegramResponse> {
-    this.pendingEditFields.delete(actor.identityId);
     const active = await this.repository.findActivePendingInteraction(actor.identityId, new Date());
     if (active !== null) {
       await this.repository.cancelPendingInteraction(active.id, new Date());
@@ -2179,9 +2309,7 @@ function applicableContentTypes(
 ): readonly ('PRODUCT_SPOTLIGHT' | 'PROMOTION' | 'SCENT_PYRAMID' | 'EDUCATIONAL' | 'ENGAGEMENT')[] {
   return [
     'PRODUCT_SPOTLIGHT',
-    ...(product.product.promo_price === undefined && product.product.discount === undefined
-      ? []
-      : (['PROMOTION'] as const)),
+    ...(hasApprovedCurrentPromotion(product.product, new Date()) ? (['PROMOTION'] as const) : []),
     ...(product.product.fragrance_notes === undefined ? [] : (['SCENT_PYRAMID'] as const)),
     'EDUCATIONAL',
     'ENGAGEMENT',

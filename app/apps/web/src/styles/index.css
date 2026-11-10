@@ -71,3 +71,31 @@ textarea:focus-visible {
   line-height: 1.8;
   overflow-wrap: anywhere;
 }
+
+/* Prompt 11 workspace foundation. Business data remains API-backed. */
+@layer components {
+  .workspace-eyebrow { @apply text-[10px] font-bold uppercase tracking-[.15em] text-[#a48652]; }
+  .workspace-panel { @apply rounded-xl border border-app-border bg-app-surface p-5 shadow-subtle; }
+  .workspace-primary { @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-navy-900 px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-navy-800; }
+  .workspace-link { @apply text-xs font-semibold text-app-primary underline-offset-4 hover:underline; }
+  .workspace-status { @apply inline-flex shrink-0 items-center rounded-md border border-app-border bg-app-bg px-2 py-1 text-[10px] font-medium text-app-muted; }
+  .workspace-tabs { @apply flex gap-4 overflow-x-auto border-b border-app-border; }
+  .workspace-tabs button { @apply min-h-11 whitespace-nowrap border-b-2 border-transparent px-2 text-xs font-semibold text-app-muted; }
+  .workspace-tabs button[aria-pressed='true'] { @apply border-gold-500 text-app-primary; }
+}
+.prompt11-workspace main { scrollbar-gutter: stable; }
+.prompt11-workspace .workspace-sidebar { font-size: 12px; }
+.prompt11-workspace h1 { letter-spacing: -.025em; }
+[data-theme='dark'] .workspace-sidebar a[aria-current='page'] { background:#2b3a40; color:var(--text); }
+[data-theme='dark'] .workspace-sidebar a[aria-current='page'] svg { color:var(--gold); }
+@media (prefers-reduced-motion: reduce) {
+  .prompt11-workspace *, .prompt11-workspace *::before, .prompt11-workspace *::after { transition-duration:0.01ms!important; animation-duration:0.01ms!important; }
+}
+/* Tailwind's rem scale uses a 16px root; body copy follows the 14px reference. */
+html { font-size:16px; }
+body, #root { font-size:14px; }
+.workspace-sidebar nav a { font-size:13px; }
+[data-theme='dark'] .prompt11-workspace .bg-white { background-color:var(--surface); }
+[data-theme='dark'] .prompt11-workspace .bg-neutral-50 { background-color:var(--surface2); }
+[data-theme='dark'] .prompt11-workspace :is(h1,h2,h3,.text-neutral-900,.text-neutral-800,.text-navy-950) { color:var(--text); }
+[data-theme='dark'] .prompt11-workspace :is(.text-neutral-600,.text-neutral-500) { color:var(--muted); }

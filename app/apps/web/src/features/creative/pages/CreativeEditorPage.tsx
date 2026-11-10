@@ -84,6 +84,10 @@ export const CreativeEditorPage: React.FC = () => {
   const [validationResult, setValidationResult] = useState<ValidationAssessmentResult | null>(null);
   const [renderResult, setRenderResult] = useState<RenderPreviewResult | null>(null);
 
+  useEffect(() => {
+    setRenderResult(null);
+  }, [projectDetail?.currentVersion.id]);
+
   // Sync initial layers from current version
   useEffect(() => {
     if (projectDetail?.currentVersion.layers && !hasUnsavedChanges) {
@@ -233,9 +237,18 @@ export const CreativeEditorPage: React.FC = () => {
 
   return (
     <div
-      className="flex flex-col h-[calc(100vh-80px)] space-y-3"
+      className="flex min-h-[calc(100vh-80px)] flex-col space-y-3"
       data-testid="creative-editor-page"
     >
+      {projectDetail.sourceContentInvalid && (
+        <div
+          role="alert"
+          className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700"
+        >
+          Source copy is invalid or uses an older format. Approval and export are unavailable in
+          this view until it is repaired.
+        </div>
+      )}
       {/* Feedback Banner */}
       {approvalFeedback && (
         <div
@@ -279,7 +292,7 @@ export const CreativeEditorPage: React.FC = () => {
       )}
 
       {/* Workstation Top Bar */}
-      <div className="px-4 py-2.5 rounded-xl border border-app-border bg-app-surface flex items-center justify-between shrink-0 shadow-sm">
+      <div className="px-4 py-2.5 rounded-xl border border-app-border bg-app-surface flex flex-wrap gap-3 items-center justify-between shrink-0 shadow-sm">
         <div className="flex items-center gap-3">
           <Link
             to="/creative"
@@ -347,7 +360,7 @@ export const CreativeEditorPage: React.FC = () => {
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Safe Margins Guide Toggle */}
           <button
             type="button"
@@ -391,7 +404,7 @@ export const CreativeEditorPage: React.FC = () => {
                   <button
                     data-testid="approve-scene-button"
                     type="button"
-                    disabled={approveMutation.isPending}
+                    disabled={approveMutation.isPending || !renderResult || hasUnsavedChanges}
                     onClick={handleApproveScene}
                     className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
                   >
@@ -400,7 +413,7 @@ export const CreativeEditorPage: React.FC = () => {
                     ) : (
                       <CheckCircle2 className="w-3.5 h-3.5" />
                     )}
-                    Approve Scene
+                    Approve poster
                   </button>
 
                   <button
@@ -410,7 +423,7 @@ export const CreativeEditorPage: React.FC = () => {
                     className="px-3 py-1.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
                   >
                     <XCircle className="w-3.5 h-3.5" />
-                    Reject Scene
+                    Request changes
                   </button>
                 </div>
               ) : (
@@ -418,10 +431,12 @@ export const CreativeEditorPage: React.FC = () => {
                   data-testid="self-approval-disabled-button"
                   type="button"
                   disabled
-                  title="Self-approval prohibited: Creator or revision author cannot approve their own creative."
+                  title={
+                    projectDetail.approvalIneligibilityReasons?.join(' ') ?? 'Approval unavailable.'
+                  }
                   className="px-3.5 py-1.5 rounded-lg bg-zinc-800 text-zinc-400 border border-zinc-700 text-xs font-semibold cursor-not-allowed"
                 >
-                  Self-Approval Prohibited
+                  Approval Unavailable
                 </button>
               )}
             </>
@@ -432,7 +447,7 @@ export const CreativeEditorPage: React.FC = () => {
             <button
               data-testid="submit-review-button"
               type="button"
-              disabled={submitMutation.isPending}
+              disabled={submitMutation.isPending || projectDetail.sourceContentInvalid}
               onClick={handleSubmitForReview}
               className="px-3.5 py-1.5 rounded-lg border border-[#A88448] text-[#A88448] hover:bg-[#A88448]/10 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
             >
@@ -484,8 +499,99 @@ export const CreativeEditorPage: React.FC = () => {
         </div>
       </div>
 
+      {sceneState === 'READY_FOR_REVIEW' && (
+        <section
+          aria-labelledby="post-review-heading"
+          className="shrink-0 rounded-xl border border-app-border bg-white p-4 text-app-primary"
+        >
+          <h2 id="post-review-heading" className="text-lg font-semibold">
+            Review the post
+          </h2>
+          <p className="mt-1 text-sm text-app-muted">
+            You are deciding on the poster. Its caption was reviewed separately; this decision does
+            not approve a new caption.
+          </p>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <h3 className="font-semibold">Poster preview</h3>
+              {renderResult ? (
+                <img
+                  src={renderResult.previewUrl}
+                  alt="Rendered poster preview"
+                  className="mt-2 max-h-64 rounded-lg object-contain"
+                />
+              ) : (
+                <p className="mt-2 text-sm">
+                  No rendered preview is shown yet. Select “Render Preview” to see the saved poster
+                  before deciding.
+                </p>
+              )}
+              {renderMutation.isError && (
+                <p role="alert" className="mt-2 text-sm text-red-700">
+                  Could not load the poster preview. Try again or ask an administrator for help.
+                </p>
+              )}
+              {canApprove && !renderResult && (
+                <p className="mt-2 text-sm text-amber-800">
+                  Open the rendered preview before approving this poster.
+                </p>
+              )}
+              {hasUnsavedChanges && (
+                <p role="alert" className="mt-2 text-sm text-amber-800">
+                  Unsaved edits are not the saved version being reviewed.
+                </p>
+              )}
+            </div>
+            <div className="space-y-2 text-sm">
+              <h3 className="font-semibold">Caption and product</h3>
+              <p>
+                {productSnapshot.productName} · {productSnapshot.brand} · {productSnapshot.currency}{' '}
+                {productSnapshot.price.toFixed(2)}
+              </p>
+              <p>Campaign: {projectDetail.campaign?.name ?? 'No campaign linked'}</p>
+              {projectDetail.contentVersion ? (
+                <div className="space-y-2">
+                  <p className="font-semibold">{projectDetail.contentVersion.headline}</p>
+                  {projectDetail.contentVersion.englishCaption && (
+                    <p className="whitespace-pre-wrap">
+                      {projectDetail.contentVersion.englishCaption}
+                    </p>
+                  )}
+                  {projectDetail.contentVersion.khmerCaption && (
+                    <p className="whitespace-pre-wrap">
+                      {projectDetail.contentVersion.khmerCaption}
+                    </p>
+                  )}
+                  {projectDetail.contentVersion.cta && <p>{projectDetail.contentVersion.cta}</p>}
+                  {projectDetail.contentVersion.hashtags && (
+                    <p>{projectDetail.contentVersion.hashtags.join(' ')}</p>
+                  )}
+                </div>
+              ) : (
+                <p role="status">
+                  The linked caption is unavailable in this view. Check the source before deciding.
+                </p>
+              )}
+            </div>
+          </div>
+          {!canApprove && (
+            <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
+              You cannot approve this poster.{' '}
+              {projectDetail.approvalIneligibilityReasons?.join(' ') ||
+                'Ask an authorized colleague to review it.'}{' '}
+              Ask an authorized colleague who did not create or edit it. A second account used by
+              the same person is not an independent review.
+            </p>
+          )}
+          <p className="mt-3 text-sm text-app-muted">
+            If the poster is changed after approval, the new version needs validation and
+            independent review again.
+          </p>
+        </section>
+      )}
+
       {/* Main Studio Body: 3-column Layout */}
-      <div className="flex-1 grid grid-cols-12 gap-3 min-h-0 overflow-hidden">
+      <div className="grid min-h-0 grid-cols-12 gap-3 lg:min-h-[640px]">
         {/* Left Column: Layers Panel (Col 3) */}
         <div className="col-span-12 lg:col-span-3 h-full min-h-0">
           <CreativeLayersPanel

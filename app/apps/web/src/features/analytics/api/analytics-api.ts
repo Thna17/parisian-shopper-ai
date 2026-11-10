@@ -51,8 +51,11 @@ export const analyticsApi = {
     return apiClient.get<AiUsageAnalytics>(`/v1/analytics/ai-usage${buildQuery(params)}`);
   },
 
-  getBudgetUtilization: async (): Promise<BudgetUtilization> => {
-    return apiClient.get<BudgetUtilization>('/v1/analytics/budgets');
+  getBudgetUtilization: async (): Promise<BudgetUtilization | null> => {
+    const result = await apiClient.get<BudgetUtilization | { configured: false }>(
+      '/v1/analytics/budgets',
+    );
+    return 'configured' in result ? null : result;
   },
 
   createBudget: async (input: CreateBudgetInput): Promise<Record<string, unknown>> => {

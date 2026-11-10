@@ -1,3 +1,5 @@
+import { PostsModule } from '../posts/posts.module.js';
+import { TelegramPostWorkflow } from './application/telegram-post-workflow.js';
 import { Module } from '@nestjs/common';
 import { AppConfigService } from '@parisian-shopper/config';
 
@@ -13,8 +15,9 @@ import {
 } from './application/telegram-command-center.js';
 
 @Module({
-  imports: [AuthModule, ProductsModule, ContentModule, ApprovalsModule],
+  imports: [PostsModule, AuthModule, ProductsModule, ContentModule, ApprovalsModule],
   providers: [
+    TelegramPostWorkflow,
     TelegramActionTokenService,
     TelegramCommandCenter,
     {
@@ -26,6 +29,6 @@ import {
       }),
     },
   ],
-  exports: [TelegramActionTokenService, TelegramCommandCenter],
+  exports: [TelegramActionTokenService, TelegramCommandCenter, TelegramPostWorkflow],
 })
 export class TelegramModule {}

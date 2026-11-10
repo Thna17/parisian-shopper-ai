@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '../application/product-snapshot-hash.js';
 
@@ -19,7 +20,23 @@ export interface FreshnessPolicyTtlConfig {
   readonly hardExpiryBoundarySeconds: number;
 }
 
+export const marketingProductPolicySchema = z
+  .object({
+    stockActions: z.partialRecord(
+      z.enum(['in_stock', 'low_stock', 'out_of_stock', 'preorder', 'discontinued', 'unknown']),
+      z.enum(['ALLOW', 'WARN', 'BLOCK']),
+    ),
+  })
+  .strict()
+  .refine(
+    (p) => !p.stockActions.discontinued || p.stockActions.discontinued === 'BLOCK',
+    'Discontinued products cannot be allowed for marketing.',
+  );
+export type MarketingProductPolicy = z.infer<typeof marketingProductPolicySchema>;
 export interface FreshnessPolicy {
+  readonly approvedByUserId?: string;
+  readonly marketing?: MarketingProductPolicy;
+
   readonly id?: string | undefined;
   readonly policyId: string;
   readonly version: string;
@@ -31,6 +48,7 @@ export interface FreshnessPolicy {
 }
 
 export interface PolicyVersionInput {
+  readonly marketing?: MarketingProductPolicy;
   readonly policyId: string;
   readonly version: string;
   readonly ttl: FreshnessPolicyTtlConfig;
@@ -38,6 +56,7 @@ export interface PolicyVersionInput {
 
 export function calculatePolicyVersionHash(input: PolicyVersionInput): string {
   const payload = {
+    ...(input.marketing ? { marketing: marketingProductPolicySchema.parse(input.marketing) } : {}),
     policy_id: input.policyId,
     ttl: {
       campaign_price_seconds: input.ttl.campaignPriceSeconds,
@@ -104,3 +123,28 @@ export interface FreshnessPolicyRepository {
   findByPolicyId(policyId: string, version?: string): Promise<FreshnessPolicy | null>;
   create(policy: FreshnessPolicy): Promise<FreshnessPolicy>;
 }
+
+const policySeconds = z.number().int().min(1).max(31536000);
+export const approveMarketingPolicyInputSchema = z
+  .object({
+    policyId: z.string().trim().min(1).max(100),
+    version: z.string().trim().min(1).max(50),
+    confirmed: z.literal(true),
+    ttl: z
+      .object({
+        stockSeconds: policySeconds,
+        catalogPriceSeconds: policySeconds,
+        campaignPriceSeconds: policySeconds,
+        promotionSeconds: policySeconds,
+        promotionRecheckWindowSeconds: policySeconds,
+        permanentFactsSeconds: policySeconds,
+        hardExpiryBoundarySeconds: policySeconds,
+      })
+      .strict(),
+    marketing: marketingProductPolicySchema,
+  })
+  .strict()
+  .refine(
+    (p) => Object.values(p.ttl).every((value) => value <= p.ttl.hardExpiryBoundarySeconds),
+    'No freshness window may exceed the hard expiry boundary.',
+  );

@@ -25,16 +25,17 @@ export class TelegramActionTokenService {
   public async create(
     telegramIdentityId: string,
     actions: readonly CreateTelegramActionInput[],
-    expiresAt: Date,
+    expiresAt?: Date,
   ): Promise<readonly string[]> {
     const values = actions.map(() => randomBytes(18).toString('base64url'));
+    const effectiveExpiresAt = expiresAt ?? new Date(Date.now() + 86400_000);
     const records: StoreActionTokenInput[] = actions.map((action, index) => ({
       tokenHash: hashTelegramActionToken(required(values[index])),
       telegramIdentityId,
       action: action.action,
       resourceId: action.resourceId,
       singleUse: action.singleUse ?? true,
-      expiresAt,
+      expiresAt: effectiveExpiresAt,
       ...(action.metadata === undefined ? {} : { metadata: action.metadata }),
     }));
     await this.repository.storeActionTokens(records);

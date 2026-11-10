@@ -1,4 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { PublicationProductGuard } from './publication-product.guard.js';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { Permission } from '../../auth/domain/permissions.js';
 import {
   CHANNEL_CAPABILITIES,
@@ -20,6 +21,7 @@ export class ConfirmPublicationUseCase {
   public constructor(
     @Inject(PUBLISHING_REPOSITORY)
     private readonly publishingRepository: PublishingRepository,
+    @Optional() private readonly productGuard?: PublicationProductGuard,
   ) {}
 
   public async execute(input: ConfirmPublicationInput): Promise<PublicationRecord> {
@@ -49,6 +51,11 @@ export class ConfirmPublicationUseCase {
       throw new PublicationChannelNotEnabledError(publication.destinationChannel);
     }
 
+    if (this.productGuard)
+      await this.productGuard.check(publication.contentVersionId, 'PUBLISH', {
+        id: input.actingUserId,
+        permissions: input.permissions,
+      });
     // For MANUAL_EXPORT, mark published immediately
     if (publication.destinationChannel === PublicationChannel.MANUAL_EXPORT) {
       const now = new Date();

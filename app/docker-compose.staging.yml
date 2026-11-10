@@ -11,7 +11,7 @@ services:
       TZ: UTC
       PGTZ: UTC
     ports:
-      - '127.0.0.1:${POSTGRES_PORT:-5433}:5432'
+      - '127.0.0.1:5433:5432'
     volumes:
       - staging_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -30,7 +30,7 @@ services:
     restart: unless-stopped
     command: ['valkey-server', '--appendonly', 'yes', '--protected-mode', 'no']
     ports:
-      - '127.0.0.1:${VALKEY_PORT:-6380}:6379'
+      - '127.0.0.1:6380:6379'
     volumes:
       - staging_valkey_data:/data
     healthcheck:
@@ -50,12 +50,12 @@ services:
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
     environment:
-      NODE_ENV: staging
+      NODE_ENV: development
       APP_NAME: parisian-shopper-api
       APP_HOST: 0.0.0.0
       APP_PORT: 3000
-      APP_CORS_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
-      DATABASE_URL: postgresql://${POSTGRES_USER:-parisian}:${POSTGRES_PASSWORD:-staging_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-parisian_shopper_staging}?schema=public
+      APP_CORS_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-parisian}:${POSTGRES_PASSWORD:-local_only_change_me}@postgres:5432/${POSTGRES_DB:-parisian_shopper}?schema=public
       VALKEY_HOST: valkey
       VALKEY_PORT: 6379
       LOG_LEVEL: info
@@ -67,7 +67,11 @@ services:
       FEATURE_AI_IMAGE_GENERATION: 'true'
       FEATURE_CREATIVE_GENERATION: 'true'
       FEATURE_TELEGRAM: 'false'
-      FEATURE_PRODUCT_API: 'false'
+      FEATURE_PRODUCT_API: 'true'
+      PRODUCT_API_BASE_URL: https://api.mekhla.digital
+      PRODUCT_API_BUSINESS_ID: cmpwgnlpv0001li15e3n16uhc
+      PRODUCT_API_CURRENCY: USD
+      PRODUCT_API_ALLOWED_HOSTS: api.mekhla.digital
       FEATURE_AUTO_PUBLISHING: 'false'
       FEATURE_META_PUBLISHING: 'false'
       FEATURE_TELEGRAM_CHANNEL_PUBLISHING: 'false'
@@ -107,8 +111,8 @@ services:
       dockerfile: apps/worker/Dockerfile
     restart: unless-stopped
     environment:
-      NODE_ENV: staging
-      DATABASE_URL: postgresql://${POSTGRES_USER:-parisian}:${POSTGRES_PASSWORD:-staging_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-parisian_shopper_staging}?schema=public
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-parisian}:${POSTGRES_PASSWORD:-local_only_change_me}@postgres:5432/${POSTGRES_DB:-parisian_shopper}?schema=public
       VALKEY_HOST: valkey
       VALKEY_PORT: 6379
       LOG_LEVEL: info
@@ -119,6 +123,11 @@ services:
       FEATURE_AI_TEXT_GENERATION: 'true'
       FEATURE_AI_IMAGE_GENERATION: 'true'
       FEATURE_CREATIVE_GENERATION: 'true'
+      FEATURE_PRODUCT_API: 'true'
+      PRODUCT_API_BASE_URL: https://api.mekhla.digital
+      PRODUCT_API_BUSINESS_ID: cmpwgnlpv0001li15e3n16uhc
+      PRODUCT_API_CURRENCY: USD
+      PRODUCT_API_ALLOWED_HOSTS: api.mekhla.digital
       FEATURE_AUTO_PUBLISHING: 'false'
       FEATURE_META_PUBLISHING: 'false'
       FEATURE_TELEGRAM_CHANNEL_PUBLISHING: 'false'

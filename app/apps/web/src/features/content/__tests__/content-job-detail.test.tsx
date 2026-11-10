@@ -164,6 +164,38 @@ describe('Content Job Detail Page (WEB-CONTENT-11 to WEB-CONTENT-16)', () => {
     expect(screen.getByText('#RoseAbsolue')).toBeInTheDocument();
   });
 
+  it('explains that copy under review does not yet include a poster', async () => {
+    vi.mocked(contentApi.getJobById).mockResolvedValue({
+      ...mockJobDetail,
+      job: { ...mockJobDetail.job, status: 'UNDER_REVIEW' },
+    });
+    renderWithProviders(
+      <Routes>
+        <Route path="/content/jobs/:id" element={<ContentJobDetailPage />} />
+      </Routes>,
+      {
+        initialEntries: ['/content/jobs/job-001-uuid'],
+      },
+    );
+    expect(await screen.findByText('Poster image is a separate step')).toBeInTheDocument();
+    expect(screen.getByText(/Once a different team member approves it/)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Create a poster' })).not.toBeInTheDocument();
+  });
+
+  it('does not report a successful generation when there is no successful attempt', async () => {
+    vi.mocked(contentApi.getJobById).mockResolvedValue({ ...mockJobDetail, attempts: [] });
+    renderWithProviders(
+      <Routes>
+        <Route path="/content/jobs/:id" element={<ContentJobDetailPage />} />
+      </Routes>,
+      {
+        initialEntries: ['/content/jobs/job-001-uuid'],
+      },
+    );
+    await screen.findByText('Poster image is a separate step');
+    expect(screen.queryByText('Marketing copy generated')).not.toBeInTheDocument();
+  });
+
   it('WEB-CONTENT-13: Displays factual truth compliance findings panel', async () => {
     renderWithProviders(
       <Routes>

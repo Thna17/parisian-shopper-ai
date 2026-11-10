@@ -184,7 +184,7 @@ describe('CreativeGenerationWorker', () => {
     await expect(worker.process(job)).rejects.toThrow(UnrecoverableError);
   });
 
-  it('re-throws transient errors for BullMQ retry and logs dead-letter flag when attempts exhausted', async () => {
+  it('does not automatically retry an uncertain provider timeout, even for an older queued job', async () => {
     const transientError = new Error('Transient database socket timeout');
     const generateExecuteMock = jest.fn(() => Promise.reject(transientError));
     const generateCreative = { execute: generateExecuteMock } as unknown as GenerateCreativeUseCase;
@@ -204,6 +204,7 @@ describe('CreativeGenerationWorker', () => {
       2, // attempt 3 is being made
     );
 
-    await expect(worker.process(job)).rejects.toThrow(transientError);
+    await expect(worker.process(job)).rejects.toThrow(UnrecoverableError);
+    expect(generateExecuteMock).toHaveBeenCalledTimes(1);
   });
 });

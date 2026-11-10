@@ -1,3 +1,4 @@
+import { ConflictError } from '@parisian-shopper/common';
 import { Injectable } from '@nestjs/common';
 import type {
   BrandProfileRepository,
@@ -98,6 +99,13 @@ export class PrismaBrandProfileRepository implements BrandProfileRepository {
     approvedByUserId: string,
   ): Promise<BrandProfileVersionRecord> {
     return this.prisma.$transaction(async (tx) => {
+      const target = await tx.brandProfileVersion.findUniqueOrThrow({ where: { id } });
+      if (target.guidance)
+        throw new ConflictError({
+          publicMessage:
+            'Use the brand-guidance preview and explicit business approval for this version.',
+        });
+
       // Retire currently active profiles
       await tx.brandProfileVersion.updateMany({
         where: { status: 'ACTIVE' },
@@ -126,6 +134,17 @@ export class PrismaBrandProfileRepository implements BrandProfileRepository {
     restoredProfile: BrandProfileVersionRecord;
   }> {
     return this.prisma.$transaction(async (tx) => {
+      const target = await tx.brandProfileVersion.findUniqueOrThrow({
+        where: { id: targetVersionId },
+      });
+      if (
+        target.guidance &&
+        !(await tx.brandProfileApproval.count({ where: { profileId: targetVersionId } }))
+      )
+        throw new ConflictError({
+          publicMessage: 'This guidance version has never received business approval.',
+        });
+
       // Find currently active profile
       const currentActive = await tx.brandProfileVersion.findFirst({
         where: { status: 'ACTIVE' },

@@ -14,7 +14,7 @@ export const AnalyticsOverviewPage: React.FC = () => {
   const [dateRange, setDateRange] = useState<DateRangeParams>({});
 
   const overviewQuery = useAnalyticsOverview(dateRange);
-  const budgetQuery = useBudgetUtilization();
+  const budgetQuery = useBudgetUtilization(hasPermission(Permission.VIEW_AI_COSTS));
 
   const kpis = overviewQuery.data;
   const budget = budgetQuery.data;
@@ -26,17 +26,17 @@ export const AnalyticsOverviewPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-app-muted">
-              Executive Intelligence
+              Business Intelligence
             </span>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold-100 text-gold-900 border border-gold-200">
-              Live Verified
+              Saved records
             </span>
           </div>
           <h1 className="text-2xl font-bold text-navy-950 font-serif tracking-tight mt-1">
-            Operational Analytics & Telemetry
+            Analytics & Operations
           </h1>
           <p className="text-xs text-app-muted mt-1">
-            Deterministic reporting grounded strictly in persisted relational entities.
+            Understand content production, AI usage, costs and workflow health.
           </p>
         </div>
 
@@ -56,6 +56,22 @@ export const AnalyticsOverviewPage: React.FC = () => {
       {/* Date Range Filter */}
       <DateRangeFilter value={dateRange} onChange={setDateRange} />
 
+      {hasPermission(Permission.VIEW_AI_COSTS) &&
+        budgetQuery.isSuccess &&
+        budgetQuery.data === null && (
+          <p className="workspace-panel text-sm text-app-muted">
+            No active budget policy is configured. Viewing this page does not create one or
+            establish a verified spending limit.
+          </p>
+        )}
+      {hasPermission(Permission.VIEW_AI_COSTS) && budgetQuery.isError && (
+        <p role="alert" className="workspace-panel text-sm">
+          Budget information could not be loaded.{' '}
+          <button className="workspace-link" onClick={() => void budgetQuery.refetch()}>
+            Try again
+          </button>
+        </p>
+      )}
       {/* Budget Utilization Card (if user has cost permissions) */}
       {hasPermission(Permission.VIEW_AI_COSTS) && budget && (
         <BudgetUtilizationCard

@@ -146,7 +146,10 @@ export class OutboxRelayWorker implements OnModuleInit, OnModuleDestroy {
 
     await this.creativeQueue.enqueue({
       contentVersionId,
-      requestedBy: (event.payload.approverUserId as string) ?? 'system',
+      requestedBy:
+        (event.payload.requesterUserId as string) ??
+        (event.payload.approverUserId as string) ??
+        'system',
     });
   }
 

@@ -73,16 +73,15 @@ export const ProductCatalogPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-app-primary">
-              Products Catalog
+              Products & Promotions
             </h1>
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#B59761]/12 text-[#9A7D45] dark:text-[#D6BC87] border border-[#B59761]/25">
               <Sparkles className="w-3 h-3" />
-              Verified Snapshots
+              Catalog snapshots
             </span>
           </div>
           <p className="text-sm text-app-muted mt-1">
-            Authoritative luxury perfume catalog synchronized with commercial verification and asset
-            rights.
+            Manage product information, saved product imagery and authorized offers.
           </p>
         </div>
 
@@ -97,6 +96,29 @@ export const ProductCatalogPage: React.FC = () => {
         )}
       </div>
 
+      <section aria-label="Catalog summary" className="grid gap-4 sm:grid-cols-3">
+        <div className="workspace-panel">
+          <p className="text-xs text-app-muted">Matching catalog products</p>
+          <p className="mt-3 text-2xl font-semibold">
+            {isLoading ? '…' : isError ? 'Unavailable' : pagination.total}
+          </p>
+        </div>
+        <div className="workspace-panel">
+          <p className="text-xs text-app-muted">Products on this page</p>
+          <p className="mt-3 text-2xl font-semibold">
+            {isLoading ? '…' : isError ? 'Unavailable' : products.length}
+          </p>
+        </div>
+        <div className="workspace-panel">
+          <p className="text-xs text-app-muted">Saved source facts</p>
+          <p className="mt-3 text-sm font-semibold">
+            Check product details for source and as-of time
+          </p>
+          <p className="mt-2 text-xs text-app-muted">
+            A saved snapshot is not a fresh stock or promotion check.
+          </p>
+        </div>
+      </section>
       {/* Filter and Search Bar */}
       <ProductFilterBar
         search={searchQuery}
@@ -105,6 +127,8 @@ export const ProductCatalogPage: React.FC = () => {
         onStockStatusChange={(s) => updateParam('stockStatus', s)}
         brand={brand}
         onBrandChange={(b) => updateParam('brand', b)}
+        category={category}
+        onCategoryChange={(value) => updateParam('category', value)}
         onReset={handleResetFilters}
       />
 

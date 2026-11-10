@@ -4,8 +4,12 @@ import {
   CREATIVE_VIDEO_PROVIDER,
   type CreativeProvider,
   type CreativeVideoProvider,
+  CancelReservationUseCase,
+  CircuitBreakerService,
   FakeCreativeProvider,
   HiggsfieldProviderError,
+  ReserveBudgetUseCase,
+  SettleReservationUseCase,
 } from '@parisian-shopper/application';
 import {
   APPLICATION_LOGGER,
@@ -17,6 +21,7 @@ import { AppConfigService, FeatureFlag, FeatureFlagService } from '@parisian-sho
 import { CodexCliCreativeProvider } from './codex-cli/codex-cli-creative-provider.js';
 import { OfficialHiggsfieldSdkClient } from './higgsfield-sdk-client.js';
 import { HiggsfieldVideoProvider } from './higgsfield-video-provider.js';
+import { BudgetAwareCreativeProvider } from './openai/budget-aware-creative-provider.js';
 import { OpenAiCreativeProvider } from './openai/openai-creative-provider.js';
 
 class DisabledCreativeVideoProvider implements CreativeVideoProvider {
@@ -51,11 +56,23 @@ class DisabledCreativeProvider implements CreativeProvider {
   providers: [
     {
       provide: CREATIVE_PROVIDER,
-      inject: [AppConfigService, FeatureFlagService, APPLICATION_LOGGER],
+      inject: [
+        AppConfigService,
+        FeatureFlagService,
+        APPLICATION_LOGGER,
+        { token: ReserveBudgetUseCase, optional: true },
+        { token: CircuitBreakerService, optional: true },
+        { token: SettleReservationUseCase, optional: true },
+        { token: CancelReservationUseCase, optional: true },
+      ],
       useFactory: (
         config: AppConfigService,
         flags: FeatureFlagService,
         logger: ApplicationLogger,
+        reserveBudgetUseCase?: ReserveBudgetUseCase,
+        circuitBreaker?: CircuitBreakerService,
+        settleReservationUseCase?: SettleReservationUseCase,
+        cancelReservationUseCase?: CancelReservationUseCase,
       ): CreativeProvider => {
         if (
           !flags.isEnabled(FeatureFlag.CREATIVE_GENERATION) ||
@@ -64,26 +81,43 @@ class DisabledCreativeProvider implements CreativeProvider {
           return new DisabledCreativeProvider();
         }
 
-        const provider = config.creative.provider;
-        if (provider === 'fake') {
+        const effectiveProvider =
+          config.creative.provider === 'fake' && config.ai.provider === 'openai'
+            ? 'openai'
+            : config.creative.provider;
+
+        if (effectiveProvider === 'fake') {
           return new FakeCreativeProvider({
             isProduction: config.nodeEnvironment === 'production',
             allowFakeInProduction: config.creative.allowFakeInProduction,
           });
         }
 
-        if (provider === 'openai') {
+        if (effectiveProvider === 'openai') {
           const apiKey = config.ai.openaiApiKey;
           if (!apiKey) {
             throw new Error('OPENAI_API_KEY is required when CREATIVE_PROVIDER=openai');
           }
-          return new OpenAiCreativeProvider({
+          const liveProvider = new OpenAiCreativeProvider({
             apiKey,
             logger,
           });
+
+          return new BudgetAwareCreativeProvider(
+            liveProvider,
+            new FakeCreativeProvider({
+              isProduction: config.nodeEnvironment === 'production',
+              allowFakeInProduction: true,
+            }),
+            reserveBudgetUseCase,
+            circuitBreaker,
+            settleReservationUseCase,
+            cancelReservationUseCase,
+            logger,
+          );
         }
 
-        if (provider === 'codex_cli') {
+        if (effectiveProvider === 'codex_cli') {
           if (config.nodeEnvironment === 'production') {
             throw new Error('Codex CLI creative provider is prohibited when NODE_ENV=production');
           }
@@ -95,7 +129,7 @@ class DisabledCreativeProvider implements CreativeProvider {
           });
         }
 
-        throw new Error(`Unsupported creative provider: ${String(provider)}`);
+        throw new Error(`Unsupported creative provider: ${String(effectiveProvider)}`);
       },
     },
     {

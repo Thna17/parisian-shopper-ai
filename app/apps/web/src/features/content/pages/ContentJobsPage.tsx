@@ -26,15 +26,14 @@ export function ContentJobsPage(): React.JSX.Element {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-serif font-semibold text-neutral-900 dark:text-neutral-50 tracking-tight">
-              AI Content Studio
+              Content Studio
             </h1>
             <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-800/60">
-              Luxury Copy
+              Caption drafts
             </span>
           </div>
           <p className="text-sm text-neutral-500 mt-1">
-            Generate and refine brand-safe multilingual marketing copy with strict factual MSRP
-            truth.
+            Prepare Khmer and English captions from saved product facts. Complete posts keep the Caption and poster together.
           </p>
         </div>
 

@@ -1,3 +1,13 @@
+import { PRODUCT_MARKETING_HISTORY } from '@parisian-shopper/application';
+import { PrismaProductMarketingHistory } from './product-snapshot/prisma-product-marketing-history.repository.js';
+import { BRAND_GUIDANCE_REPOSITORY } from '@parisian-shopper/application';
+import { PrismaBrandGuidanceRepository } from './brand/prisma-brand-guidance.repository.js';
+import { POST_CAPTION_REPOSITORY } from '@parisian-shopper/application';
+import { PrismaPostCaptionRepository } from './posts/prisma-post-caption.repository.js';
+import { POST_GENERATION_REPOSITORY } from '@parisian-shopper/application';
+import { PrismaPostGenerationRepository } from './posts/prisma-post-generation.repository.js';
+import { POST_REPOSITORY } from '@parisian-shopper/application';
+import { PrismaPostRepository } from './posts/prisma-post.repository.js';
 import { Global, Module } from '@nestjs/common';
 import {
   APPROVALS_REPOSITORY,
@@ -89,6 +99,16 @@ import {
 @Global()
 @Module({
   providers: [
+    PrismaProductMarketingHistory,
+    { provide: PRODUCT_MARKETING_HISTORY, useExisting: PrismaProductMarketingHistory },
+    PrismaBrandGuidanceRepository,
+    { provide: BRAND_GUIDANCE_REPOSITORY, useExisting: PrismaBrandGuidanceRepository },
+    PrismaPostCaptionRepository,
+    { provide: POST_CAPTION_REPOSITORY, useExisting: PrismaPostCaptionRepository },
+    PrismaPostGenerationRepository,
+    { provide: POST_GENERATION_REPOSITORY, useExisting: PrismaPostGenerationRepository },
+    PrismaPostRepository,
+    { provide: POST_REPOSITORY, useExisting: PrismaPostRepository },
     PrismaService,
     DatabaseHealthIndicator,
     PrismaTransactionManager,
@@ -186,6 +206,16 @@ import {
     { provide: OUTBOX_RELAY_REPOSITORY, useExisting: PrismaOutboxRelayRepository },
   ],
   exports: [
+    PrismaProductMarketingHistory,
+    PRODUCT_MARKETING_HISTORY,
+    PrismaBrandGuidanceRepository,
+    BRAND_GUIDANCE_REPOSITORY,
+    PrismaPostCaptionRepository,
+    POST_CAPTION_REPOSITORY,
+    PrismaPostGenerationRepository,
+    POST_GENERATION_REPOSITORY,
+    PrismaPostRepository,
+    POST_REPOSITORY,
     PrismaService,
     DatabaseHealthIndicator,
     PrismaTransactionManager,

@@ -139,10 +139,14 @@ async function main() {
         promptVersion: '1.0',
         structuredOutput: {
           headline: 'A gentle evening scent',
-          khmerCaption: 'ក្លិនក្រអូបពិសេស',
-          englishCaption: 'A gentle evening scent for you',
+          khmer_caption: 'ក្លិនក្រអូបពិសេស',
+          english_caption: 'A gentle evening scent for you',
           cta: 'Shop now',
           hashtags: ['#fragrance'],
+          creative_brief: 'A gentle evening scent',
+          facts_used: [],
+          warnings: [],
+          missing_information: [],
         },
       },
     });

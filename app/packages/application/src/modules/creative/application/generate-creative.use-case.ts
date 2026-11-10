@@ -402,8 +402,16 @@ export class GenerateCreativeUseCase {
             });
           }
         } catch (bgError) {
-          if (creativeReservationId && this.settleBudget) {
-            await this.settleBudget.release(creativeReservationId, 'Background generation failed');
+          // The provider may have accepted and charged for the request before
+          // the response was lost. Do not explicitly release the reservation.
+          if (creativeReservationId) {
+            this.logger.warn(
+              'Background generation outcome is uncertain; reservation not released',
+              {
+                creativeJobId: creativeJob.id,
+                reservationId: creativeReservationId,
+              },
+            );
           }
           throw bgError;
         }

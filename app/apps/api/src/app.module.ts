@@ -1,3 +1,5 @@
+import { HiggsfieldMcpApiModule } from './posts/higgsfield-mcp.controller.js';
+import { PostsApiModule } from './posts/posts.controller.js';
 import { Module } from '@nestjs/common';
 import { ApplicationModule } from '@parisian-shopper/application';
 import { AIProvidersModule } from '@parisian-shopper/ai-providers';
@@ -39,6 +41,8 @@ import { BudgetApiModule } from './budget/budget.module.js';
     ProductsApiModule,
     CampaignsApiModule,
     ContentApiModule,
+    PostsApiModule,
+    HiggsfieldMcpApiModule,
     ApprovalsApiModule,
     CreativesApiModule,
     CreativeApiModule,

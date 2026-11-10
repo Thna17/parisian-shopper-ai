@@ -1,4 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { PublicationProductGuard } from './publication-product.guard.js';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { Permission } from '../../auth/domain/permissions.js';
 import {
   type PublicationRecord,
@@ -17,6 +18,7 @@ export class RetryPublicationUseCase {
   public constructor(
     @Inject(PUBLISHING_REPOSITORY)
     private readonly publishingRepository: PublishingRepository,
+    @Optional() private readonly productGuard?: PublicationProductGuard,
   ) {}
 
   public async execute(input: RetryPublicationInput): Promise<PublicationRecord> {
@@ -33,6 +35,11 @@ export class RetryPublicationUseCase {
       throw new PublicationNotRetryableError(input.publicationId);
     }
 
+    if (this.productGuard)
+      await this.productGuard.check(publication.contentVersionId, 'PUBLISH', {
+        id: input.actingUserId,
+        permissions: input.permissions,
+      });
     return this.publishingRepository.updateStatus(publication.id, PublicationStatus.QUEUED);
   }
 }

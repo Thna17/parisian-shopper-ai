@@ -42,6 +42,7 @@ import { FindingCode, FindingSeverity } from '@parisian-shopper/application';
 import { DatabaseHealthIndicator, PrismaService } from '@parisian-shopper/database';
 import {
   ContentGenerationQueue,
+  ProductCatalogSyncQueue,
   CreativeGenerationQueue,
   ValkeyConnectionService,
 } from '@parisian-shopper/jobs';
@@ -432,6 +433,8 @@ describe('Content Studio API Integration (e2e)', () => {
     })
       .overrideProvider(ValkeyConnectionService)
       .useValue({ getClient: () => ({ status: 'ready' }), isHealthy: () => true })
+      .overrideProvider(ProductCatalogSyncQueue)
+      .useValue({ enqueue: jest.fn(), onModuleInit: jest.fn() })
       .overrideProvider(ContentGenerationQueue)
       .useValue({
         enqueue: jest.fn(async (jobId: string) => {

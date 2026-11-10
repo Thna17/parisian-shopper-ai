@@ -137,6 +137,38 @@ describe('SEC-BRAND-15 to SEC-BRAND-19: Governed Brand Source Ingestion', () => 
     expect(result.id).toBe(sampleCreatedRecord.id);
   });
 
+  it('keeps distinct posts with the same caption separate while preserving retry identity', async () => {
+    await ingestUseCase.execute(validIngestInput);
+    const first = mockSourceRepo.storeRawPost.mock.calls[0]![0];
+    await ingestUseCase.execute({
+      ...validIngestInput,
+      externalPostId: 'different-post',
+      mediaCasKeys: ['different-image'],
+    });
+    const second = mockSourceRepo.storeRawPost.mock.calls[1]![0];
+    await ingestUseCase.execute(validIngestInput);
+    const retry = mockSourceRepo.storeRawPost.mock.calls[2]![0];
+    expect(first.sha256Hex).not.toBe(second.sha256Hex);
+    expect(first.sha256Hex).toBe(retry.sha256Hex);
+  });
+
+  it('does not reuse an unrelated legacy record with the same caption hash', async () => {
+    mockSourceRepo.findBySha256
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ ...sampleCreatedRecord, externalPostId: 'other-post' });
+    await ingestUseCase.execute(validIngestInput);
+    expect(mockSourceRepo.storeRawPost).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses a matching legacy record during reimport', async () => {
+    mockSourceRepo.findBySha256
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(sampleCreatedRecord);
+    const result = await ingestUseCase.execute(validIngestInput);
+    expect(result.id).toBe(sampleCreatedRecord.id);
+    expect(mockSourceRepo.storeRawPost).not.toHaveBeenCalled();
+  });
+
   it('SEC-BRAND-19: preserves metadata (sourceSystem, externalPostId, mediaCasKeys, tags, ingestedByUserId) upon ingestion', async () => {
     await ingestUseCase.execute(validIngestInput);
 

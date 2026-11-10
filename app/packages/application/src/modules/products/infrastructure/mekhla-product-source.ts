@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import {
+  type ProductCatalogPageResult,
   type ProductSearchResult,
   type ProductSource,
   type ProductSourceSearchInput,
@@ -348,6 +349,45 @@ export class MekhlaProductSource implements ProductSource {
     };
   }
 
+  public async fetchCatalogPage(page = 1, limit = 50): Promise<ProductCatalogPageResult> {
+    const boundedLimit = Math.min(Math.max(1, limit), 250);
+    const collectionUrl = this.buildCollectionUrl({
+      page,
+      limit: boundedLimit,
+      status: 'ACTIVE',
+      type: 'PERFUME',
+      includeCounts: false,
+      summaryMode: false,
+    });
+
+    const collectionData = await this.executeFetch(collectionUrl);
+    const parsedEnvelope = rawMekhlaCollectionEnvelopeSchema.safeParse(collectionData);
+    if (!parsedEnvelope.success) {
+      throw new ProductSourceResponseInvalidError(parsedEnvelope.error);
+    }
+
+    const { items, pagination } = parsedEnvelope.data.data;
+    const normalizedItems: NormalizedProductEnvelope[] = [];
+
+    for (const item of items) {
+      try {
+        normalizedItems.push(this.normalizeItem(item));
+      } catch {
+        // Skip individual items that fail schema validation
+      }
+    }
+
+    return {
+      items: normalizedItems,
+      pagination: {
+        page: pagination.page,
+        limit: pagination.limit,
+        totalItems: pagination.totalItems,
+        totalPages: pagination.totalPages,
+      },
+    };
+  }
+
   private buildCollectionUrl(params: {
     page: number;
     limit: number;
@@ -673,14 +713,17 @@ export function toCanonicalDecimalString(price: string | number): string {
 }
 
 export function deriveStockStatus(item: {
+  status?:string;
   trackInventory?: boolean | null | undefined;
   stockQuantity?: number | null | undefined;
   lowStockThreshold?: number | null | undefined;
 }): 'unknown' | 'out_of_stock' | 'low_stock' | 'in_stock' {
-  if (item.trackInventory === false) {
+  if(item.status?.toUpperCase()==='LOW_STOCK')return 'low_stock';
+  if(item.status?.toUpperCase()==='OUT_OF_STOCK')return 'out_of_stock';
+  if (item.trackInventory !== true || typeof item.stockQuantity!=='number' || !Number.isFinite(item.stockQuantity)) {
     return 'unknown';
   }
-  const quantity = typeof item.stockQuantity === 'number' ? item.stockQuantity : 0;
+  const quantity = item.stockQuantity;
   if (quantity <= 0) {
     return 'out_of_stock';
   }

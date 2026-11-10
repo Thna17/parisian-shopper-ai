@@ -35,7 +35,8 @@ RUN pnpm install --frozen-lockfile
 # Copy source trees and assets
 COPY assets ./assets
 COPY packages ./packages
-COPY apps/worker ./apps/worker
+COPY apps ./apps
+COPY examples ./examples
 
 # Generate Prisma Client & compile TypeScript
 RUN pnpm --filter @parisian-shopper/database prisma:generate
@@ -62,8 +63,7 @@ COPY --chown=node:node --from=builder /build/package.json ./package.json
 COPY --chown=node:node --from=builder /build/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --chown=node:node --from=builder /build/assets ./assets
 COPY --chown=node:node --from=builder /build/packages ./packages
-COPY --chown=node:node --from=builder /build/apps/worker/dist ./apps/worker/dist
-COPY --chown=node:node --from=builder /build/apps/worker/package.json ./apps/worker/package.json
+COPY --chown=node:node --from=builder /build/apps/worker ./apps/worker
 
 USER node
 

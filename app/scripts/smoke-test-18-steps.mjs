@@ -10,6 +10,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import { Buffer } from 'node:buffer';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -245,10 +246,14 @@ async function main() {
         promptVersion: '1.0',
         structuredOutput: {
           headline: 'Yes I Am The King — ក្លិនក្រអូបប្រណិតលំដាប់ប៉ារីស',
-          khmerCaption:
+          khmer_caption:
             'ទឹកអប់ Yes I Am The King ពី Geparlys Paris ផ្ដល់នូវក្លិនក្រអូបទាក់ទាញ ទំនុកចិត្តខ្ពស់ និងភាពថ្លៃថ្នូរ។',
-          englishCaption:
+          english_caption:
             'Experience the regal elegance of Yes I Am The King by Geparlys Paris. A sophisticated aromatic fragrance designed for distinguished elegance.',
+          creative_brief: 'Present Yes I Am The King as a luxury fragrance.',
+          facts_used: [],
+          warnings: [],
+          missing_information: [],
           cta: 'ទាក់ទងកុម្ម៉ង់ឥឡូវនេះ (Shop Now)',
           hashtags: [
             '#ParisianShopper',
@@ -278,7 +283,7 @@ async function main() {
   try {
     const validator = new DeterministicFactualValidator();
     const passResult = validator.validate({
-      copy: `${contentVersion.structuredOutput.headline} ${contentVersion.structuredOutput.englishCaption}`,
+      copy: `${contentVersion.structuredOutput.headline} ${contentVersion.structuredOutput.english_caption}`,
       snapshot: {
         productName: productSnapshot.productName,
         brand: productSnapshot.brand,
@@ -334,9 +339,8 @@ async function main() {
   let approver;
   try {
     // 8a. Self-approval attempt by author
-    let selfApprovalBlocked = false;
-    if (contentJob.requesterUserId === testPilotUser.id) {
-      selfApprovalBlocked = true;
+    if (contentJob.requesterUserId !== testPilotUser.id) {
+      throw new Error('Self-approval check: requester must be author');
     }
 
     // 8b. Independent approval by Marc (Creative Director / Approver)
@@ -721,8 +725,11 @@ async function main() {
     const userCheck = await prisma.user.findUniqueOrThrow({
       where: { id: testPilotUser.id },
     });
-    const isSuspendedAndZeroSessions =
-      userCheck.status === 'DISABLED' && activeSessions.length === 0;
+    if (userCheck.status !== 'DISABLED' || activeSessions.length !== 0) {
+      throw new Error(
+        `Expected DISABLED user with 0 sessions, got ${userCheck.status} and ${activeSessions.length} sessions`,
+      );
+    }
     record(
       16,
       'Session Revocation & Employee Suspension',

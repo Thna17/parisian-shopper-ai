@@ -27,7 +27,7 @@ export interface LanguagePolicy {
   readonly formality: 'LUXURY_FORMAL' | 'ELEVATED_CASUAL' | 'EDITORIAL';
   readonly primaryLanguage: 'KM' | 'EN' | 'BILINGUAL';
   readonly khmerConventions: {
-    readonly scriptStyle: 'Moul' | 'Battambang' | 'Siemreap';
+    readonly scriptStyle: 'Moul' | 'Battambang' | 'Siemreap' | 'Noto Sans Khmer';
     readonly spacingRules: string;
     readonly disallowedLoanwords: readonly string[];
   };
@@ -66,7 +66,7 @@ export interface LogoRules {
   readonly allowedPlacements: readonly (
     'TOP_CENTER' | 'BOTTOM_CENTER' | 'TOP_LEFT' | 'TOP_RIGHT'
   )[];
-  readonly defaultVariant: 'GOLD' | 'MONOCHROME_WHITE' | 'MONOCHROME_BLACK';
+  readonly defaultVariant: 'GOLD' | 'MONOCHROME_WHITE' | 'MONOCHROME_BLACK' | 'AS_UPLOADED';
 }
 
 export interface BrandProfileVersionRecord {

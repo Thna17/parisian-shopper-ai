@@ -88,7 +88,19 @@ describe('Phase 1C AI content domain', () => {
 
   it('enforces all strategy prerequisites without factual inference', () => {
     const normal = requiredFixture(0).product;
-    const promoted = requiredFixture(1).product;
+    const rawPromotion = requiredFixture(1).product;
+    const promoted = {
+      ...rawPromotion,
+      discount: {
+        ...rawPromotion.discount!,
+        approval: {
+          status: 'approved' as const,
+          approved_by: 'Fixture approver',
+          approved_at: '2026-09-30T00:00:00.000Z',
+          reference: 'Synthetic test approval only',
+        },
+      },
+    };
     const missingNotes = requiredFixture(2).product;
     expect(() => new ProductSpotlightStrategy().assertPrerequisites(normal)).not.toThrow();
     expect(() => new PromotionStrategy().assertPrerequisites(normal)).toThrow('lacks data');

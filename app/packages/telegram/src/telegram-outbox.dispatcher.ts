@@ -4,6 +4,7 @@ import {
   CREATIVE_JOB_REPOSITORY,
   TELEGRAM_WORKFLOW_REPOSITORY,
   TelegramAction,
+  TelegramPostWorkflow,
   TelegramActionTokenService,
   VISUAL_ASSET_REPOSITORY,
   VISUAL_VALIDATION_REPOSITORY,
@@ -39,6 +40,7 @@ import { buildVisualReviewKeyboard } from './keyboards/visual-review.keyboard.js
 import { VisualReviewCardRenderer } from './renderers/visual-review-card.renderer.js';
 
 const TOPICS = [
+  'POST_CHANGED',
   'CONTENT_VALIDATION_COMPLETED',
   'CONTENT_GENERATION_FAILED',
   'CONTENT_REJECTED',
@@ -73,6 +75,7 @@ export class TelegramOutboxDispatcher
     @Optional()
     @Inject(ASSET_STORAGE)
     private readonly assetStorage?: AssetStoragePort,
+    @Optional() private readonly posts?: TelegramPostWorkflow,
   ) {}
 
   public onModuleInit(): void {
@@ -109,7 +112,16 @@ export class TelegramOutboxDispatcher
     attemptCount: number;
   }): Promise<void> {
     try {
-      if (event.topic === 'CREATIVE_VALIDATED') await this.sendVisualReview(event);
+      if (event.topic === 'POST_CHANGED') {
+        if (!this.posts) throw new Error('Complete Post delivery is not configured.');
+        const postId = event.payload.postId;
+        if (typeof postId !== 'string') throw new Error('Post event is missing its identity.');
+        for (const { actor, response } of await this.posts.notification(postId)) {
+          if (await this.repository.postNotificationSent?.(event.id, actor.identityId)) continue;
+          await this.gateway.sendMessages(actor.telegramUserId, response.messages);
+          await this.repository.acknowledgePostNotification?.(event.id, actor.identityId);
+        }
+      } else if (event.topic === 'CREATIVE_VALIDATED') await this.sendVisualReview(event);
       else if (event.topic === 'CREATIVE_VALIDATION_FAILED')
         await this.sendCreativeValidationFailed(event);
       else if (event.topic === 'CONTENT_VALIDATION_COMPLETED') await this.sendDraft(event);
@@ -259,6 +271,73 @@ export class TelegramOutboxDispatcher
       ...(index !== texts.length - 1 ? {} : { buttons: buttonRows }),
     }));
     await this.gateway.sendMessages(view.requesterTelegramUserId, messages);
+
+    if (
+      view.validation.status !== 'BLOCKED' &&
+      view.validation.status !== 'FAILED' &&
+      this.repository.listActiveApproverTelegramUserIds !== undefined
+    ) {
+      const approverIds = await this.repository.listActiveApproverTelegramUserIds();
+      for (const approverTelegramUserId of approverIds) {
+        if (approverTelegramUserId === view.requesterTelegramUserId) continue;
+
+        const approverActor = await this.repository.resolveActor({
+          telegramUserId: approverTelegramUserId,
+        });
+        if (approverActor === null) continue;
+
+        const approverTokenDefs: CreateTelegramActionInput[] = [
+          { action: TelegramAction.VIEW_SOURCE, resourceId: view.jobId, singleUse: false },
+          { action: TelegramAction.VIEW_VALIDATION, resourceId: versionId, singleUse: false },
+          {
+            action: TelegramAction.APPROVE_PROMPT,
+            resourceId: versionId,
+            metadata: { contentJobId: view.jobId, versionNumber: view.versionNumber },
+            singleUse: false,
+          },
+          {
+            action: TelegramAction.REJECT_PROMPT,
+            resourceId: versionId,
+            metadata: { contentJobId: view.jobId, versionNumber: view.versionNumber },
+            singleUse: false,
+          },
+          {
+            action: TelegramAction.REQUEST_EDIT,
+            resourceId: versionId,
+            metadata: { contentJobId: view.jobId, versionNumber: view.versionNumber },
+            singleUse: false,
+          },
+        ];
+
+        const approverTokens = await this.tokens.create(
+          approverActor.identityId,
+          approverTokenDefs,
+          expiresAt,
+        );
+
+        const approverButtonRows: TelegramButton[][] = [
+          [
+            { text: '📋 Source Facts', callbackData: callbackData(required(approverTokens[0])) },
+            {
+              text: '🛡️ Validation Details',
+              callbackData: callbackData(required(approverTokens[1])),
+            },
+          ],
+          [
+            { text: '✅ Approve', callbackData: callbackData(required(approverTokens[2])) },
+            { text: '❌ Reject', callbackData: callbackData(required(approverTokens[3])) },
+          ],
+          [{ text: '✏️ Request Edit', callbackData: callbackData(required(approverTokens[4])) }],
+        ];
+
+        const approverMessages: TelegramMessage[] = texts.map((text, index) => ({
+          text,
+          ...(index !== texts.length - 1 ? {} : { buttons: approverButtonRows }),
+        }));
+        await this.gateway.sendMessages(approverTelegramUserId, approverMessages);
+      }
+    }
+
     await this.repository.markNotificationSent(event.id, new Date());
   }
 
@@ -526,6 +605,45 @@ export class TelegramOutboxDispatcher
           visualAssetId,
         },
       });
+    }
+
+    if (this.repository.listActiveApproverTelegramUserIds !== undefined) {
+      const approverIds = await this.repository.listActiveApproverTelegramUserIds();
+      for (const approverTelegramUserId of approverIds) {
+        if (approverTelegramUserId === view.requesterTelegramUserId) continue;
+
+        const approverActor = await this.repository.resolveActor({
+          telegramUserId: approverTelegramUserId,
+        });
+        if (approverActor === null) continue;
+
+        const approverTokens = await this.tokens.create(
+          approverActor.identityId,
+          tokenDefs,
+          expiresAt,
+        );
+
+        const approverButtonRows = buildVisualReviewKeyboard({
+          approveToken: approverTokens[0] ?? '',
+          editLayoutToken: approverTokens[1],
+          editTextToken: approverTokens[2],
+          changeStyleToken: approverTokens[3],
+          newBackgroundToken: approverTokens[4],
+          rejectToken: approverTokens[5] ?? '',
+          detailsToken: approverTokens[6],
+        });
+
+        if (photoBuffer !== undefined) {
+          await this.gateway.sendPhoto(approverTelegramUserId, photoBuffer, {
+            caption,
+            buttons: approverButtonRows,
+          });
+        } else {
+          await this.gateway.sendMessage(approverTelegramUserId, caption, {
+            buttons: approverButtonRows,
+          });
+        }
+      }
     }
 
     await this.repository.markNotificationSent(event.id, new Date());

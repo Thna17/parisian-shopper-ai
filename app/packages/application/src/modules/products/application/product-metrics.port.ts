@@ -1,6 +1,6 @@
 export const PRODUCT_METRICS = Symbol('PRODUCT_METRICS');
 
-export type ProductMetricOperation = 'getBySku' | 'search' | 'createSnapshot';
+export type ProductMetricOperation = 'getBySku' | 'search' | 'createSnapshot' | 'syncCatalog';
 
 export interface ProductMetricEvent {
   operation: ProductMetricOperation;

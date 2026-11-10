@@ -3,6 +3,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import {
   AI_EXECUTION_POLICY,
   AI_TEXT_PROVIDER,
+  POST_CAPTION_PROVIDER,
   CONTENT_METRICS,
   type AIContext,
   type AITextProvider,
@@ -114,12 +115,14 @@ describe('AIProvidersModule wiring', () => {
     expect(provider).toBeInstanceOf(OpenAITextProvider);
   });
 
-  it('throws an error if AI_PROVIDER=openai but OPENAI_API_KEY is missing', async () => {
-    await expect(
-      createModule({
-        aiProvider: 'openai',
-        openaiModel: 'gpt-4o',
-      }),
-    ).rejects.toThrow('OPENAI_API_KEY is required');
+  it('keeps the application available and reports missing credentials without generating', async () => {
+    const module = await createModule({ aiProvider: 'openai', openaiModel: 'gpt-4o' });
+    for (const token of [AI_TEXT_PROVIDER, POST_CAPTION_PROVIDER]) {
+      const provider = module.get<AITextProvider>(token);
+      expect(provider.providerName).toBe('unconfigured');
+      await expect(
+        provider.generate({} as AIContext, new AbortController().signal),
+      ).rejects.toThrow(/configure/i);
+    }
   });
 });

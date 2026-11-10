@@ -71,11 +71,59 @@ export interface ProductApiConfig {
   timeoutMs: number;
   maxRetries: number;
   token?: string | undefined;
+  syncCron?: string | undefined;
+  syncWebhookKey?: string | undefined;
   runLiveTests: boolean;
+}
+
+export interface MetaConfig {
+  enabled: boolean;
+  graphApiVersion: string;
+  accessToken?: string | undefined;
+  facebookPageId?: string | undefined;
+  instagramAccountId?: string | undefined;
+  fourEyesSecret: string;
 }
 
 @Injectable()
 export class AppConfigService {
+  get postImages(): {
+    provider: Environment['POST_IMAGE_PROVIDER'];
+    apiKey: string | undefined;
+    assetHosts: string[];
+    confirmedRequestId: string | undefined;
+  } {
+    return {
+      provider: this.config.get('POST_IMAGE_PROVIDER', { infer: true }),
+      apiKey: this.config.get('HF_POSTER_API_KEY', { infer: true }),
+      assetHosts: this.config
+        .get('HF_POSTER_ASSET_HOSTS', { infer: true })
+        .split(',')
+        .map((host) => host.trim())
+        .filter(Boolean),
+      confirmedRequestId: this.config.get('POST_IMAGE_CONFIRMED_REQUEST_ID', { infer: true }),
+    };
+  }
+
+  get higgsfieldMcp(): {
+    encryptionKey: string | undefined;
+    redirectUri: string | undefined;
+    clientId: string | undefined;
+    clientSecret: string | undefined;
+    clientAuthMethod: 'client_secret_post' | 'client_secret_basic';
+    dispatchEnabled: boolean;
+    sharedUseConfirmed: boolean;
+  } {
+    return {
+      encryptionKey: this.config.get('HF_MCP_ENCRYPTION_KEY', { infer: true }),
+      redirectUri: this.config.get('HF_MCP_REDIRECT_URI', { infer: true }),
+      clientId: this.config.get('HF_MCP_CLIENT_ID', { infer: true }),
+      clientSecret: this.config.get('HF_MCP_CLIENT_SECRET', { infer: true }),
+      clientAuthMethod: this.config.get('HF_MCP_CLIENT_AUTH_METHOD', { infer: true }),
+      dispatchEnabled: this.config.get('HF_MCP_DISPATCH_ENABLED', { infer: true }),
+      sharedUseConfirmed: this.config.get('HF_MCP_SHARED_USE_CONFIRMED', { infer: true }),
+    };
+  }
   public constructor(private readonly config: ConfigService<Environment, true>) {}
 
   public get nodeEnvironment(): Environment['NODE_ENV'] {
@@ -122,6 +170,10 @@ export class AppConfigService {
     );
   }
 
+  public get postCaptionLiveDispatchEnabled(): boolean {
+    return this.config.get('POST_CAPTION_REAL_DISPATCH_ENABLED', { infer: true });
+  }
+
   public get ai(): AIConfig {
     const openaiApiKey = this.config.get('OPENAI_API_KEY', { infer: true });
     const openaiModel = this.config.get('OPENAI_MODEL', { infer: true });
@@ -141,14 +193,29 @@ export class AppConfigService {
     const botToken = this.config.get('TELEGRAM_BOT_TOKEN', { infer: true });
     const webhookUrl = this.config.get('TELEGRAM_WEBHOOK_URL', { infer: true });
     const webhookSecret = this.config.get('TELEGRAM_WEBHOOK_SECRET', { infer: true });
-    const channelId = this.config.get('TELEGRAM_CHANNEL_ID', { infer: true });
+    const channelId =
+      this.config.get('TELEGRAM_CHANNEL_ID', { infer: true }) ?? '@parisian_shopper_kh';
     return {
       mode: this.config.get('TELEGRAM_MODE', { infer: true }),
       actionTokenTtlSeconds: this.config.get('TELEGRAM_ACTION_TOKEN_TTL_SECONDS', { infer: true }),
       ...(botToken === undefined ? {} : { botToken }),
       ...(webhookUrl === undefined ? {} : { webhookUrl }),
       ...(webhookSecret === undefined ? {} : { webhookSecret }),
-      ...(channelId === undefined ? {} : { channelId }),
+      channelId,
+    };
+  }
+
+  public get meta(): MetaConfig {
+    const accessToken = this.config.get('META_ACCESS_TOKEN', { infer: true });
+    const facebookPageId = this.config.get('META_FACEBOOK_PAGE_ID', { infer: true });
+    const instagramAccountId = this.config.get('META_INSTAGRAM_ACCOUNT_ID', { infer: true });
+    return {
+      enabled: this.config.get('FEATURE_META_PUBLISHING', { infer: true }),
+      graphApiVersion: this.config.get('META_GRAPH_API_VERSION', { infer: true }),
+      fourEyesSecret: this.config.get('PUBLISHING_FOUR_EYES_SECRET', { infer: true }),
+      ...(accessToken === undefined ? {} : { accessToken }),
+      ...(facebookPageId === undefined ? {} : { facebookPageId }),
+      ...(instagramAccountId === undefined ? {} : { instagramAccountId }),
     };
   }
 
@@ -203,6 +270,8 @@ export class AppConfigService {
       timeoutMs: this.config.get('PRODUCT_API_TIMEOUT_MS', { infer: true }),
       maxRetries: this.config.get('PRODUCT_API_MAX_RETRIES', { infer: true }),
       token: this.config.get('PRODUCT_API_TOKEN', { infer: true }),
+      syncCron: this.config.get('PRODUCT_CATALOG_SYNC_CRON', { infer: true }),
+      syncWebhookKey: this.config.get('PRODUCT_SYNC_WEBHOOK_KEY', { infer: true }),
       runLiveTests: this.config.get('RUN_PRODUCT_API_LIVE_TESTS', { infer: true }),
     });
   }

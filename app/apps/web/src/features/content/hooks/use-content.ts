@@ -29,10 +29,12 @@ export const contentKeys = {
 
 export function useContentJobs(
   params: ListContentJobsParams = {},
+  enabled = true,
 ): UseQueryResult<PaginatedContentJobs, Error> {
   return useQuery<PaginatedContentJobs, Error>({
     queryKey: contentKeys.list(params),
     queryFn: () => contentApi.getJobs(params),
+    enabled,
     staleTime: 30 * 1000,
     placeholderData: (previousData) => previousData,
   });
@@ -93,9 +95,20 @@ export function useReviseContent(
     ManualRevisePayload
   >({
     mutationFn: (payload) => contentApi.reviseManual(jobId, payload),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: contentKeys.detail(jobId) });
-      void queryClient.invalidateQueries({ queryKey: contentKeys.lists() });
+    onSuccess: async (result) => {
+      queryClient.setQueryData<ContentJobDetail>(contentKeys.detail(jobId), (previous) =>
+        previous
+          ? {
+              ...previous,
+              currentVersion: result.version,
+              latestValidationResult: result.validationResult,
+            }
+          : previous,
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: contentKeys.detail(jobId) }),
+        queryClient.invalidateQueries({ queryKey: contentKeys.lists() }),
+      ]);
     },
   });
 }

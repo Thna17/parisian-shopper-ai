@@ -77,9 +77,12 @@ export function useAiUsageAnalytics(
   });
 }
 
-export function useBudgetUtilization(): UseQueryResult<BudgetUtilization, Error> {
+export function useBudgetUtilization(
+  enabled = true,
+): UseQueryResult<BudgetUtilization | null, Error> {
   return useQuery({
     queryKey: ['analytics-budgets'],
+    enabled,
     queryFn: () => analyticsApi.getBudgetUtilization(),
   });
 }

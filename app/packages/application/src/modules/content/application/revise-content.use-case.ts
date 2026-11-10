@@ -108,23 +108,19 @@ export class ReviseContentUseCase {
       throw new ValidationError({ publicMessage: 'Content version not found.' });
     }
 
-    const updatedOutput: AIContentOutput = {
-      ...currentVersion.structuredOutput,
-      ...(input.targetLanguage === 'KM' && !currentVersion.structuredOutput.khmer_caption
-        ? {
-            khmer_caption:
-              currentVersion.structuredOutput.english_caption ??
-              currentVersion.structuredOutput.headline,
-          }
-        : {}),
-      ...(input.targetLanguage === 'EN' && !currentVersion.structuredOutput.english_caption
-        ? {
-            english_caption:
-              currentVersion.structuredOutput.khmer_caption ??
-              currentVersion.structuredOutput.headline,
-          }
-        : {}),
-    };
+    if (currentVersion.contentJobId !== input.contentJobId)
+      throw new ValidationError({
+        publicMessage: 'The caption version belongs to another request.',
+      });
+    if (
+      (input.targetLanguage !== 'EN' && !currentVersion.structuredOutput.khmer_caption) ||
+      (input.targetLanguage !== 'KM' && !currentVersion.structuredOutput.english_caption)
+    )
+      throw new ValidationError({
+        publicMessage:
+          'The requested translation is missing. Generate a translation or write the missing caption first. Switching language does not translate text.',
+      });
+    const updatedOutput = currentVersion.structuredOutput;
 
     const newVersion = await this.saveNewVersion(
       input.contentJobId,

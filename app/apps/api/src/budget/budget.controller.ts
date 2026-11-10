@@ -55,7 +55,7 @@ import {
 
 @ApiTags('AI Provider Budget & Usage Ledger')
 @ApiCookieAuth('session')
-@Controller('v1/ai')
+@Controller('ai')
 @UseGuards(SessionAuthGuard, PermissionsGuard)
 export class BudgetController {
   public constructor(

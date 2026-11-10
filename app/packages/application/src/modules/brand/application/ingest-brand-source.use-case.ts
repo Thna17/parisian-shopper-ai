@@ -35,14 +35,41 @@ export class IngestBrandSourceUseCase {
 
     const sanitizedCaption = this.scrubPii(input.captionText);
 
+    // Caption text alone is not a poster identity: many posts reuse the same caption.
+    // Include the source identity and media keys so unrelated posts are not collapsed.
+    const mediaCasKeys = [...(input.mediaCasKeys ?? [])].sort();
     const sha256Hex = createHash('sha256')
-      .update(`${input.sourceSystem}:${sanitizedCaption}:${input.licenseReference}`)
+      .update(
+        JSON.stringify({
+          version: 2,
+          sourceSystem: input.sourceSystem,
+          externalPostId: input.externalPostId ?? null,
+          sanitizedCaption,
+          mediaCasKeys,
+          copyrightOwner: input.copyrightOwner.trim(),
+          licenseReference: input.licenseReference.trim(),
+        }),
+      )
       .digest('hex');
 
     const existing = await this.brandSourceRepo.findBySha256(sha256Hex);
-    if (existing) {
-      return existing;
-    }
+    if (existing) return existing;
+
+    // Reuse a pre-v2 record only if its stored identity and media actually match.
+    // Old fingerprints ignored those fields, so a matching hash alone is unsafe.
+    const legacyHash = createHash('sha256')
+      .update(`${input.sourceSystem}:${sanitizedCaption}:${input.licenseReference}`)
+      .digest('hex');
+    const legacy = await this.brandSourceRepo.findBySha256(legacyHash);
+    if (
+      legacy &&
+      legacy.sourceSystem === input.sourceSystem &&
+      legacy.externalPostId === (input.externalPostId ?? null) &&
+      legacy.copyrightOwner === input.copyrightOwner.trim() &&
+      legacy.licenseReference === input.licenseReference.trim() &&
+      JSON.stringify([...legacy.mediaCasKeys].sort()) === JSON.stringify(mediaCasKeys)
+    )
+      return legacy;
 
     return this.brandSourceRepo.storeRawPost({
       sourceSystem: input.sourceSystem,
@@ -60,21 +87,25 @@ export class IngestBrandSourceUseCase {
   }
 
   private scrubPii(text: string): string {
-    return (
-      text
-        // Redact email addresses
-        .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[REDACTED_EMAIL]')
-        // Redact phone numbers (Cambodian with/without spaces/dots/hyphens, and international formats)
-        .replace(/(?:\+?855[\s.-]?|0)[1-9](?:[\s.-]?\d){7,8}\b/g, '[REDACTED_PHONE]')
-        .replace(
-          /\b(?:\+?\d{1,3}[\s.-]?)?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}\b/g,
-          '[REDACTED_PHONE]',
-        )
-        // Redact social handles
-        .replace(/@[a-zA-Z0-9_.-]+/g, '[REDACTED_HANDLE]')
-        // Redact telegram links
-        .replace(/t\.me\/[a-zA-Z0-9_]+/gi, '[REDACTED_LINK]')
-        .trim()
-    );
+    return sanitizeBrandSourceCaption(text);
   }
+}
+
+export function sanitizeBrandSourceCaption(text: string): string {
+  return (
+    text
+      // Redact email addresses
+      .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[REDACTED_EMAIL]')
+      // Redact phone numbers (Cambodian with/without spaces/dots/hyphens, and international formats)
+      .replace(/(?:\+?855[\s.-]?|0)[1-9](?:[\s.-]?\d){7,8}\b/g, '[REDACTED_PHONE]')
+      .replace(
+        /\b(?:\+?\d{1,3}[\s.-]?)?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}\b/g,
+        '[REDACTED_PHONE]',
+      )
+      // Redact social handles
+      .replace(/@[a-zA-Z0-9_.-]+/g, '[REDACTED_HANDLE]')
+      // Redact telegram links
+      .replace(/t\.me\/[a-zA-Z0-9_]+/gi, '[REDACTED_LINK]')
+      .trim()
+  );
 }

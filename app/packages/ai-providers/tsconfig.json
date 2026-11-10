@@ -6,7 +6,7 @@
     "rootDir": "src",
     "tsBuildInfoFile": "tsconfig.tsbuildinfo"
   },
-  "references": [{ "path": "../application" }, { "path": "../config" }, { "path": "../codex-cli" }],
+  "references": [{ "path": "../application" }, { "path": "../config" }, { "path": "../codex-cli" }, { "path": "../common" }],
   "include": ["src/**/*.ts"],
   "exclude": ["dist", "node_modules"]
 }

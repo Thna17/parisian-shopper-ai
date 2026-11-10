@@ -64,7 +64,7 @@ import { ReconcileUsageDto } from './dto/reconcile-usage.dto.js';
 
 @ApiTags('Analytics & FinOps')
 @ApiCookieAuth('session')
-@Controller('v1/analytics')
+@Controller('analytics')
 @UseGuards(SessionAuthGuard, PermissionsGuard)
 export class AnalyticsController {
   public constructor(
@@ -199,11 +199,12 @@ export class AnalyticsController {
   @RequirePermissions(Permission.VIEW_AI_COSTS)
   public async getBudgetUtilization(
     @CurrentUser() user: SanitizedEmployeeDto,
-  ): Promise<BudgetUtilizationResult> {
+  ): Promise<BudgetUtilizationResult | { configured: false }> {
     try {
-      return await this.activeBudgetUseCase.execute({
+      const result = await this.activeBudgetUseCase.execute({
         permissions: user.permissions,
       });
+      return result ?? { configured: false };
     } catch (error) {
       this.handleError(error);
     }
