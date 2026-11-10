@@ -220,6 +220,14 @@ export interface PaginatedCreativeProjects {
 export interface CreativeProjectDetail {
   readonly project: CreativeSceneRecord;
   readonly currentVersion: CreativeSceneVersionRecord;
+  readonly contentVersion?: {
+    readonly id: string;
+    readonly headline?: string;
+    readonly englishCaption?: string;
+    readonly khmerCaption?: string;
+    readonly cta?: string;
+    readonly hashtags?: readonly string[];
+  } | null;
   readonly productSnapshot: {
     readonly id: string;
     readonly sku: string;
@@ -244,6 +252,7 @@ export interface CreativeProjectDetail {
   }[];
   readonly canEdit: boolean;
   readonly canApprove: boolean;
+  readonly sourceContentInvalid?: boolean;
   readonly canExport: boolean;
   readonly approvalIneligibilityReasons?: readonly string[];
   readonly creativeJob?: {
@@ -267,7 +276,7 @@ export interface ValidationAssessmentResult {
   readonly infoCount: number;
   readonly findings: readonly ValidationFinding[];
   readonly aestheticScore: number;
-  readonly scoreBreakdown: {
+  readonly scoreBreakdown?: {
     readonly typographyLegibility: number;
     readonly spatialBalance: number;
     readonly focalProminence: number;

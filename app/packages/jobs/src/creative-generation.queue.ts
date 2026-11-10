@@ -35,8 +35,9 @@ export class CreativeGenerationQueue implements OnModuleInit, CreativeGeneration
     const queue = new Queue<CreativeGenerationJobData>(QueueName.CREATIVE_GENERATION, {
       connection: createBullMqConnection(client),
       defaultJobOptions: {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 1_000 },
+        // A failure can happen after a provider has charged for a request.
+        // Never automatically submit the same work a second time.
+        attempts: 1,
         removeOnComplete: { count: 1_000 },
         removeOnFail: { count: 5_000 },
       },
@@ -50,8 +51,7 @@ export class CreativeGenerationQueue implements OnModuleInit, CreativeGeneration
     const deduplicationId = data.creativeJobId ?? data.contentVersionId;
     await queue.add(CreativeGenerationJobName.GENERATE_CREATIVE, data, {
       jobId: `creative-${deduplicationId}-${Date.now()}`,
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 1_000 },
+      attempts: 1,
     });
   }
 }

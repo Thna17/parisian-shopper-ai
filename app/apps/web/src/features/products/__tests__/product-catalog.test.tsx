@@ -94,10 +94,10 @@ describe('Product Catalog (WEB-PROD-01 to WEB-PROD-05, WEB-PROD-09, WEB-PROD-10,
 
     renderWithProviders(<ProductCatalogPage />);
 
-    expect(screen.getByText('Products Catalog')).toBeInTheDocument();
+    expect(screen.getByText('Products & Promotions')).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Authoritative luxury perfume catalog synchronized with commercial verification/i,
+        /Manage product information, saved product imagery and authorized offers/i,
       ),
     ).toBeInTheDocument();
 

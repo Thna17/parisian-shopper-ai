@@ -1,7 +1,7 @@
 import { type ContentVersion } from '../../content/application/content-generation.repository.js';
 import { type ProductSnapshot } from '../../products/application/product-snapshot.repository.js';
 
-export const FACTUAL_VALIDATOR_VERSION = 'ps-factual-v1';
+export const FACTUAL_VALIDATOR_VERSION = 'ps-factual-v2';
 
 export const FindingSeverity = {
   INFO: 'INFO',

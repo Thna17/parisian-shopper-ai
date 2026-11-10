@@ -11,11 +11,13 @@
   ],
   "dependencies": {
     "@higgsfield/client": "0.2.6",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@nestjs/common": "12.1.2",
     "@parisian-shopper/application": "workspace:0.1.0",
     "@parisian-shopper/codex-cli": "workspace:0.1.0",
     "@parisian-shopper/common": "workspace:0.1.0",
     "@parisian-shopper/config": "workspace:0.1.0",
+    "@parisian-shopper/database": "workspace:0.1.0",
     "rxjs": "7.8.2",
     "sharp": "0.33.5"
   }

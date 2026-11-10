@@ -18,7 +18,7 @@ export class GetActiveBudgetUseCase {
     private readonly budgetLedgerRepo: BudgetLedgerRepository,
   ) {}
 
-  public async execute(input: GetActiveBudgetInput): Promise<BudgetUtilizationResult> {
+  public async execute(input: GetActiveBudgetInput): Promise<BudgetUtilizationResult | null> {
     const hasPermission =
       input.permissions.includes(Permission.VIEW_AI_COSTS) ||
       input.permissions.includes(Permission.VIEW_ALL_CONTENT);
@@ -34,17 +34,9 @@ export class GetActiveBudgetUseCase {
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999),
     );
 
-    let policy = await this.budgetLedgerRepo.getActivePolicy();
-    if (!policy) {
-      // Create initial authoritative default policy ($20.00 USD monthly ceiling)
-      policy = await this.budgetLedgerRepo.createPolicy({
-        monthlyCeiling: 20.0,
-        perRequestCeiling: 2.0,
-        softAlertThreshold: 80.0,
-        effectiveFrom: periodStart,
-        actorUserId: '00000000-0000-0000-0000-000000000000',
-      });
-    }
+    const policy = await this.budgetLedgerRepo.getActivePolicy();
+    // Viewing a report cannot create spending authority or invent a business policy.
+    if (!policy) return null;
 
     return this.budgetLedgerRepo.getBudgetUtilization(policy.id, periodStart, periodEnd);
   }

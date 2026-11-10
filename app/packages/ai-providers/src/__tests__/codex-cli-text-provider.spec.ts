@@ -304,6 +304,18 @@ describe('CodexCliTextProvider', () => {
     });
   });
 
+  it('does not silently fall back to a mock when the Post adapter disables development fallback', async () => {
+    process.env.NODE_ENV = 'development';
+    const runner = {
+      run: jest
+        .fn<CodexCliRunner['run']>()
+        .mockRejectedValue(new CodexCliNotAuthenticatedError('Fixture missing login')),
+    } as unknown as CodexCliRunner;
+    const provider = new CodexCliTextProvider({ runner, allowDevelopmentFallback: false });
+    await expect(
+      provider.generate(sampleContext, new AbortController().signal),
+    ).rejects.toMatchObject({ code: 'AI_PROVIDER_UNAVAILABLE' });
+  });
   it('maps authentication failure to AI_PROVIDER_UNAVAILABLE with retryable=true', async () => {
     const fakeRunner = {
       run: jest

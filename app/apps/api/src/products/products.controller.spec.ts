@@ -1,14 +1,22 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import { describe, expect, it, beforeEach, jest } from '@jest/globals';
+import { type ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import {
   FICTIONAL_PRODUCTS,
+  Permission,
   ProductSnapshotNotFoundError,
+  type GetCurrentEmployeeUseCase,
+  type ProductAssetEligibilityEvaluator,
+  type ProductAssetRepository,
+  type ProductCatalogSyncEnqueuer,
+  type ProductFreshnessAssessmentRepository,
   type ProductSnapshot,
   type ProductSnapshotRepository,
-  type ProductFreshnessAssessmentRepository,
-  type ProductAssetRepository,
-  type ProductAssetEligibilityEvaluator,
+  type SanitizedEmployeeDto,
+  SyncMekhlaCatalogUseCase,
 } from '@parisian-shopper/application';
+import { type AppConfigService } from '@parisian-shopper/config';
+import { ProductSyncAuthGuard } from './guards/product-sync-auth.guard.js';
 import { ProductsController } from './products.controller.js';
 import { ProductsService } from './products.service.js';
 
@@ -41,6 +49,8 @@ describe('ProductsController & ProductsService (API-002)', () => {
   let mockAssetRepo: jest.Mocked<ProductAssetRepository>;
   let mockAssessmentRepo: jest.Mocked<ProductFreshnessAssessmentRepository>;
   let mockAssetEvaluator: jest.Mocked<ProductAssetEligibilityEvaluator>;
+  let mockSyncUseCase: jest.Mocked<SyncMekhlaCatalogUseCase>;
+  let mockSyncEnqueuer: ProductCatalogSyncEnqueuer;
   let service: ProductsService;
   let controller: ProductsController;
 
@@ -172,11 +182,33 @@ describe('ProductsController & ProductsService (API-002)', () => {
       ),
     } as unknown as jest.Mocked<ProductAssetEligibilityEvaluator>;
 
+    mockSyncUseCase = {
+      execute: jest.fn<SyncMekhlaCatalogUseCase['execute']>().mockResolvedValue({
+        status: 'COMPLETED',
+        synced: 2,
+        skipped: 8,
+        totalDiscovered: 10,
+        cutoutsProcessed: 2,
+        durationMs: 120,
+        syncedSkus: ['FIC-PERF-001'],
+        skippedSkus: [],
+        errors: [],
+      }),
+    } as unknown as jest.Mocked<SyncMekhlaCatalogUseCase>;
+
+    mockSyncEnqueuer = {
+      enqueue: jest.fn<ProductCatalogSyncEnqueuer['enqueue']>().mockResolvedValue({
+        jobId: 'catalog-sync-mock-123',
+      }),
+    };
+
     service = new ProductsService(
       mockSnapshotRepo,
       mockAssetRepo,
       mockAssessmentRepo,
       mockAssetEvaluator,
+      mockSyncUseCase,
+      mockSyncEnqueuer,
     );
 
     controller = new ProductsController(service);
@@ -299,6 +331,8 @@ describe('ProductsController & ProductsService (API-002)', () => {
     expect(detail.registeredAssets).toHaveLength(1);
     expect(detail.registeredAssets?.[0]?.role).toBe('HERO_CUTOUT');
     expect(detail.registeredAssets?.[0]?.rightsState).toBe('VERIFIED');
+    expect(detail.images[0]?.rightsState).toBe('UNREVIEWED');
+    expect(detail.images[0]?.isHeroCutout).toBe(false);
   });
 
   // PROD-API-11 — No secret exposure
@@ -319,5 +353,129 @@ describe('ProductsController & ProductsService (API-002)', () => {
     await expect(controller.getProductById('00000000-0000-0000-0000-000000000000')).rejects.toThrow(
       ProductSnapshotNotFoundError,
     );
+  });
+
+  // PROD-API-13 — Background catalog synchronization
+  it('PROD-API-13: syncProducts enqueues background job by default', async () => {
+    const actor: SanitizedEmployeeDto = {
+      id: 'emp-001',
+      displayName: 'Marketing Editor',
+      status: 'ACTIVE',
+      roles: ['ADMIN'],
+      permissions: [Permission.MANAGE_PRODUCTS, Permission.ADMIN],
+    };
+
+    const response = await controller.syncProducts({ force: true }, actor);
+    expect(response.status).toBe('QUEUED');
+    expect(response.jobId).toBe('catalog-sync-mock-123');
+    expect(mockSyncEnqueuer.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ force: true, requestedBy: 'emp-001' }),
+    );
+  });
+
+  // PROD-API-14 — Synchronous catalog execution
+  it('PROD-API-14: syncProducts executes synchronously when sync=true is requested', async () => {
+    const response = await controller.syncProducts({ sync: true, force: false });
+    expect(response.status).toBe('COMPLETED');
+    expect(response.synced).toBe(2);
+    expect(response.skipped).toBe(8);
+    expect(response.cutoutsProcessed).toBe(2);
+    expect(mockSyncUseCase.execute).toHaveBeenCalled();
+  });
+
+  describe('ProductSyncAuthGuard', () => {
+    const mockAppConfig = {
+      productApi: {
+        syncWebhookKey: 'production-secret-key-12345',
+      },
+    } as unknown as AppConfigService;
+
+    const mockGetEmployeeUseCase = {
+      execute: jest.fn<GetCurrentEmployeeUseCase['execute']>(),
+    } as unknown as jest.Mocked<GetCurrentEmployeeUseCase>;
+
+    let guard: ProductSyncAuthGuard;
+
+    const createMockContext = (req: {
+      headers: Record<string, string>;
+      cookies?: Record<string, string>;
+    }): ExecutionContext =>
+      ({
+        switchToHttp: (): { getRequest: () => typeof req } => ({
+          getRequest: (): typeof req => req,
+        }),
+      }) as unknown as ExecutionContext;
+
+    beforeEach(() => {
+      guard = new ProductSyncAuthGuard(mockAppConfig, mockGetEmployeeUseCase);
+    });
+
+    it('allows access with valid x-webhook-key header without session cookie', async () => {
+      const mockContext = createMockContext({
+        headers: { 'x-webhook-key': 'production-secret-key-12345' },
+      });
+
+      const canActivate = await guard.canActivate(mockContext);
+      expect(canActivate).toBe(true);
+    });
+
+    it('allows access for authenticated employee possessing MANAGE_PRODUCTS permission', async () => {
+      mockGetEmployeeUseCase.execute.mockResolvedValueOnce({
+        id: 'user-admin',
+        displayName: 'Catalog Admin',
+        status: 'ACTIVE',
+        roles: ['ADMIN'],
+        permissions: [Permission.MANAGE_PRODUCTS, Permission.ADMIN],
+      });
+
+      const mockContext = createMockContext({
+        headers: {},
+        cookies: { ps_session: 'valid-session-token' },
+      });
+
+      const canActivate = await guard.canActivate(mockContext);
+      expect(canActivate).toBe(true);
+    });
+
+    it('throws UnauthorizedException when neither session cookie nor webhook header is present', async () => {
+      const mockContext = createMockContext({
+        headers: {},
+        cookies: {},
+      });
+
+      await expect(guard.canActivate(mockContext)).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('throws ForbiddenException when employee lacks MANAGE_PRODUCTS permission', async () => {
+      mockGetEmployeeUseCase.execute.mockResolvedValueOnce({
+        id: 'user-viewer',
+        displayName: 'Read-only Viewer',
+        status: 'ACTIVE',
+        roles: ['VIEWER'],
+        permissions: [Permission.VIEW_PRODUCTS],
+      });
+
+      const mockContext = createMockContext({
+        headers: {},
+        cookies: { ps_session: 'viewer-token' },
+      });
+
+      await expect(guard.canActivate(mockContext)).rejects.toThrow(ForbiddenException);
+    });
+  });
+  it('does not display an unapproved source offer as a usable promotional price or rewrite its stored facts', async () => {
+    const raw = structuredClone(sampleSnapshot1);
+    raw.product.product.promo_price = '25';
+    raw.product.product.discount = {
+      type: 'fixed_amount',
+      value: '13',
+      calculation_method: 'fixture',
+      starts_at: '2026-01-01T00:00:00.000Z',
+      ends_at: '2099-01-01T00:00:00.000Z',
+    };
+    mockSnapshotRepo.findById.mockResolvedValueOnce(raw);
+    const detail = await controller.getProductById(raw.id);
+    expect(detail.promoPrice).toBeNull();
+    expect(raw.product.product.promo_price).toBe('25');
   });
 });

@@ -1,3 +1,5 @@
+import {ProductMarketingEligibilityService} from '../../products/application/product-marketing-eligibility.service.js';
+import {resolvePermissionsForRoles} from '../../auth/domain/permissions.js';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -137,6 +139,7 @@ export class ExportPosterUseCase {
     @Optional()
     @Inject(CREATIVE_SCENE_REPOSITORY)
     private readonly sceneRepo?: CreativeSceneRepository,
+    @Optional() private readonly productMarketing?:ProductMarketingEligibilityService,
   ) {
     this.posterCompositor = posterCompositor ?? new SharpPosterCompositor();
   }
@@ -242,6 +245,7 @@ export class ExportPosterUseCase {
     const contentVersion = await this.contentRepo.findVersionById(job.contentVersionId);
     if (!contentVersion) throw new ValidationError({ publicMessage: 'Content version not found.' });
 
+    if(this.productMarketing){const contentJob=await this.contentRepo.findJobById(contentVersion.contentJobId);if(!contentJob)throw new ValidationError({publicMessage:'The product purpose for this export is missing.'});await this.productMarketing.assert({snapshotId:job.productSnapshotId,creationPlan:{purpose:contentJob.contentType==='SCENT_PYRAMID'?'EDUCATIONAL':contentJob.contentType==='PROMOTION'?'PROMOTION':'PRODUCT_SPOTLIGHT',...(contentJob.contentType==='SCENT_PYRAMID'?{educationMode:'FRAGRANCE_NOTES'}:{})},caption:contentVersion.structuredOutput,campaignId:contentJob.campaignId??null,action:'EXPORT'},{id:input.actorUserId,permissions:resolvePermissionsForRoles(input.actorRoles)});}
     // Idempotency check: Reuse existing export if already recorded in ledger and CAS
     if (this.exportRepo) {
       const existing = await this.exportRepo.findByAssetAndFormat(

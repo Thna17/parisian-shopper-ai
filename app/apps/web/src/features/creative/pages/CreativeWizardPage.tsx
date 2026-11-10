@@ -1,8 +1,11 @@
+import { useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Sparkles, Package, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Sparkles, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { productsApi } from '../../products/api/products-api.js';
+import { ProductContextSelector } from '../../content/components/ProductContextSelector.js';
+import type { ProductSummary } from '../../products/types/product.types.js';
 import { contentApi } from '../../content/api/content-api.js';
 import { useCreateCreativeProject, useCreativeTemplates } from '../hooks/use-creative.js';
 import { CreativeFormatSelector } from '../components/CreativeFormatSelector.js';
@@ -14,38 +17,66 @@ export const CreativeWizardPage: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
 
   // Form State
-  const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const [selectedProduct, setSelectedProduct] = useState<ProductSummary | null>(null);
+  const selectedProductId = selectedProduct?.id ?? '';
   const [selectedContentVersionId, setSelectedContentVersionId] = useState<string>('');
   const [selectedTemplateId, setSelectedTemplateId] = useState<SceneTemplateId>('EDITORIAL_SPLIT');
   const [selectedAspectRatio, setSelectedAspectRatio] = useState<PosterAspectRatio>('1:1');
-  const [selectedLanguage] = useState<SceneLanguage>('EN');
+  const [selectedLanguage, setSelectedLanguage] = useState<SceneLanguage>('EN');
   const [projectTitle, setProjectTitle] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Queries
-  const { data: productsData, isLoading: isLoadingProducts } = useQuery({
-    queryKey: ['products-for-creative'],
-    queryFn: () => productsApi.getProducts({ limit: 50 }),
-  });
-
-  const { data: contentJobsData, isLoading: isLoadingContentJobs } = useQuery({
-    queryKey: ['content-jobs-for-creative', selectedProductId],
-    queryFn: () => contentApi.getJobs({ limit: 50 }),
+  const {
+    data: contentResult,
+    isLoading: isLoadingContentJobs,
+    isError: contentError,
+  } = useQuery({
+    queryKey: ['approved-content-for-creative', selectedProductId],
+    queryFn: async () => {
+      const jobs = await contentApi.getJobs({
+        limit: 50,
+        status: 'APPROVED',
+        productSnapshotId: selectedProductId,
+      });
+      const results = await Promise.allSettled(
+        jobs.items.map((job) => contentApi.getJobById(job.id)),
+      );
+      const details = results.flatMap((result) =>
+        result.status === 'fulfilled' ? [result.value] : [],
+      );
+      return {
+        unavailable: results.filter((result) => result.status === 'rejected').length,
+        versions: details.filter(
+          (detail) =>
+            detail.job.status === 'APPROVED' &&
+            detail.job.productSnapshotId === selectedProductId &&
+            detail.currentVersion,
+        ),
+      };
+    },
     enabled: Boolean(selectedProductId),
   });
 
+  const contentVersions = contentResult?.versions ?? [];
   const { data: templates = [] } = useCreativeTemplates();
+  const [searchParams] = useSearchParams();
+  const requestedTemplate = searchParams.get('template');
+  const appliedTemplate = useRef<string | null>(null);
+  useEffect(() => {
+    const template = templates.find((item) => item.id === requestedTemplate);
+    if (template && appliedTemplate.current !== template.id) {
+      setSelectedTemplateId(template.id);
+      appliedTemplate.current = template.id;
+    }
+  }, [templates, requestedTemplate]);
+
   const createMutation = useCreateCreativeProject();
 
-  const selectedProduct = productsData?.data.find((p) => p.id === selectedProductId);
-
-  // Set default title when product is selected
-  const handleSelectProduct = (productId: string) => {
-    setSelectedProductId(productId);
-    const prod = productsData?.data.find((p) => p.id === productId);
-    if (prod && !projectTitle) {
-      setProjectTitle(`${prod.title} — Official Poster`);
-    }
+  const handleSelectProduct = (product: ProductSummary) => {
+    setSelectedProduct(product);
+    setSelectedContentVersionId('');
+    setProjectTitle(`${product.title} — Official Poster`);
   };
 
   const handleNext = () => {
@@ -109,9 +140,7 @@ export const CreativeWizardPage: React.FC = () => {
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
-            <h1 className="text-xl font-serif font-bold text-app-primary">
-              New Creative Poster Composition
-            </h1>
+            <h1 className="text-xl font-serif font-bold text-app-primary">Create a poster</h1>
             <p className="text-xs text-app-muted">
               Step {currentStep} of 4: {getStepTitle(currentStep)}
             </p>
@@ -154,53 +183,18 @@ export const CreativeWizardPage: React.FC = () => {
         <div className="p-6 rounded-2xl border border-app-border bg-app-surface space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-app-primary uppercase tracking-wider">
-              Select Verified Product Snapshot
+              Choose a product
             </h3>
             <p className="text-xs text-app-muted mt-1">
-              Every poster must be anchored to an immutable ProductSnapshot with verified MSRP
-              truth.
+              Choose the product you want to feature. Its catalog details will be used in your
+              poster.
             </p>
           </div>
 
-          {isLoadingProducts ? (
-            <div className="text-center py-12 text-app-muted">Loading products...</div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-1">
-              {productsData?.data.map((product) => {
-                const isSelected = selectedProductId === product.id;
-                return (
-                  <button
-                    key={product.id}
-                    type="button"
-                    onClick={() => handleSelectProduct(product.id)}
-                    className={`p-4 rounded-xl border text-left transition-all flex items-start gap-3.5 ${
-                      isSelected
-                        ? 'border-brand-burgundy bg-brand-burgundy/5 ring-1 ring-brand-burgundy'
-                        : 'border-app-border bg-app-surface hover:border-app-muted/60'
-                    }`}
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-app-surface-subtle border border-app-border flex items-center justify-center shrink-0">
-                      <Package className="w-5 h-5 text-brand-burgundy" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#EAD9BD]/20 text-[#5F4A2C]">
-                          {product.sku}
-                        </span>
-                        <span className="text-xs font-mono font-bold text-app-primary">
-                          ${product.price.amount.toFixed(2)} {product.price.currency}
-                        </span>
-                      </div>
-                      <div className="font-semibold text-xs text-app-primary truncate">
-                        {product.title}
-                      </div>
-                      <div className="text-[11px] text-app-muted truncate">{product.brand}</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <ProductContextSelector
+            selectedSnapshotId={selectedProductId || null}
+            onSelect={handleSelectProduct}
+          />
         </div>
       )}
 
@@ -209,28 +203,50 @@ export const CreativeWizardPage: React.FC = () => {
         <div className="p-6 rounded-2xl border border-app-border bg-app-surface space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-app-primary uppercase tracking-wider">
-              Select Source Content Version
+              Choose approved copy
             </h3>
             <p className="text-xs text-app-muted mt-1">
-              Select the validated headline and advertising copy that will populate the poster
-              typography.
+              Choose approved copy for this product to use in your poster.
             </p>
           </div>
 
+          {Boolean(contentResult?.unavailable) && (
+            <p role="alert" className="text-sm text-amber-700">
+              Some approved copy could not be loaded. Open it in Marketing copy or contact an
+              administrator.
+            </p>
+          )}
           {isLoadingContentJobs ? (
             <div className="text-center py-12 text-app-muted">Loading content versions...</div>
+          ) : contentError ? (
+            <p role="alert" className="text-sm text-red-700">
+              Could not load approved copy. Please try again.
+            </p>
+          ) : contentVersions.length === 0 ? (
+            <p className="text-sm text-app-muted">
+              {contentResult?.unavailable
+                ? 'No available approved copy could be loaded for this product.'
+                : 'No approved copy was found for this product.'}{' '}
+              <Link to="/content/new" className="font-semibold underline">
+                Create copy
+              </Link>{' '}
+              and request a review first.
+            </p>
           ) : (
             <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-              {contentJobsData?.items.map((job) => {
-                // Use job's latest contentVersion or dummy fallback
-                const versionId = job.id; // job id or associated version
+              {contentVersions.map((detail) => {
+                const job = detail.job;
+                const versionId = detail.currentVersion!.id;
                 const isSelected = selectedContentVersionId === versionId;
 
                 return (
                   <button
                     key={job.id}
                     type="button"
-                    onClick={() => setSelectedContentVersionId(versionId)}
+                    onClick={() => {
+                      setSelectedContentVersionId(versionId);
+                      setSelectedLanguage(job.language);
+                    }}
                     className={`p-4 rounded-xl border text-left w-full transition-all ${
                       isSelected
                         ? 'border-brand-burgundy bg-brand-burgundy/5 ring-1 ring-brand-burgundy'
@@ -388,9 +404,9 @@ export const CreativeWizardPage: React.FC = () => {
 function getStepTitle(step: number): string {
   switch (step) {
     case 1:
-      return 'Select Verified Product Snapshot';
+      return 'Choose a product';
     case 2:
-      return 'Select Authorized Content Version';
+      return 'Choose approved copy';
     case 3:
       return 'Choose Canonical Template & Ratio';
     case 4:

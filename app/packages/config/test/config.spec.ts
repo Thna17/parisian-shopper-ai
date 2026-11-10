@@ -61,6 +61,28 @@ describe('configuration validation', () => {
     ).toThrow(/OPENAI_API_KEY is required|OPENAI_MODEL is required/);
   });
 
+  it('requires a DeepSeek key when enabled with the DeepSeek provider', () => {
+    expect(() =>
+      validateEnvironment({
+        ...minimumEnvironment,
+        FEATURE_AI_TEXT_GENERATION: 'true',
+        AI_PROVIDER: 'deepseek',
+      }),
+    ).toThrow(/DEEPSEEK_API_KEY is required/);
+  });
+
+  it('accepts DeepSeek configuration when key is provided', () => {
+    const config = validateEnvironment({
+      ...minimumEnvironment,
+      FEATURE_AI_TEXT_GENERATION: 'true',
+      AI_PROVIDER: 'deepseek',
+      DEEPSEEK_API_KEY: 'sk-test-deepseek-key',
+    });
+    expect(config.AI_PROVIDER).toBe('deepseek');
+    expect(config.DEEPSEEK_MODEL).toBe('deepseek-chat');
+    expect(config.DEEPSEEK_BASE_URL).toBe('https://api.deepseek.com');
+  });
+
   it('does not silently use fake AI in production', () => {
     expect(() =>
       validateEnvironment({
@@ -157,11 +179,21 @@ describe('configuration validation', () => {
   });
 
   it.each(['FEATURE_AUTO_PUBLISHING', 'FEATURE_META_PUBLISHING'] as const)(
-    'refuses to enable %s during Phase 1A',
+    'refuses to enable %s without required credentials or configuration',
     (flag) => {
       expect(() => validateEnvironment({ ...minimumEnvironment, [flag]: 'true' })).toThrow();
     },
   );
+
+  it('permits FEATURE_META_PUBLISHING when META_ACCESS_TOKEN is provided', () => {
+    expect(() =>
+      validateEnvironment({
+        ...minimumEnvironment,
+        FEATURE_META_PUBLISHING: 'true',
+        META_ACCESS_TOKEN: 'valid-meta-page-access-token-12345678',
+      }),
+    ).not.toThrow();
+  });
 
   it('rejects wildcard CORS in production', () => {
     expect(() =>
@@ -389,5 +421,44 @@ describe('configuration validation', () => {
         }),
       ).toThrow('PRODUCT_API_BUSINESS_ID is required when FEATURE_PRODUCT_API=true');
     });
+  });
+});
+
+describe('persistent post image configuration', () => {
+  it('is disabled by default and never infers app image credentials from MCP or the video key', () => {
+    expect(validateEnvironment(minimumEnvironment).POST_IMAGE_PROVIDER).toBe('disabled');
+    expect(() =>
+      validateEnvironment({
+        ...minimumEnvironment,
+        POST_IMAGE_PROVIDER: 'higgsfield',
+        HF_CREDENTIALS: 'video-only-secret',
+      }),
+    ).toThrow('developer API key');
+  });
+  it('requires exact public output hosts and blocks mock production posters', () => {
+    expect(() =>
+      validateEnvironment({
+        ...minimumEnvironment,
+        POST_IMAGE_PROVIDER: 'higgsfield',
+        HF_POSTER_API_KEY: 'test-key',
+        HF_POSTER_ASSET_HOSTS: 'http://127.0.0.1',
+      }),
+    ).toThrow('hostnames');
+    expect(() =>
+      validateEnvironment({
+        ...minimumEnvironment,
+        NODE_ENV: 'production',
+        POST_IMAGE_PROVIDER: 'fake',
+      }),
+    ).toThrow();
+    expect(
+      validateEnvironment({
+        ...minimumEnvironment,
+        POST_IMAGE_PROVIDER: 'higgsfield',
+        HF_POSTER_API_KEY: 'test-key',
+        HF_POSTER_ASSET_HOSTS: 'images.higgsfield.ai',
+        CREATIVE_ASSET_STORAGE_ROOT: '/tmp/post-config-test-assets',
+      }).POST_IMAGE_CONFIRMED_REQUEST_ID,
+    ).toBeUndefined();
   });
 });

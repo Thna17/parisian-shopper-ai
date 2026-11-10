@@ -1,3 +1,4 @@
+import { BrandGuidanceModule } from './modules/brand/brand-guidance.module.js';
 import { Module } from '@nestjs/common';
 
 import { AiModule } from './modules/ai/ai.module.js';
@@ -19,6 +20,7 @@ import { BudgetModule } from './modules/budget/budget.module.js';
 
 @Module({
   imports: [
+    BrandGuidanceModule,
     AuthModule,
     UsersModule,
     TelegramModule,
@@ -37,6 +39,7 @@ import { BudgetModule } from './modules/budget/budget.module.js';
     BudgetModule,
   ],
   exports: [
+    BrandGuidanceModule,
     AuthModule,
     UsersModule,
     TelegramModule,

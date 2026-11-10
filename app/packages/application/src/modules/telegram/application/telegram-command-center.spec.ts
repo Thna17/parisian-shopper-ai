@@ -331,15 +331,10 @@ describe('TelegramCommandCenter Phase 1F Review Workflow', () => {
         text: 'Emphasize rose notes and shorten opening',
       });
 
-      expect(executeEdit).toHaveBeenCalledWith({
-        contentJobId: 'job-1',
-        contentVersionId: 'ver-1',
-        actorUserId: approverActor.internalUserId,
-        actorRoles: approverActor.roles,
-        instruction: 'Emphasize rose notes and shorten opening',
-      });
-      expect(completePendingInteraction).toHaveBeenCalledWith('pi-1', expect.any(Date));
-      expect(response.messages[0]?.text).toContain('Revision requested with instructions');
+      expect(executeEdit).not.toHaveBeenCalled();
+      expect(completePendingInteraction).not.toHaveBeenCalled();
+      expect(response.messages[0]?.text).toContain('Proposed Caption edit');
+      expect(response.messages[0]?.text).toContain('No generation started');
     });
 
     it('processes user message as rejection comment when pending interaction is REJECT', async () => {
@@ -696,6 +691,9 @@ describe('TelegramCommandCenter Phase 1F Review Workflow', () => {
     };
 
     it('presents Step 5 of 6 with visual style presets upon selecting channel and format', async () => {
+      (mockRepository as unknown as Record<string, unknown>).findFlowById = jest.fn(() =>
+        Promise.resolve(sampleFlow),
+      );
       resolveActor.mockResolvedValueOnce(creatorActor);
       consumeActionToken.mockResolvedValueOnce({
         disposition: 'VALID',
@@ -772,7 +770,7 @@ describe('TelegramCommandCenter Phase 1F Review Workflow', () => {
       expect(response.messages[0]?.action).toBe('EDIT_TEXT');
       // Generate button + navigation row
       expect(response.messages[0]?.buttons?.length).toBe(2);
-      expect(response.messages[0]?.buttons?.[0]?.[0]?.text).toContain('Generate Poster');
+      expect(response.messages[0]?.buttons?.[0]?.[0]?.text).toContain('Caption');
     });
 
     it('enqueues generation and returns progress card upon confirming generation', async () => {
@@ -848,7 +846,7 @@ describe('TelegramCommandCenter Phase 1F Review Workflow', () => {
       expect(completeFlowMock).toHaveBeenCalledWith('flow-123');
       expect(mockEnqueuer.enqueue).toHaveBeenCalledWith('job-999');
 
-      expect(response.messages[0]?.text).toContain('Generating Poster & Copy');
+      expect(response.messages[0]?.text).toContain('Preparing legacy Caption');
       expect(response.messages[0]?.text).toContain('Preparing verified product facts');
       expect(response.messages[0]?.action).toBe('EDIT_TEXT');
       expect(response.callbackNotice).toBe('Generation started!');
@@ -1102,8 +1100,8 @@ describe('TelegramCommandCenter Phase 1F Review Workflow', () => {
         text: '/resume',
       });
 
-      expect(response.messages[0]?.text).toContain('No active draft in progress');
-      expect(response.messages[0]?.text).toContain('Start one with /create');
+      expect(response.messages[0]?.text).toContain('No active product selection');
+      expect(response.messages[0]?.text).toContain('/create SKU');
     });
   });
 });

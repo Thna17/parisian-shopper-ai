@@ -288,8 +288,10 @@ export class StockRule extends Rule {
         /\b(?:available now|in stock|order today|shop now)\b|មានក្នុងស្តុក|បញ្ជាទិញឥឡូវ/iu.test(
           segment.text,
         );
+      const unavailable = /\bout of stock\b|អស់ពីស្តុក/iu.test(segment.text);
       if (
-        (available && ['out_of_stock', 'discontinued'].includes(product.stock_status)) ||
+        (unavailable && product.stock_status !== 'out_of_stock') ||
+        (available && !['in_stock', 'low_stock'].includes(product.stock_status)) ||
         (available &&
           ['discontinued', 'deleted'].includes(input.productSnapshot.product.lifecycle_status))
       )

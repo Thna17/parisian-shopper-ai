@@ -25,6 +25,7 @@ export const Permission = {
   VIEW_OPERATIONAL_ANALYTICS: 'VIEW_OPERATIONAL_ANALYTICS',
   VIEW_AI_COSTS: 'VIEW_AI_COSTS',
   MANAGE_AI_BUDGETS: 'MANAGE_AI_BUDGETS',
+  MANAGE_PRODUCTS: 'MANAGE_PRODUCTS',
   ADMIN: 'ADMIN',
 } as const;
 export type Permission = (typeof Permission)[keyof typeof Permission];
@@ -77,6 +78,7 @@ const ROLE_PERMISSIONS: Readonly<Record<RoleCode, readonly Permission[]>> = {
     Permission.VIEW_OPERATIONAL_ANALYTICS,
     Permission.VIEW_AI_COSTS,
     Permission.MANAGE_AI_BUDGETS,
+    Permission.MANAGE_PRODUCTS,
     Permission.ADMIN,
   ],
 };

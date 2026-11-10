@@ -99,6 +99,44 @@ describe('SharpHybridCompositorAdapter (W23-C Multi-Layer Compositor)', () => {
     </svg>
   `);
 
+  it('contains a tall logo within its approved layout box without stretching or overflowing the poster', async () => {
+    const logo = await sharp({
+      create: { width: 10, height: 2000, channels: 4, background: '#ff0000' },
+    })
+      .png()
+      .toBuffer();
+    const result = await compositor.composite({
+      creativeJobId: 'tall-logo-fixture',
+      aspectRatio: '1:1',
+      canvas: { width: 1080, height: 1080 },
+      colorProfile: 'sRGB',
+      layers: [
+        makeLayer(0, 'BACKGROUND', bg1080),
+        makeLayer(300, 'BRAND_LOGO', logo, 'image/png', { x: 54, y: 54, width: 180, height: 180 }),
+      ],
+    });
+    const pixels = await sharp(result.compositedBuffer).raw().toBuffer({ resolveWithObject: true });
+    let marked = 0;
+    let maxX = 0;
+    let maxY = 0;
+    for (let y = 0; y < pixels.info.height; y++)
+      for (let x = 0; x < pixels.info.width; x++) {
+        const index = (y * pixels.info.width + x) * pixels.info.channels;
+        if (
+          pixels.data[index]! > 200 &&
+          pixels.data[index + 1]! < 40 &&
+          pixels.data[index + 2]! < 40
+        ) {
+          marked++;
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+        }
+      }
+    expect(marked).toBeGreaterThan(0);
+    expect(maxX).toBeLessThan(58);
+    expect(maxY).toBeLessThan(234);
+  });
+
   describe('1. Full 8-Layer Composition Across Canvases (1:1, 4:5, 9:16)', () => {
     it('successfully composites 8 layers on a 1:1 canvas (1080x1080)', async () => {
       const layers: readonly CompositorLayerInput[] = [

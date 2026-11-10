@@ -48,6 +48,15 @@ export const discountSchema = z
     type: z.enum(['percentage', 'fixed_amount', 'none']),
     value: decimalStringSchema,
     label: z.string().trim().min(1).max(120).optional(),
+    approval: z
+      .object({
+        status: z.literal('approved'),
+        approved_by: z.string().trim().min(1).max(160),
+        approved_at: z.iso.datetime({ offset: true }).transform(toCanonicalTimestamp),
+        reference: z.string().trim().min(1).max(500),
+      })
+      .strict()
+      .optional(),
     calculation_method: z.string().trim().min(1).max(100),
     starts_at: z.iso.datetime({ offset: true }).transform(toCanonicalTimestamp).optional(),
     ends_at: z.iso.datetime({ offset: true }).transform(toCanonicalTimestamp).optional(),

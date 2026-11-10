@@ -2,6 +2,7 @@ export const QueueName = Object.freeze({
   CONTENT_GENERATION: 'content-generation',
   CONTENT_VALIDATION: 'content-validation',
   CREATIVE_GENERATION: 'creative-generation',
+  PRODUCT_CATALOG_SYNC: 'product-catalog-sync',
 } as const);
 
 export type QueueName = (typeof QueueName)[keyof typeof QueueName];
@@ -16,4 +17,8 @@ export const ContentValidationJobName = Object.freeze({
 
 export const CreativeGenerationJobName = Object.freeze({
   GENERATE_CREATIVE: 'GENERATE_CREATIVE',
+} as const);
+
+export const ProductCatalogSyncJobName = Object.freeze({
+  SYNC_CATALOG: 'SYNC_CATALOG',
 } as const);

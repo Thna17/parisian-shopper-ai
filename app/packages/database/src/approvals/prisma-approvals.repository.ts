@@ -252,6 +252,7 @@ export class PrismaApprovalsRepository implements ApprovalsRepository {
                 contentVersionId: targetVersion.id,
                 approvalEventId: approval.id,
                 approverUserId: input.approverUserId,
+                requesterUserId: job.requesterUserId,
               },
               occurredAt: approval.createdAt,
               availableAt: approval.createdAt,
@@ -616,6 +617,7 @@ export class PrismaApprovalsRepository implements ApprovalsRepository {
     const record = await this.prisma.telegramPendingReviewInteraction.findFirst({
       where: {
         telegramIdentityId,
+        postId: null,
         completedAt: null,
         cancelledAt: null,
         expiresAt: { gt: now },
@@ -680,6 +682,8 @@ function toApprovalRecord(
 }
 
 function toPendingRecord(record: PrismaPendingInteraction): PendingReviewInteractionRecord {
+  if (!record.contentJobId || !record.contentVersionId)
+    throw new Error('Expected a legacy caption interaction');
   return {
     id: record.id,
     telegramIdentityId: record.telegramIdentityId,

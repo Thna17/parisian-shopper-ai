@@ -42,6 +42,15 @@ export const CreativeProjectsPage: React.FC = () => {
         )}
       </div>
 
+      {import.meta.env.DEV && (
+        <Link
+          to="/creative/higgsfield-pilot"
+          className="block rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-app-primary"
+        >
+          View imported Higgsfield test concept — unapproved local preview
+        </Link>
+      )}
+
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-center gap-3">
         <div className="relative flex-1 w-full">

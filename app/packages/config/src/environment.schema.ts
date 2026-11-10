@@ -1,3 +1,4 @@
+import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 
 const booleanFromEnvironment = z.preprocess((value) => {
@@ -30,6 +31,7 @@ export const environmentSchema = z
     APP_NAME: z.string().trim().min(1).max(100).default('parisian-shopper-ai'),
     APP_HOST: z.string().trim().min(1).default('127.0.0.1'),
     APP_PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
+    POST_CAPTION_REAL_DISPATCH_ENABLED: booleanFromEnvironment.default(false),
     APP_CORS_ORIGINS: z.string().default(''),
     APP_BODY_LIMIT: z
       .string()
@@ -57,13 +59,27 @@ export const environmentSchema = z
     TELEGRAM_WEBHOOK_URL: optionalUrl,
     TELEGRAM_WEBHOOK_SECRET: optionalSecret,
     TELEGRAM_ACTION_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3_600).default(900),
-    TELEGRAM_CHANNEL_ID: z.string().trim().min(1).optional(),
-    AI_PROVIDER: z.enum(['fake', 'openai', 'codex_cli']).default('fake'),
+    TELEGRAM_CHANNEL_ID: z.string().trim().min(1).default('@parisian_shopper_kh'),
+    META_GRAPH_API_VERSION: z.string().trim().default('v21.0'),
+    META_ACCESS_TOKEN: optionalSecret,
+    META_FACEBOOK_PAGE_ID: z.string().trim().optional(),
+    META_INSTAGRAM_ACCOUNT_ID: z.string().trim().optional(),
+    PUBLISHING_FOUR_EYES_SECRET: z
+      .string()
+      .min(16)
+      .default('parisian-shopper-four-eyes-secret-production-key'),
+    AI_PROVIDER: z.enum(['fake', 'openai', 'codex_cli', 'deepseek']).default('fake'),
     OPENAI_API_KEY: optionalSecret,
     OPENAI_MODEL: z.preprocess(
       (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
       z.string().trim().min(1).max(200).optional(),
     ),
+    DEEPSEEK_API_KEY: optionalSecret,
+    DEEPSEEK_MODEL: z.preprocess(
+      (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+      z.string().trim().min(1).max(200).default('deepseek-chat'),
+    ),
+    DEEPSEEK_BASE_URL: optionalUrl.default('https://api.deepseek.com'),
     AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
     AI_ATTEMPT_STALE_AFTER_MS: z.coerce.number().int().min(2_000).max(300_000).default(35_000),
     AI_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
@@ -79,6 +95,8 @@ export const environmentSchema = z
     PRODUCT_API_ALLOWED_HOSTS: z.string().default('api.mekhla.digital'),
     PRODUCT_API_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(3_000),
     PRODUCT_API_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
+    PRODUCT_CATALOG_SYNC_CRON: z.string().trim().default('0 */6 * * *'),
+    PRODUCT_SYNC_WEBHOOK_KEY: optionalSecret,
     RUN_PRODUCT_API_LIVE_TESTS: booleanFromEnvironment.default(false),
 
     CODEX_CLI_TEXT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(120_000),
@@ -106,6 +124,42 @@ export const environmentSchema = z
       .default('bytedance/seedance-2.5/text-to-video'),
     HIGGSFIELD_VIDEO_MAX_WAIT_MS: z.coerce.number().int().min(10_000).max(900_000).default(300_000),
     HIGGSFIELD_GENERATE_AUDIO: booleanFromEnvironment.default(false),
+    POST_IMAGE_PROVIDER: z
+      .enum(['disabled', 'fake', 'higgsfield', 'higgsfield_mcp'])
+      .default('disabled'),
+    HF_MCP_ENCRYPTION_KEY: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+    ),
+    HF_MCP_REDIRECT_URI: optionalUrl,
+    HF_MCP_CLIENT_ID: optionalSecret,
+    HF_MCP_CLIENT_SECRET: optionalSecret,
+    HF_MCP_CLIENT_AUTH_METHOD: z
+      .enum(['client_secret_post', 'client_secret_basic'])
+      .default('client_secret_post'),
+    HF_MCP_DISPATCH_ENABLED: booleanFromEnvironment.default(false),
+    HF_MCP_SHARED_USE_CONFIRMED: booleanFromEnvironment.default(false),
+    HF_POSTER_API_KEY: optionalSecret,
+    HF_POSTER_ASSET_HOSTS: z
+      .string()
+      .refine(
+        (value) =>
+          !value ||
+          value
+            .split(',')
+            .every((host) =>
+              /^(?!.*(?:localhost|\.local$))(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,63}$/.test(
+                host.trim(),
+              ),
+            ),
+        'Use exact public HTTPS output hostnames, without wildcards, URLs or IP addresses',
+      )
+      .default(''),
+    // One exact durable request, enabled only after an operator verifies the preflight and gets confirmation.
+    POST_IMAGE_CONFIRMED_REQUEST_ID: z.string().uuid().optional(),
     HF_CREDENTIALS: optionalSecret,
     RUN_HIGGSFIELD_LIVE_TESTS: booleanFromEnvironment.default(false),
     FEATURE_TELEGRAM: booleanFromEnvironment.default(false),
@@ -176,6 +230,19 @@ export const environmentSchema = z
         code: 'custom',
         path: ['OPENAI_MODEL'],
         message: 'OPENAI_MODEL is required when AI text generation uses OpenAI',
+      });
+    }
+
+    if (
+      environment.FEATURE_AI_TEXT_GENERATION &&
+      environment.AI_PROVIDER === 'deepseek' &&
+      environment.DEEPSEEK_API_KEY === undefined &&
+      environment.OPENAI_API_KEY === undefined
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['DEEPSEEK_API_KEY'],
+        message: 'DEEPSEEK_API_KEY is required when AI text generation uses DeepSeek',
       });
     }
 
@@ -359,11 +426,41 @@ export const environmentSchema = z
       });
     }
 
-    if (environment.FEATURE_META_PUBLISHING) {
+    if (environment.FEATURE_META_PUBLISHING && environment.META_ACCESS_TOKEN === undefined) {
       context.addIssue({
         code: 'custom',
-        path: ['FEATURE_META_PUBLISHING'],
-        message: 'Meta publishing is unavailable in Phase 1A',
+        path: ['META_ACCESS_TOKEN'],
+        message: 'META_ACCESS_TOKEN is required when FEATURE_META_PUBLISHING=true',
+      });
+    }
+
+    if (
+      environment.POST_IMAGE_PROVIDER !== 'disabled' &&
+      !isAbsolute(environment.CREATIVE_ASSET_STORAGE_ROOT)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['CREATIVE_ASSET_STORAGE_ROOT'],
+        message:
+          'Persistent Post generation requires an absolute shared durable asset directory for the API and worker',
+      });
+    }
+    if (
+      environment.POST_IMAGE_PROVIDER === 'higgsfield' &&
+      (!environment.HF_POSTER_API_KEY || !environment.HF_POSTER_ASSET_HOSTS.trim())
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['HF_POSTER_API_KEY'],
+        message:
+          'Higgsfield posters require a developer API key and HF_POSTER_ASSET_HOSTS output allowlist; MCP authorization is not sufficient',
+      });
+    }
+    if (environment.POST_IMAGE_PROVIDER === 'fake' && environment.NODE_ENV === 'production') {
+      context.addIssue({
+        code: 'custom',
+        path: ['POST_IMAGE_PROVIDER'],
+        message: 'Mock post generation is prohibited in production',
       });
     }
 

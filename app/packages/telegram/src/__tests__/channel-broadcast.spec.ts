@@ -74,6 +74,41 @@ describe('Telegram Channel Broadcast Publishing', () => {
       expect(caption).toContain('\\#Hermes \\#Birkin25 \\#ParisianLuxury');
     });
 
+    it('renders localized Khmer and Latin luxury styling, scent pyramid breakdown, and verified USD price', () => {
+      const caption = ChannelBroadcastRenderer.renderCaption({
+        productName: 'Maison Imaginaire Moonlit River',
+        brand: 'Maison Imaginaire',
+        sku: 'FIC-PERF-001',
+        price: '38.00',
+        currency: 'USD',
+        headline: 'A Night by the Seine',
+        khmerCaption: 'ក្លិនក្រអូបប្រណីតពីប៉ារីស បង្កើតឡើងសម្រាប់ភាពថ្លៃថ្នូរ។',
+        englishCaption: 'Experience Parisian evening mist with pure elegance.',
+        fragranceNotes: {
+          top: ['Bergamot', 'Mandarin'],
+          heart: ['French Rose', 'Jasmine'],
+          base: ['White Musk', 'Cedarwood'],
+        },
+        cta: 'Discover your signature scent.',
+        hashtags: ['#ParisianShopper', '#LuxuryFragrance'],
+      });
+
+      expect(caption).toContain('✨ *PARISIAN LUXURY SELECTION* ✨');
+      expect(caption).toContain('🇰🇭 *ភ្នាក់ងារទិញទំនិញប៉ារីស — នាំចូលផ្ទាល់ពីប្រទេសបារាំង*');
+      expect(caption).toContain('💎 *Maison Imaginaire Moonlit River*');
+      expect(caption).toContain('_Maison Imaginaire_');
+      expect(caption).toContain('*$38\\.00 USD*');
+      expect(caption).toContain('`FIC\\-PERF\\-001`');
+      expect(caption).toContain('🌿 *កំណត់ចំណាំក្លិនក្រអូប • Fragrance Notes:*');
+      expect(caption).toContain('• *Top Notes:* Bergamot, Mandarin');
+      expect(caption).toContain('• *Heart Notes:* French Rose, Jasmine');
+      expect(caption).toContain('• *Base Notes:* White Musk, Cedarwood');
+      expect(caption).toContain('🇰🇭 ក្លិនក្រអូបប្រណីតពីប៉ារីស បង្កើតឡើងសម្រាប់ភាពថ្លៃថ្នូរ។');
+      expect(caption).toContain('🇬🇧 Experience Parisian evening mist with pure elegance\\.');
+      expect(caption).toContain('✅ *Verified Parisian Authentic* • *100% ធានាសុទ្ធពីប៉ារីស*');
+      expect(caption).toContain('🛎️ _Discover your signature scent\\._');
+    });
+
     it('enforces Telegram 1024-character maximum caption limit with clean truncation', () => {
       const longText = 'A'.repeat(1500);
       const caption = ChannelBroadcastRenderer.renderCaption({
@@ -114,7 +149,7 @@ describe('Telegram Channel Broadcast Publishing', () => {
       telegram: {
         mode: 'polling';
         actionTokenTtlSeconds: number;
-        channelId?: string;
+        channelId: string;
       };
       demoMode: boolean;
     };
@@ -305,7 +340,9 @@ describe('Telegram Channel Broadcast Publishing', () => {
       expect(gateway.sent).toHaveLength(0);
     });
 
-    it('fails closed in publishManual() before invoking Telegram delivery gateway', async () => {
+    it('fails closed in publishManual() when TELEGRAM_CHANNEL_PUBLISHING is false', async () => {
+      mockFlags.isEnabled.mockReturnValue(false);
+
       const adapter = new TelegramChannelBroadcastAdapter(
         mockConfig,
         mockFlags,
@@ -331,10 +368,99 @@ describe('Telegram Channel Broadcast Publishing', () => {
           },
         }),
       ).rejects.toThrow(
-        'Direct manual publishing is disabled pending controlled publishing implementation (W61 PublishIntent required).',
+        'Direct manual publishing is disabled pending controlled publishing implementation (FEATURE_TELEGRAM_CHANNEL_PUBLISHING=false).',
       );
 
       expect(gateway.sent).toHaveLength(0);
+      expect(gateway.sentPhotos).toHaveLength(0);
+    });
+
+    it('successfully publishes to official public channel @parisian_shopper_kh when FEATURE_TELEGRAM_CHANNEL_PUBLISHING is true', async () => {
+      mockFlags.isEnabled.mockReturnValue(true);
+      // Configure official public channel
+      mockConfig.telegram.channelId = '@parisian_shopper_kh';
+
+      const recordPublicationSpy = jest.fn<
+        (
+          creativeJobId: string,
+          visualAssetId: string,
+          channelId: string,
+          messageId: number,
+          publishedAt?: Date,
+        ) => Promise<void>
+      >(() => Promise.resolve());
+      mockWorkflowRepo = {
+        ...mockWorkflowRepo,
+        getChannelPublication: jest.fn<TelegramWorkflowRepository['getChannelPublication']>(() =>
+          Promise.resolve(null),
+        ),
+        recordChannelPublication: recordPublicationSpy,
+      };
+
+      const adapter = new TelegramChannelBroadcastAdapter(
+        mockConfig,
+        mockFlags,
+        gateway,
+        mockLogger,
+        mockWorkflowRepo as TelegramWorkflowRepository,
+        mockCreativeJobs as CreativeJobRepository,
+        mockVisualAssets as VisualAssetRepository,
+        mockProductSnapshots as ProductSnapshotRepository,
+        mockAssetStorage as AssetStoragePort,
+      );
+
+      const result = await adapter.publishManual({
+        creativeJobId: 'creative-job-42',
+        visualAssetId: 'visual-asset-77',
+        actor: {
+          identityId: 'id-1',
+          internalUserId: 'u-1',
+          telegramUserId: '123',
+          displayName: 'Test User',
+          roles: ['ADMIN'],
+        },
+      });
+
+      expect(result.disposition).toBe('PUBLISHED');
+      expect(result.channelId).toBe('@parisian_shopper_kh');
+      expect(result.messageId).toBe(1001);
+      expect(gateway.sentPhotos).toHaveLength(1);
+      expect(gateway.sentPhotos[0]?.chatId).toBe('@parisian_shopper_kh');
+      expect(recordPublicationSpy).toHaveBeenCalledWith(
+        'creative-job-42',
+        'visual-asset-77',
+        '@parisian_shopper_kh',
+        1001,
+        expect.any(Date),
+      );
+
+      // Verify idempotency: subsequent publish returns ALREADY_PUBLISHED
+      mockWorkflowRepo.getChannelPublication = jest.fn<
+        TelegramWorkflowRepository['getChannelPublication']
+      >(() =>
+        Promise.resolve({
+          channelId: '@parisian_shopper_kh',
+          messageId: 1001,
+          publishedAt: new Date(),
+        }),
+      );
+
+      const repeatResult = await adapter.publishManual({
+        creativeJobId: 'creative-job-42',
+        visualAssetId: 'visual-asset-77',
+        actor: {
+          identityId: 'id-1',
+          internalUserId: 'u-1',
+          telegramUserId: '123',
+          displayName: 'Test User',
+          roles: ['ADMIN'],
+        },
+      });
+
+      expect(repeatResult.disposition).toBe('ALREADY_PUBLISHED');
+      expect(repeatResult.channelId).toBe('@parisian_shopper_kh');
+      // No extra photo dispatched
+      expect(gateway.sentPhotos).toHaveLength(1);
     });
   });
 });

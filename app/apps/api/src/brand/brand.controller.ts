@@ -71,7 +71,7 @@ import { CreateBrandDatasetDto } from './dto/create-brand-dataset.dto.js';
 
 @ApiTags('Brand Intelligence & Governance')
 @ApiCookieAuth('session')
-@Controller('v1/brand')
+@Controller('brand')
 @UseGuards(SessionAuthGuard, PermissionsGuard)
 export class BrandController {
   public constructor(
@@ -90,7 +90,7 @@ export class BrandController {
     private readonly brandDatasetRepo: BrandDatasetRepository,
   ) {}
 
-  @Get('profiles/active')
+  @Get(['profiles/active', 'profile/active'])
   @ApiOperation({ summary: 'Get currently active and authoritative BrandProfileVersion' })
   @ApiOkResponse({ description: 'Active brand profile record or null if unconfigured' })
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
@@ -105,7 +105,7 @@ export class BrandController {
     return this.listProfilesUseCase.execute();
   }
 
-  @Post('profiles')
+  @Post(['profiles', 'profile'])
   @UseGuards(CsrfGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create new BrandProfileVersion in DRAFT status (Admin only)' })
@@ -133,7 +133,7 @@ export class BrandController {
     }
   }
 
-  @Post('profiles/:id/activate')
+  @Post(['profiles/:id/activate', 'profile/:id/activate'])
   @UseGuards(CsrfGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -155,7 +155,7 @@ export class BrandController {
     }
   }
 
-  @Post('profiles/rollback')
+  @Post(['profiles/rollback', 'profile/rollback', 'profiles/:id/rollback', 'profile/:id/rollback'])
   @UseGuards(CsrfGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -165,11 +165,16 @@ export class BrandController {
   public async rollbackProfile(
     @CurrentUser() user: SanitizedEmployeeDto,
     @Body() dto: RollbackBrandProfileDto,
+    @Param('id') id?: string,
   ): Promise<RollbackBrandProfileResult> {
     try {
+      const targetVersionId = dto.targetVersionId ?? id;
+      if (!targetVersionId) {
+        throw new BadRequestException('targetVersionId is required for rollback.');
+      }
       return await this.rollbackProfileUseCase.execute({
-        targetVersionId: dto.targetVersionId,
-        reason: dto.reason,
+        targetVersionId,
+        reason: dto.reason ?? 'Emergency rollback to previous brand profile version',
         authorizedUserId: user.id,
         permissions: user.permissions,
       });
@@ -237,18 +242,26 @@ export class BrandController {
     return this.assembleBrandBriefUseCase.execute();
   }
 
-  @Post('profiles/:id/benchmark')
+  @Post(['profiles/:id/benchmark', 'profile/:id/benchmark', 'benchmark'])
   @UseGuards(CsrfGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Run benchmark evaluation against a brand profile' })
   @RequirePermissions(Permission.ADMIN)
   public async runBenchmark(
-    @Param('id') id: string,
     @Body() dto: RunBenchmarkDto,
+    @Param('id') id?: string,
   ): Promise<BenchmarkEvaluationReport> {
     try {
+      let profileId = id ?? dto.profileId;
+      if (!profileId) {
+        const active = await this.getActiveProfileUseCase.execute();
+        if (!active) {
+          throw new BadRequestException('No active brand profile found to benchmark against.');
+        }
+        profileId = active.id;
+      }
       return await this.runBrandBenchmarkUseCase.execute({
-        profileId: id,
+        profileId,
         testDatasetId: dto.testDatasetId,
         policyId: dto.policyId,
         testCases: dto.testCases,

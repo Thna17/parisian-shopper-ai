@@ -59,6 +59,7 @@ export function calculateProductDependencyHashes(
   const promotionPayload = {
     discount: product.discount
       ? {
+          ...(product.discount.approval ? { approval: product.discount.approval } : {}),
           calculation_method: product.discount.calculation_method,
           ends_at: product.discount.ends_at ?? null,
           label: product.discount.label ?? null,

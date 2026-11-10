@@ -1,11 +1,12 @@
 import { Injectable, Optional } from '@nestjs/common';
 import {
   calculatePolicyVersionHash,
+  marketingProductPolicySchema,
   createDevelopmentFreshnessPolicy,
   type FreshnessPolicy,
   type FreshnessPolicyRepository,
 } from '@parisian-shopper/application';
-import { type Clock, SystemClock } from '@parisian-shopper/common';
+import { type Clock, SystemClock, ConflictError } from '@parisian-shopper/common';
 import {
   type FreshnessPolicyActivation as PrismaPolicyActivation,
   type FreshnessPolicyVersion as PrismaPolicyVersion,
@@ -97,6 +98,9 @@ export class PrismaFreshnessPolicyRepository implements FreshnessPolicyRepositor
         policyId: policyVersion.policyId,
         version: policyVersion.version,
         environment: '',
+        ...(policyVersion.marketingRules
+          ? { marketing: marketingProductPolicySchema.parse(policyVersion.marketingRules) }
+          : {}),
         lifecycleState: 'DRAFT',
         ttl: {
           stockSeconds: policyVersion.stockTtlSeconds,
@@ -147,9 +151,10 @@ export class PrismaFreshnessPolicyRepository implements FreshnessPolicyRepositor
       let policyVersion: PrismaPolicyVersion;
       if (existingVersion) {
         if (existingVersion.policyHash !== resolvedHash) {
-          throw new Error(
-            `Conflict: FreshnessPolicyVersion ${policy.policyId}:${policy.version} already exists with differing hash (${existingVersion.policyHash} !== ${resolvedHash})`,
-          );
+          throw new ConflictError({
+            publicMessage:
+              'Conflict: this policy version already has different rules. Enter a new version number; previous rules cannot be rewritten.',
+          });
         }
         policyVersion = existingVersion;
       } else {
@@ -157,6 +162,9 @@ export class PrismaFreshnessPolicyRepository implements FreshnessPolicyRepositor
           data: {
             policyId: policy.policyId,
             version: policy.version,
+            ...(policy.marketing
+              ? { marketingRules: marketingProductPolicySchema.parse(policy.marketing) }
+              : {}),
             stockTtlSeconds: policy.ttl.stockSeconds,
             catalogPriceTtlSeconds: policy.ttl.catalogPriceSeconds,
             campaignPriceTtlSeconds: policy.ttl.campaignPriceSeconds,
@@ -175,6 +183,7 @@ export class PrismaFreshnessPolicyRepository implements FreshnessPolicyRepositor
           policyVersionId: policyVersion.id,
           environment: policy.environment,
           lifecycleState: policy.lifecycleState,
+          ...(policy.approvedByUserId ? { activatedBy: policy.approvedByUserId } : {}),
           activatedAt: policy.effectiveAt,
         },
       });
@@ -189,6 +198,10 @@ function toDomain(
   activationRecord: PrismaPolicyActivation,
 ): FreshnessPolicy {
   return {
+    ...(versionRecord.marketingRules
+      ? { marketing: marketingProductPolicySchema.parse(versionRecord.marketingRules) }
+      : {}),
+    ...(activationRecord.activatedBy ? { approvedByUserId: activationRecord.activatedBy } : {}),
     id: versionRecord.id,
     policyId: versionRecord.policyId,
     version: versionRecord.version,

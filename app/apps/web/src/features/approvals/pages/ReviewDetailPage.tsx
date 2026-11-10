@@ -106,6 +106,7 @@ export const ReviewDetailPage: React.FC = () => {
         (err as Error)?.message ??
         'Approval failed.';
       setActionError(errorMsg);
+      throw err;
     }
   };
 
@@ -127,6 +128,7 @@ export const ReviewDetailPage: React.FC = () => {
         (err as Error)?.message ??
         'Rejection failed.';
       setActionError(errorMsg);
+      throw err;
     }
   };
 
@@ -142,7 +144,7 @@ export const ReviewDetailPage: React.FC = () => {
             <ArrowLeft className="h-3.5 w-3.5" /> Back to Review Queue
           </Link>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-xl font-bold text-white tracking-tight">
+            <h1 className="text-xl font-bold text-zinc-900 tracking-tight">
               {productSnapshot.productName}
             </h1>
             <span
@@ -188,7 +190,7 @@ export const ReviewDetailPage: React.FC = () => {
             }
           >
             <ShieldAlert className="h-3.5 w-3.5 text-rose-400" />
-            Reject Draft
+            Request changes
           </button>
 
           {/* Approve Button */}
@@ -217,6 +219,15 @@ export const ReviewDetailPage: React.FC = () => {
 
       {/* Four-Eyes Policy Eligibility Banner */}
       <ReviewEligibilityBanner eligibility={eligibility} />
+
+      <section
+        aria-label="Review scope"
+        className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"
+      >
+        <strong>Caption review only.</strong> This decision does not approve a poster. The poster is
+        created and reviewed separately after the caption is approved; its final preview is not
+        available on this page.
+      </section>
 
       {/* Main Review Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -264,7 +275,7 @@ export const ReviewDetailPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-amber-400" />
                 <h2 className="text-sm font-semibold text-white">
-                  Target Copy Draft (Version {targetVersion.versionNumber})
+                  Caption to review (Version {targetVersion.versionNumber})
                 </h2>
               </div>
               <div className="flex items-center gap-2 text-xs text-zinc-400">

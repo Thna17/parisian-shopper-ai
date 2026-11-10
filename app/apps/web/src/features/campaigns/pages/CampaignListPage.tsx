@@ -52,9 +52,9 @@ export const CampaignListPage: React.FC = () => {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <PageHeader
-        eyebrow="Commercial Orchestration"
-        title="Campaign Management"
-        subtitle="Coordinate marketing initiatives, align verified luxury products with proposed promo targets, and transition through commercial lifecycles."
+        eyebrow="Workspace / Campaigns"
+        title="Campaigns"
+        subtitle="Plan launches, organize products and continue your saved marketing campaigns."
         actions={
           canCreate ? (
             <Link to="/campaigns/new">

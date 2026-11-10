@@ -37,6 +37,7 @@ import {
 import { DatabaseHealthIndicator, PrismaService } from '@parisian-shopper/database';
 import {
   ContentGenerationQueue,
+  ProductCatalogSyncQueue,
   CreativeGenerationQueue,
   ValkeyConnectionService,
 } from '@parisian-shopper/jobs';
@@ -507,6 +508,8 @@ describe('Four-Eyes Approvals Review Desk API Integration (e2e)', () => {
       .useValue({ isHealthy: jest.fn().mockResolvedValue(true) })
       .overrideProvider(ValkeyConnectionService)
       .useValue({ getClient: jest.fn().mockReturnValue({ status: 'ready' }) })
+      .overrideProvider(ProductCatalogSyncQueue)
+      .useValue({ enqueue: jest.fn(), onModuleInit: jest.fn() })
       .overrideProvider(ContentGenerationQueue)
       .useValue({ addJob: jest.fn().mockResolvedValue(undefined) })
       .overrideProvider(CreativeGenerationQueue)

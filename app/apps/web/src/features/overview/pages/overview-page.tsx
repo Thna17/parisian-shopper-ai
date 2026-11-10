@@ -1,201 +1,257 @@
 import React from 'react';
-import {
-  ShieldCheck,
-  UserCheck,
-  KeyRound,
-  Sparkles,
-  RotateCw,
-  LogOut,
-  Layers,
-  ArrowRight,
-} from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowRight, CalendarDays, FileText, Image, Plus, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../auth/context/auth-context.js';
 import { usePermissions } from '../../auth/hooks/use-permissions.js';
-import { PageHeader } from '../../../components/navigation/page-header.js';
-import { Card, CardHeader, CardTitle, CardContent } from '../../../components/ui/card.js';
-import { Badge } from '../../../components/ui/badge.js';
-import { Button } from '../../../components/ui/button.js';
-import { EmptyState } from '../../../components/ui/empty-state.js';
 import { Permission } from '../../../types/auth.types.js';
+import { postsApi, postStatusLabel } from '../../posts/api/posts-api.js';
+import { campaignsApi } from '../../campaigns/api/campaigns-api.js';
 
 export const OverviewPage: React.FC = () => {
-  const { employee, refetchEmployee, logout, isLoggingOut } = useAuth();
+  const { employee } = useAuth();
   const { hasPermission } = usePermissions();
-
+  const canView = hasPermission(Permission.VIEW_OWN_CONTENT);
+  const canCreate = hasPermission(Permission.CREATE_CONTENT);
+  const mine = useQuery({
+    queryKey: ['staff-posts', 'mine', 1],
+    queryFn: () => postsApi.list(1, 'mine'),
+    enabled: canView,
+    retry: false,
+  });
+  const reviews = useQuery({
+    queryKey: ['staff-posts', 'reviews', 1],
+    queryFn: () => postsApi.list(1, 'reviews'),
+    enabled: canView,
+    retry: false,
+  });
+  const approved = useQuery({
+    queryKey: ['staff-posts', 'approved', 1],
+    queryFn: () => postsApi.list(1, 'approved'),
+    enabled: canView,
+    retry: false,
+  });
+  const campaigns = useQuery({
+    queryKey: ['workspace-campaigns'],
+    queryFn: () => campaignsApi.getCampaigns({ page: 1, limit: 4, status: 'ACTIVE' }),
+    enabled: canView,
+    retry: false,
+  });
+  const metrics = [
+    {
+      label: 'Your saved posts',
+      query: mine,
+      to: '/posts',
+      hint: 'Drafts and their saved revisions',
+    },
+    {
+      label: 'Reviews pending',
+      query: reviews,
+      to: '/posts/reviews',
+      hint: 'Complete posts awaiting a decision',
+    },
+    {
+      label: 'Approved posts',
+      query: approved,
+      to: '/posts/approved',
+      hint: 'Available to your account',
+    },
+    {
+      label: 'Active campaigns',
+      query: campaigns,
+      to: '/campaigns',
+      hint: 'From saved campaign records',
+    },
+  ];
   return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow="Operations Portal"
-        title={`Welcome, ${employee?.displayName ?? 'Employee'}`}
-        subtitle="Parisian Shopper AI — Authenticated Luxury Retail Marketing & Telegram Distribution Workspace."
-        actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => refetchEmployee()}
-              icon={<RotateCw className="w-3.5 h-3.5" />}
-            >
-              Verify Session
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => logout()}
-              isLoading={isLoggingOut}
-              icon={<LogOut className="w-3.5 h-3.5" />}
-            >
-              Sign Out
-            </Button>
-          </div>
-        }
-      />
-
-      {/* Verified Employee Identity & Session Verification Banner */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-gold-500" />
-              <CardTitle>Authenticated Identity</CardTitle>
-            </div>
-            <Badge variant="good" dot>
-              Active
-            </Badge>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div>
-              <div className="text-[10px] text-app-muted uppercase tracking-wider font-semibold">
-                Display Name
-              </div>
-              <div className="text-sm font-semibold text-app-primary">
-                {employee?.displayName ?? '—'}
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] text-app-muted uppercase tracking-wider font-semibold">
-                Internal User UUID
-              </div>
-              <div className="text-xs font-mono text-app-muted truncate" title={employee?.id}>
-                {employee?.id ?? '—'}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <KeyRound className="w-4 h-4 text-navy-900" />
-              <CardTitle>Assigned Roles</CardTitle>
-            </div>
-            <span className="text-xs text-app-muted font-mono">{employee?.roles.length ?? 0}</span>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-1.5">
-              {employee?.roles.map((role) => (
-                <Badge key={role} variant="navy" className="text-xs">
-                  {role}
-                </Badge>
-              ))}
-            </div>
-            <p className="text-[11px] text-app-muted mt-3 leading-relaxed">
-              Roles are authority-governed in PostgreSQL and dictate your operational permissions.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-status-good" />
-              <CardTitle>Four-Eyes Governance</CardTitle>
-            </div>
-            <Badge variant="good">SEC-002</Badge>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-app-primary font-medium leading-relaxed">
-              Authoritative Self-Approval Prevention
-            </p>
-            <p className="text-[11px] text-app-muted mt-1 leading-relaxed">
-              {hasPermission(Permission.APPROVE_CONTENT)
-                ? 'Your account holds approval privileges. Note that content you create yourself cannot be approved by your account (enforced at database transaction boundary).'
-                : 'Your account holds editor privileges. Content versions you generate will require a separate marketing approver before publishing.'}
-            </p>
-          </CardContent>
-        </Card>
+    <div className="space-y-6 pb-10">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="workspace-eyebrow">Workspace / Overview</p>
+          <h1 className="mt-2 text-[30px] font-semibold tracking-tight">
+            Welcome back, {employee?.displayName?.split(/\s+/)[0] ?? 'there'}.
+          </h1>
+          <p className="mt-2 text-sm text-app-muted">
+            Your campaigns, product content and creative production, together in one workspace.
+          </p>
+        </div>
+        {canCreate && (
+          <Link to="/posts/new" className="workspace-primary">
+            <Plus className="h-4 w-4" />
+            Create a post
+          </Link>
+        )}
+      </header>
+      <div className="workspace-panel flex flex-wrap items-center justify-between gap-3 !bg-app-bg !py-3">
+        <p className="flex items-center gap-2 text-xs text-app-muted">
+          <ShieldCheck className="h-4 w-4 text-status-good" />
+          Content stays in draft until an independent colleague approves it.
+        </p>
+        {canView && (
+          <Link className="text-xs font-semibold" to="/posts/reviews">
+            Open reviews <span aria-hidden="true">↗</span>
+          </Link>
+        )}
       </div>
-
-      {/* Honest Workspace Modules Status Banner */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-gold-500" />
-            <CardTitle>Integrated Marketing Modules</CardTitle>
-          </div>
-          <span className="text-xs text-app-muted font-medium">Prompt Stage 2 Status</span>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl border border-app-border bg-app-surface-subtle/40 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-app-primary">Web Authentication</span>
-                <Badge variant="good" dot>
-                  Live
-                </Badge>
-              </div>
-              <p className="text-[11px] text-app-muted leading-relaxed">
-                Argon2id password verification, session hashing, and secure cookies active.
+      {canView && (
+        <section
+          aria-label="Workspace summary"
+          className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+        >
+          {metrics.map(({ label, query, to, hint }) => (
+            <Link
+              key={label}
+              to={to}
+              className="workspace-panel block transition hover:border-gold-500"
+            >
+              <p className="text-xs font-medium text-app-muted">{label}</p>
+              <p className="my-4 text-[30px] font-semibold tabular-nums">
+                {query.isLoading ? '…' : query.isError ? 'Unavailable' : (query.data?.total ?? '—')}
               </p>
-            </div>
-
-            <div className="p-4 rounded-xl border border-app-border bg-app-surface-subtle/40 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-app-primary">Product Catalog</span>
-                <Badge variant="neutral">WEB-006</Badge>
-              </div>
-              <p className="text-[11px] text-app-muted leading-relaxed">
-                Mekhla integration, luxury perfume catalog, and SKU snapshot browser.
+              <p className="text-[11px] text-app-muted">
+                {query.isError ? 'Open this section to retry.' : hint}
               </p>
+            </Link>
+          ))}
+        </section>
+      )}
+      <section>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold">Quick create</h2>
+          <span className="text-xs text-app-muted">Start with a verified product</span>
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            {
+              title: 'Product post',
+              text: 'Prepare a poster and Khmer / English Caption in one saved post.',
+              to: '/posts/new',
+              Icon: Plus,
+              enabled: canCreate,
+            },
+            {
+              title: 'Campaign',
+              text: 'Plan a launch, select products and organize your content.',
+              to: '/campaigns/new',
+              Icon: CalendarDays,
+              enabled: canCreate,
+            },
+            {
+              title: 'Creative Studio',
+              text: 'Continue existing poster projects and their saved artwork.',
+              to: '/creative',
+              Icon: Image,
+              enabled: canView,
+            },
+          ]
+            .filter((item) => item.enabled)
+            .map(({ title, text, to, Icon }) => (
+              <Link
+                key={title}
+                to={to}
+                className="workspace-panel flex items-start gap-4 hover:border-gold-500"
+              >
+                <span className="rounded-lg bg-app-bg p-3 text-[#a48652]">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-semibold">{title}</h3>
+                  <p className="mt-2 text-xs leading-5 text-app-muted">{text}</p>
+                </div>
+                <ArrowRight className="ml-auto h-4 w-4 shrink-0 text-app-muted" />
+              </Link>
+            ))}
+        </div>
+      </section>
+      {canView && (
+        <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
+          <section className="workspace-panel">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-base font-semibold">Recent posts</h2>
+              <Link to="/posts" className="workspace-link">
+                View all ↗
+              </Link>
             </div>
-
-            <div className="p-4 rounded-xl border border-app-border bg-app-surface-subtle/40 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-app-primary">Content Studio</span>
-                <Badge variant="neutral">WEB-007</Badge>
-              </div>
-              <p className="text-[11px] text-app-muted leading-relaxed">
-                Bilingual AI generation, Khmer typography editor, and validation gates.
+            {mine.isLoading ? (
+              <p role="status">Loading saved posts…</p>
+            ) : mine.isError ? (
+              <p role="alert">
+                Posts could not be loaded.{' '}
+                <button className="workspace-link" onClick={() => void mine.refetch()}>
+                  Try again
+                </button>
               </p>
-            </div>
-
-            <div className="p-4 rounded-xl border border-app-border bg-app-surface-subtle/40 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-app-primary">Telegram Reviews</span>
-                <Badge variant="good" dot>
-                  W30 Live
-                </Badge>
+            ) : !mine.data?.items.length ? (
+              <div className="py-10 text-center text-app-muted">
+                <FileText className="mx-auto mb-3 h-8 w-8" />
+                <p className="text-sm">Your first post starts with a product.</p>
+                {canCreate && (
+                  <Link to="/posts/new" className="workspace-link mt-3 inline-block">
+                    Create a post
+                  </Link>
+                )}
               </div>
-              <p className="text-[11px] text-app-muted leading-relaxed">
-                Persistent Telegram wizard review pipeline synchronized with PostgreSQL.
-              </p>
+            ) : (
+              <ul className="divide-y divide-app-border">
+                {mine.data.items.slice(0, 5).map((post) => (
+                  <li key={post.id}>
+                    <Link
+                      to={'/posts/' + post.id}
+                      className="flex items-center justify-between gap-4 py-4"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold">{post.productName}</p>
+                        <p className="mt-1 text-[11px] text-app-muted">
+                          Revision {post.revisionNumber} ·{' '}
+                          {new Date(post.updatedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <span className="workspace-status">
+                        {postStatusLabel[post.status] ?? post.status}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section className="workspace-panel">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-base font-semibold">Active campaigns</h2>
+              <Link to="/campaigns" className="workspace-link">
+                View all ↗
+              </Link>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Honest Empty State for Initial Content Pipeline */}
-      <EmptyState
-        icon={<Layers className="w-6 h-6 text-gold-500" />}
-        title="No Active Content In Flight"
-        description="The real backend content pipeline is online. Product snapshots and review queues will populate as you begin marketing campaigns in Stage 2, Prompt 06."
-        action={
-          <div className="text-xs text-app-muted font-medium flex items-center gap-1.5">
-            <span>Next integration slice: Product Catalog & Asset Rights (WEB-006)</span>
-            <ArrowRight className="w-3.5 h-3.5 text-gold-500" />
-          </div>
-        }
-      />
+            {campaigns.isLoading ? (
+              <p role="status">Loading campaigns…</p>
+            ) : campaigns.isError ? (
+              <p role="alert">
+                Campaigns could not be loaded.{' '}
+                <button className="workspace-link" onClick={() => void campaigns.refetch()}>
+                  Try again
+                </button>
+              </p>
+            ) : !campaigns.data?.items.length ? (
+              <p className="py-8 text-sm text-app-muted">
+                No active campaigns. You can create a post without one.
+              </p>
+            ) : (
+              <ul className="divide-y divide-app-border">
+                {campaigns.data.items.map((campaign) => (
+                  <li key={campaign.id}>
+                    <Link to={'/campaigns/' + campaign.id} className="block py-4">
+                      <p className="text-sm font-semibold">{campaign.name}</p>
+                      <p className="mt-2 text-xs text-app-muted">
+                        {campaign.productCount} products · {campaign.code}
+                      </p>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      )}
     </div>
   );
 };

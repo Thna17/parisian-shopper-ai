@@ -459,6 +459,7 @@ describe('Phase 1G Acceptance Golden Path and Operational Resilience', () => {
       // Step 11 & 12: Dispatch outbox events
       await outboxDispatcher!.dispatchOnce();
       const editorMessages = gateway!.popMessages(editorProfile.telegramUserId);
+      gateway!.popMessages(approverProfile.telegramUserId);
       expect(editorMessages.length).toBeGreaterThan(0);
       const v1DraftMessage = editorMessages[0]!;
       expect(v1DraftMessage.text).toContain('Draft Copy Review');
@@ -502,12 +503,17 @@ describe('Phase 1G Acceptance Golden Path and Operational Resilience', () => {
       const v2Draft = v2Messages[0]!;
       expect(v2Draft.text).toContain('V2');
 
+      const approverV2Messages = gateway!.popMessages(approverProfile.telegramUserId);
+      expect(approverV2Messages.length).toBeGreaterThan(0);
+      const approverV2Draft =
+        approverV2Messages.find((m) => m.text.includes('V2')) ?? approverV2Messages.at(-1)!;
+
       // Step 18: Reviewer initiates approval on V2
       const approverViewResponse = await command(approverProfile, `/status`);
       expect(approverViewResponse.messages[0]?.text).toContain(job.productSnapshot.productName);
 
       // Reviewer clicks Approve button on V2
-      const v2Buttons = v2Draft.buttons?.flat() ?? [];
+      const v2Buttons = approverV2Draft.buttons?.flat() ?? [];
       const approveButton = v2Buttons.find((b) => b.text.includes('Approve'))!;
       const confirmApprovalPrompt = await callback(approverProfile, approveButton.callbackData);
 
@@ -658,8 +664,11 @@ describe('Phase 1G Acceptance Golden Path and Operational Resilience', () => {
 
       // Step 9: V2 is delivered, approver approves V2
       await outboxDispatcher!.dispatchOnce();
-      const v2Messages = gateway!.popMessages(editorProfile.telegramUserId);
-      const v2Buttons = v2Messages[0]!.buttons!.flat() ?? [];
+      const editorV2Messages = gateway!.popMessages(editorProfile.telegramUserId);
+      expect(editorV2Messages.length).toBeGreaterThan(0);
+      const approverV2Messages = gateway!.popMessages(approverProfile.telegramUserId);
+      expect(approverV2Messages.length).toBeGreaterThan(0);
+      const v2Buttons = approverV2Messages[0]!.buttons!.flat() ?? [];
       const v2ApproveBtn = v2Buttons.find((b) => b.text.includes('Approve'))!;
       expect(v2ApproveBtn).toBeDefined();
 

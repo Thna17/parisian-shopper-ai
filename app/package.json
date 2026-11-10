@@ -20,6 +20,7 @@
     "db:migrate:deploy": "pnpm --filter @parisian-shopper/database prisma:migrate:deploy",
     "db:migrate:status": "pnpm --filter @parisian-shopper/database prisma:migrate:status",
     "db:seed": "node --env-file=.env scripts/seed-demo-data.mjs",
+    "sync:products": "node --env-file=.env scripts/sync-mekhla-products.mjs",
     "user:enroll": "node --env-file=.env scripts/seed-demo-data.mjs",
     "demo": "node --env-file=.env scripts/interactive-demo.mjs --auto",
     "demo:interactive": "node --env-file=.env scripts/interactive-demo.mjs --interactive",

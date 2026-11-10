@@ -87,12 +87,12 @@ describe('Content Studio Jobs List (WEB-CONTENT-01 to WEB-CONTENT-05)', () => {
     vi.mocked(contentApi.getJobs).mockResolvedValue(mockPaginatedJobs);
   });
 
-  it('WEB-CONTENT-01: Renders AI Content Studio header and generate button', async () => {
+  it('WEB-CONTENT-01: Renders Content Studio header and generate button', async () => {
     renderWithProviders(<ContentJobsPage />, { initialEntries: ['/content'] });
 
-    expect(await screen.findByText('AI Content Studio')).toBeInTheDocument();
+    expect(await screen.findByText('Content Studio')).toBeInTheDocument();
     expect(screen.getByText('Generate New Content')).toBeInTheDocument();
-    expect(screen.getByText('Luxury Copy')).toBeInTheDocument();
+    expect(screen.getByText('Caption drafts')).toBeInTheDocument();
   });
 
   it('WEB-CONTENT-02: Renders list of content jobs with statuses and badges', async () => {

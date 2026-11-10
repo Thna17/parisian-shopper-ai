@@ -1,6 +1,14 @@
 import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Megaphone, Package, RefreshCw, ShieldCheck } from 'lucide-react';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Image,
+  Megaphone,
+  Package,
+  RefreshCw,
+  ShieldCheck,
+} from 'lucide-react';
 
 import {
   useContentJobDetail,
@@ -8,6 +16,8 @@ import {
   useSubmitContentForReview,
 } from '../hooks/use-content.js';
 import type { ContentVersion } from '../types/content.types.js';
+import { usePermissions } from '../../auth/hooks/use-permissions.js';
+import { Permission } from '../../../types/auth.types.js';
 import { ContentJobStatusBadge } from '../components/ContentJobStatusBadge.js';
 import { GenerationProgressCard } from '../components/GenerationProgressCard.js';
 import { ContentPreviewPanel } from '../components/ContentPreviewPanel.js';
@@ -18,6 +28,7 @@ import { SubmitForReviewPanel } from '../components/SubmitForReviewPanel.js';
 
 export function ContentJobDetailPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
+  const { hasPermission } = usePermissions();
   const { data, isLoading, isError, refetch, isFetching } = useContentJobDetail(id);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -112,6 +123,12 @@ export function ContentJobDetailPage(): React.JSX.Element {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
+      <Link
+        to={`/posts/${job.id}`}
+        className="inline-block text-sm font-semibold text-amber-800 underline"
+      >
+        Open guided post view
+      </Link>
       {/* Top Navigation & Status Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-neutral-200 dark:border-neutral-800">
         <div className="flex items-center gap-3">
@@ -171,6 +188,47 @@ export function ContentJobDetailPage(): React.JSX.Element {
 
       {/* Generation Worker Progress (When Queued/Generating/Failed) */}
       <GenerationProgressCard status={job.status} attempts={attempts} />
+
+      <section
+        aria-labelledby="poster-next-step"
+        className="rounded-2xl border border-[#e3d9c8] bg-[#faf7f1] p-5 sm:p-6"
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="rounded-xl bg-[#efe6d7] p-2.5 text-[#9b7845]">
+              <Image className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div>
+              <h2 id="poster-next-step" className="text-sm font-semibold text-[#263741]">
+                Poster image is a separate step
+              </h2>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-neutral-600">
+                {job.status === 'APPROVED'
+                  ? 'This copy is approved. Start a poster project, select this product and copy, then render a preview in the poster editor.'
+                  : job.status === 'UNDER_REVIEW'
+                    ? 'This page contains marketing copy only. Once a different team member approves it, you can use it to create a poster.'
+                    : 'This page contains marketing copy only. Submit the copy for independent review; after approval, you can create a poster.'}
+              </p>
+            </div>
+          </div>
+          {job.status === 'APPROVED' && hasPermission(Permission.EDIT_CREATIVE) && (
+            <Link
+              to="/creative/new"
+              className="inline-flex shrink-0 items-center justify-center rounded-xl bg-[#263b48] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#344e5d] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a78751]"
+            >
+              Create a poster
+            </Link>
+          )}
+          {job.status === 'UNDER_REVIEW' && hasPermission(Permission.APPROVE_CONTENT) && (
+            <Link
+              to={`/approvals/${job.id}`}
+              className="inline-flex shrink-0 items-center justify-center rounded-xl border border-[#cab999] bg-white px-4 py-2.5 text-sm font-semibold text-[#604a2b] hover:bg-[#f5f0e8]"
+            >
+              Open review
+            </Link>
+          )}
+        </div>
+      </section>
 
       {/* Main Studio Layout: 2-Column (Preview & Editor + Truth Reference Sidebar) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

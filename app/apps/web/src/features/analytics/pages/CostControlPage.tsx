@@ -78,6 +78,20 @@ export const CostControlPage: React.FC = () => {
         </div>
       </div>
 
+      {budgetQuery.isSuccess && budgetQuery.data === null && (
+        <p className="workspace-panel text-sm text-app-muted">
+          No active budget policy is configured. An authorized manager must explicitly configure
+          spending authority. No policy is created by viewing this page.
+        </p>
+      )}
+      {budgetQuery.isError && (
+        <p role="alert" className="workspace-panel text-sm">
+          Budget information could not be loaded.{' '}
+          <button className="workspace-link" onClick={() => void budgetQuery.refetch()}>
+            Try again
+          </button>
+        </p>
+      )}
       {/* Budget Utilization Card */}
       {budget && (
         <BudgetUtilizationCard

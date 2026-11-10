@@ -79,7 +79,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           <div className="flex items-center gap-1">
             <span
               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-app-surface/90 backdrop-blur-sm border border-app-border text-[10px] font-medium text-app-muted"
-              title="Verified Upstream Snapshot"
+              title="Saved catalog snapshot"
             >
               <ShieldCheck className="w-3 h-3 text-[#23856B]" />
               <span className="hidden sm:inline">Verified</span>
@@ -119,7 +119,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         <div className="mt-4 pt-3 border-t border-app-border/60 flex items-end justify-between">
           <div className="flex flex-col">
             <span className="text-[10px] font-medium uppercase text-app-muted tracking-wider">
-              Verified Retail
+              Saved catalog price
             </span>
             <div className="flex items-baseline gap-1.5">
               <span className="text-base font-bold text-app-primary">

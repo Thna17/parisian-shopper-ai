@@ -1,4 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
+import { ZodError } from 'zod';
 import { ForbiddenError, NotFoundError } from '@parisian-shopper/common';
 import { Permission, PermissionService } from '../../auth/domain/permissions.js';
 import {
@@ -60,6 +61,10 @@ export interface CreativeProjectDetailResult {
         readonly id: string;
         readonly headline?: string | undefined;
         readonly bodyCopy?: string | undefined;
+        readonly englishCaption?: string | undefined;
+        readonly khmerCaption?: string | undefined;
+        readonly cta?: string | undefined;
+        readonly hashtags?: readonly string[] | undefined;
         readonly platform?: string | undefined;
         readonly strategy?: string | undefined;
       }
@@ -114,6 +119,7 @@ export interface CreativeProjectDetailResult {
     readonly width: number;
     readonly height: number;
   }[];
+  readonly sourceContentInvalid?: boolean;
   readonly canEdit: boolean;
   readonly canApprove: boolean;
   readonly canExport: boolean;
@@ -215,12 +221,27 @@ export class GetCreativeProjectDetailUseCase {
 
     // Load Content Version
     let contentVersion: CreativeProjectDetailResult['contentVersion'] = undefined;
+    let sourceContentInvalid = false;
     if (currentVersion.sourceContentVersionId) {
-      const cv = await this.contentRepo.findVersionById(currentVersion.sourceContentVersionId);
+      let cv;
+      try {
+        cv = await this.contentRepo.findVersionById(currentVersion.sourceContentVersionId);
+      } catch (error) {
+        if (!(error instanceof ZodError)) throw error;
+        sourceContentInvalid = true;
+      }
       if (cv) {
         contentVersion = {
           id: cv.id,
           ...(cv.structuredOutput?.headline ? { headline: cv.structuredOutput.headline } : {}),
+          ...(cv.structuredOutput?.english_caption
+            ? { englishCaption: cv.structuredOutput.english_caption }
+            : {}),
+          ...(cv.structuredOutput?.khmer_caption
+            ? { khmerCaption: cv.structuredOutput.khmer_caption }
+            : {}),
+          ...(cv.structuredOutput?.cta ? { cta: cv.structuredOutput.cta } : {}),
+          ...(cv.structuredOutput?.hashtags ? { hashtags: cv.structuredOutput.hashtags } : {}),
           ...(cv.structuredOutput?.english_caption
             ? { bodyCopy: cv.structuredOutput.english_caption }
             : cv.structuredOutput?.khmer_caption
@@ -338,8 +359,14 @@ export class GetCreativeProjectDetailUseCase {
     );
     const isReviewable = job?.status === 'READY_FOR_REVIEW';
 
-    const canApprove = hasApprovePerm && isReviewable && !isRequester && !isVersionAuthor;
+    const canApprove =
+      hasApprovePerm && isReviewable && !isRequester && !isVersionAuthor && !sourceContentInvalid;
     const approvalIneligibilityReasons: string[] = [];
+    if (sourceContentInvalid) {
+      approvalIneligibilityReasons.push(
+        'Source copy is invalid and must be repaired before review.',
+      );
+    }
     if (!hasApprovePerm) {
       approvalIneligibilityReasons.push('Requires APPROVE_CREATIVE permission.');
     }
@@ -364,7 +391,8 @@ export class GetCreativeProjectDetailUseCase {
       currentVersion?.state?.isExportEligible === true;
     const canExport =
       this.permissions.hasAnyRolePermission(input.requesterRoles, Permission.EXPORT_CREATIVE) &&
-      (job?.status === 'CREATIVE_APPROVED' || isVersionApproved);
+      (job?.status === 'CREATIVE_APPROVED' || isVersionApproved) &&
+      !sourceContentInvalid;
 
     return {
       project,
@@ -377,6 +405,7 @@ export class GetCreativeProjectDetailUseCase {
       ...(latestRender ? { latestRender } : {}),
       ...(latestValidation ? { latestValidation } : {}),
       availableAssets,
+      ...(sourceContentInvalid ? { sourceContentInvalid: true } : {}),
       canEdit,
       canApprove,
       canExport,

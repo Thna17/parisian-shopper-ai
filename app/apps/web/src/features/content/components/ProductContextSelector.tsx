@@ -13,7 +13,8 @@ export function ProductContextSelector({
   onSelect,
 }: ProductContextSelectorProps): React.JSX.Element {
   const [search, setSearch] = useState('');
-  const { data, isLoading } = useProducts({ search, limit: 12 });
+  const [page, setPage] = useState(1);
+  const { data, isLoading, isError, refetch } = useProducts({ search, page, limit: 12 });
 
   const products = data?.data ?? [];
 
@@ -23,8 +24,12 @@ export function ProductContextSelector({
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
         <input
           type="text"
+          aria-label="Search products"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
           placeholder="Search verified catalog products by name, brand, or SKU..."
           className="w-full pl-10 pr-4 py-2 text-sm bg-neutral-50 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-neutral-900 dark:text-neutral-100"
         />
@@ -32,6 +37,13 @@ export function ProductContextSelector({
 
       {isLoading ? (
         <div className="py-8 text-center text-xs text-neutral-500">Loading catalog products...</div>
+      ) : isError ? (
+        <p role="alert" className="py-8 text-center text-sm text-red-700">
+          Could not load products.{' '}
+          <button type="button" className="font-semibold underline" onClick={() => void refetch()}>
+            Try again
+          </button>
+        </p>
       ) : products.length === 0 ? (
         <div className="py-8 text-center text-xs text-neutral-500">
           No verified products found matching "{search}".
@@ -46,6 +58,7 @@ export function ProductContextSelector({
                 key={product.id}
                 type="button"
                 onClick={() => onSelect(product)}
+                aria-pressed={isSelected}
                 className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
                   isSelected
                     ? 'bg-amber-50/80 dark:bg-amber-950/40 border-amber-500 shadow-sm ring-1 ring-amber-500'
@@ -89,6 +102,31 @@ export function ProductContextSelector({
               </button>
             );
           })}
+        </div>
+      )}
+      {data && data.pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between gap-3 text-xs text-app-muted">
+          <span>
+            Page {data.pagination.page} of {data.pagination.totalPages}
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((value) => value - 1)}
+              className="rounded-lg border border-app-border px-3 py-2 disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={page >= data.pagination.totalPages}
+              onClick={() => setPage((value) => value + 1)}
+              className="rounded-lg border border-app-border px-3 py-2 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
     </div>

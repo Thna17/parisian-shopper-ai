@@ -678,12 +678,17 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
     await outboxDispatcher!.dispatchOnce();
     const editorMessages = gateway!.popMessages(editorProfile.telegramUserId);
     expect(editorMessages.length).toBeGreaterThan(0);
-    const draftMessage = editorMessages[0]!;
-    expect(draftMessage.text).toContain('Draft Copy Review');
-    expect(draftMessage.text).toContain('V1');
+    const editorDraftMessage = editorMessages[0]!;
+    expect(editorDraftMessage.text).toContain('Draft Copy Review');
+    expect(editorDraftMessage.text).toContain('V1');
+
+    // Retrieve review message delivered to independent approver (contains Approve button per Four-Eyes)
+    const approverMessages = gateway!.popMessages(approverProfile.telegramUserId);
+    expect(approverMessages.length).toBeGreaterThan(0);
+    const approverDraftMessage = approverMessages[0]!;
 
     // Operator clicks Approve on Text draft
-    const approveButton = findButton({ messages: [draftMessage] }, 'Approve');
+    const approveButton = findButton({ messages: [approverDraftMessage] }, 'Approve');
     const confirmPrompt = await callback(approverProfile, approveButton);
     expect(confirmPrompt.messages[0]?.text).toContain('Confirm Approval');
 
@@ -773,7 +778,7 @@ describe('End-to-End Golden Path Creative Lifecycle', () => {
     // -------------------------------------------------------------
     // Dispatch CREATIVE_VALIDATED notification to Telegram
     await outboxDispatcher!.dispatchOnce();
-    const visualReviewMessages = gateway!.popMessages(editorProfile.telegramUserId);
+    const visualReviewMessages = gateway!.popMessages(approverProfile.telegramUserId);
     expect(visualReviewMessages.length).toBeGreaterThan(0);
     const visualCardMessage = visualReviewMessages[0]!;
     expect(visualCardMessage.text).toContain('Visual Creative Review');

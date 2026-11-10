@@ -3,14 +3,21 @@ import { APPLICATION_LOGGER, type ApplicationLogger } from '@parisian-shopper/co
 import {
   PRODUCT_ASSET_ELIGIBILITY_EVALUATOR,
   PRODUCT_ASSET_REPOSITORY,
+  PRODUCT_CATALOG_SYNC_ENQUEUER,
   PRODUCT_FRESHNESS_ASSESSMENT_REPOSITORY,
   PRODUCT_SNAPSHOT_REPOSITORY,
   ProductAssetEligibilityEvaluator,
+  ProductMarketingEligibilityService,
+  hasApprovedCurrentPromotion,
+  type PostActor,
+  type ProductMarketingCheck,
   type ProductAssetRepository,
+  type ProductCatalogSyncEnqueuer,
   type ProductFreshnessAssessmentRepository,
   ProductSnapshotNotFoundError,
   type ProductSnapshot,
   type ProductSnapshotRepository,
+  SyncMekhlaCatalogUseCase,
 } from '@parisian-shopper/application';
 import { ListProductsQueryDto } from './dto/list-products-query.dto.js';
 import {
@@ -22,6 +29,7 @@ import {
   type ScentPyramidDto,
   type VerifiedProductFactsDto,
 } from './dto/product-response.dto.js';
+import { type SyncProductsDto, type SyncProductsResponseDto } from './dto/sync-products.dto.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -39,9 +47,68 @@ export class ProductsService {
     @Optional()
     @Inject(PRODUCT_ASSET_ELIGIBILITY_EVALUATOR)
     private readonly assetEvaluator?: ProductAssetEligibilityEvaluator,
+    @Optional()
+    @Inject(SyncMekhlaCatalogUseCase)
+    private readonly syncUseCase?: SyncMekhlaCatalogUseCase,
+    @Optional()
+    @Inject(PRODUCT_CATALOG_SYNC_ENQUEUER)
+    private readonly syncEnqueuer?: ProductCatalogSyncEnqueuer,
     @Inject(APPLICATION_LOGGER)
     private readonly logger?: ApplicationLogger,
+    @Optional() private readonly productMarketing?: ProductMarketingEligibilityService,
   ) {}
+
+  public async syncProducts(
+    dto: SyncProductsDto,
+    actorUserId?: string,
+  ): Promise<SyncProductsResponseDto> {
+    const isExplicitSync = dto.sync === true || !this.syncEnqueuer;
+
+    if (isExplicitSync) {
+      if (!this.syncUseCase) {
+        throw new Error(
+          'SyncMekhlaCatalogUseCase is not available in current runtime configuration',
+        );
+      }
+
+      const result = await this.syncUseCase.execute({
+        force: dto.force,
+        skus: dto.skus,
+        maxPages: dto.maxPages,
+        limit: dto.limit,
+        actorUserId,
+        source: 'manual',
+      });
+
+      return {
+        status: result.status,
+        message: `Catalog sync completed: ${result.synced} synced, ${result.skipped} skipped, ${result.cutoutsProcessed} cutouts processed`,
+        synced: result.synced,
+        skipped: result.skipped,
+        totalDiscovered: result.totalDiscovered,
+        cutoutsProcessed: result.cutoutsProcessed,
+        durationMs: result.durationMs,
+        syncedSkus: result.syncedSkus,
+        skippedSkus: result.skippedSkus,
+        errors: result.errors,
+      };
+    }
+
+    const { jobId } = await this.syncEnqueuer.enqueue({
+      force: dto.force,
+      skus: dto.skus,
+      maxPages: dto.maxPages,
+      limit: dto.limit,
+      requestedBy: actorUserId,
+      source: 'manual',
+    });
+
+    return {
+      status: 'QUEUED',
+      jobId,
+      message: 'Product catalog synchronization job enqueued for background processing',
+    };
+  }
 
   public async listProducts(query: ListProductsQueryDto): Promise<PaginatedProductsResponseDto> {
     const search = (query.search ?? query.q ?? '').trim();
@@ -93,15 +160,11 @@ export class ProductsService {
 
     // Look up registered assets if asset repo available
     let registeredAssets: ProductDetailDto['registeredAssets'];
-    let heroAssetRegistered = false;
 
     if (this.assetRepo) {
       try {
         const registrations = await this.assetRepo.findRegistrationsBySku(sku);
         registeredAssets = registrations.map((r) => {
-          if (r.role === 'HERO_CUTOUT') {
-            heroAssetRegistered = true;
-          }
           return {
             id: r.id,
             role: r.role,
@@ -115,15 +178,15 @@ export class ProductsService {
       }
     }
 
-    const images: ProductDetailDto['images'] = (product.images ?? []).map((img, idx) => {
+    const images: ProductDetailDto['images'] = (product.images ?? []).map((img) => {
       const resolvedUrl =
         img.url && !img.url.includes('.invalid') ? img.url : `/assets/products/${product.sku}.png`;
       return {
         url: resolvedUrl,
         role: img.role,
         altText: img.alt_text ?? `${product.brand} ${product.product_name}`,
-        rightsState: 'VERIFIED',
-        isHeroCutout: img.role === 'primary' && heroAssetRegistered && idx === 0,
+        rightsState: 'UNREVIEWED',
+        isHeroCutout: false,
       };
     });
 
@@ -140,12 +203,13 @@ export class ProductsService {
         amount: parseFloat(product.price) || 0,
         currency: product.currency,
       },
-      promoPrice: product.promo_price
-        ? {
-            amount: parseFloat(product.promo_price) || 0,
-            currency: product.currency,
-          }
-        : null,
+      promoPrice:
+        hasApprovedCurrentPromotion(product, new Date()) && product.promo_price
+          ? {
+              amount: parseFloat(product.promo_price) || 0,
+              currency: product.currency,
+            }
+          : null,
       stockStatus: product.stock_status,
       lifecycleStatus: snapshot.product.lifecycle_status,
       productUrl: product.product_url ?? null,
@@ -178,7 +242,10 @@ export class ProductsService {
     };
   }
 
-  public async getProductReadiness(idOrSku: string): Promise<ProductReadinessResponseDto> {
+  public async getProductReadiness(
+    idOrSku: string,
+    actor?: PostActor,
+  ): Promise<ProductReadinessResponseDto> {
     const snapshot = await this.resolveSnapshot(idOrSku);
     const sku = snapshot.product.product.sku;
     const findings: ProductReadinessFinding[] = [];
@@ -198,7 +265,7 @@ export class ProductsService {
       findings.push({
         category: 'COMMERCIAL_FACTS',
         status: 'PASSED',
-        message: `Verified retail price of ${snapshot.product.product.currency} ${snapshot.product.product.price} recorded.`,
+        message: `Saved catalog price of ${snapshot.product.product.currency} ${snapshot.product.product.price} recorded.`,
       });
     }
 
@@ -220,8 +287,7 @@ export class ProductsService {
         const assessment = await this.assessmentRepo.findLatestForSnapshot(snapshot.id);
         if (assessment) {
           lastAssessedAt = assessment.evaluatedAt.toISOString();
-          freshnessState =
-            assessment.freshnessState as ProductReadinessResponseDto['freshnessState'];
+          freshnessState = assessment.freshnessState;
 
           if (assessment.freshnessState === 'FRESH') {
             findings.push({
@@ -306,6 +372,39 @@ export class ProductsService {
       assetCount = snapshot.product.product.images?.length ?? 0;
     }
 
+    let sourceCheck: ProductMarketingCheck['source'] | undefined;
+    if (this.productMarketing && actor) {
+      const check = await this.productMarketing.check(
+        { snapshotId: snapshot.id, action: 'DRAFT' },
+        actor,
+      );
+      sourceCheck = check.source;
+      freshnessState =
+        check.source.freshness === 'NOT_CHECKED'
+          ? 'UNASSESSED'
+          : (check.source.freshness as ProductReadinessResponseDto['freshnessState']);
+      lastAssessedAt = check.source.checkedAt;
+      for (let i = findings.length - 1; i >= 0; i--)
+        if (findings[i]?.category === 'FRESHNESS') findings.splice(i, 1);
+      for (let i = blockingReasons.length - 1; i >= 0; i--)
+        if (['FACTS_STALE', 'FACTS_INVALID'].includes(blockingReasons[i]!))
+          blockingReasons.splice(i, 1);
+      for (const issue of check.issues) {
+        findings.push({
+          category: 'FRESHNESS',
+          status: issue.blocking ? 'BLOCKED' : 'WARNING',
+          code: issue.code,
+          message: `${issue.message} ${issue.alternatives.join(' ')}`,
+        });
+        if (issue.blocking) blockingReasons.push(issue.code);
+      }
+      if (check.eligible)
+        findings.push({
+          category: 'FRESHNESS',
+          status: 'PASSED',
+          message: `Saved facts as of ${check.source.asOf}. Last source check: ${check.source.checkedAt ?? 'none'}. Release requires a new source check.`,
+        });
+    }
     const isReadyForContent = blockingReasons.length === 0;
 
     return {
@@ -316,6 +415,7 @@ export class ProductsService {
       hasApprovedAssets,
       assetCount,
       lastAssessedAt,
+      ...(sourceCheck ? { sourceCheck } : {}),
       blockingReasons,
       findings,
     };
@@ -336,12 +436,13 @@ export class ProductsService {
         amount: parseFloat(product.price) || 0,
         currency: product.currency,
       },
-      promoPrice: product.promo_price
-        ? {
-            amount: parseFloat(product.promo_price) || 0,
-            currency: product.currency,
-          }
-        : null,
+      promoPrice:
+        hasApprovedCurrentPromotion(product, new Date()) && product.promo_price
+          ? {
+              amount: parseFloat(product.promo_price) || 0,
+              currency: product.currency,
+            }
+          : null,
       stockStatus: product.stock_status,
       description: product.description ?? null,
       specifications: {
@@ -400,12 +501,13 @@ export class ProductsService {
         amount: parseFloat(p.price) || 0,
         currency: p.currency,
       },
-      promoPrice: p.promo_price
-        ? {
-            amount: parseFloat(p.promo_price) || 0,
-            currency: p.currency,
-          }
-        : null,
+      promoPrice:
+        hasApprovedCurrentPromotion(p, new Date()) && p.promo_price
+          ? {
+              amount: parseFloat(p.promo_price) || 0,
+              currency: p.currency,
+            }
+          : null,
       stockStatus: p.stock_status,
       lifecycleStatus: snapshot.product.lifecycle_status,
       primaryImageUrl,

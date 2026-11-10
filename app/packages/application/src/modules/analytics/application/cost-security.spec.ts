@@ -155,6 +155,14 @@ describe('COST-SEC-01 to COST-SEC-16: AI Cost Ledger & Enforceable Spending Limi
     _reconcileUseCase = new ReconcileAiUsageUseCase(mockBudgetRepo);
   });
 
+  it('keeps a missing budget read-only instead of creating an unapproved default', async () => {
+    mockBudgetRepo.getActivePolicy.mockResolvedValueOnce(null);
+    await expect(
+      activeBudgetUseCase.execute({ permissions: [Permission.VIEW_AI_COSTS] }),
+    ).resolves.toBeNull();
+    expect(mockBudgetRepo.createPolicy).not.toHaveBeenCalled();
+    expect(mockBudgetRepo.getBudgetUtilization).not.toHaveBeenCalled();
+  });
   it('COST-SEC-01: Reservation occurs before paid provider dispatch and returns committed hold', async () => {
     const reservation = await reserveBudgetUseCase.execute({
       idempotencyKey: 'idemp-attempt-1',
@@ -333,8 +341,8 @@ describe('COST-SEC-01 to COST-SEC-16: AI Cost Ledger & Enforceable Spending Limi
     const tgActive = await activeBudgetUseCase.execute({
       permissions: [Permission.VIEW_ALL_CONTENT],
     });
-    expect(webActive.policyId).toBe(tgActive.policyId);
-    expect(webActive.monthlyCeiling).toBe(tgActive.monthlyCeiling);
+    expect(webActive?.policyId).toBe(tgActive?.policyId);
+    expect(webActive?.monthlyCeiling).toBe(tgActive?.monthlyCeiling);
   });
 
   it('COST-SEC-13: Paid calls fail closed when authority is unavailable', async () => {
@@ -354,8 +362,8 @@ describe('COST-SEC-01 to COST-SEC-16: AI Cost Ledger & Enforceable Spending Limi
     const res = await activeBudgetUseCase.execute({
       permissions: [Permission.VIEW_AI_COSTS],
     });
-    expect(new Date(res.periodStart).getUTCDate()).toBe(1);
-    expect(res.isExhausted).toBe(false);
+    expect(new Date(res!.periodStart).getUTCDate()).toBe(1);
+    expect(res?.isExhausted).toBe(false);
   });
 
   it('COST-SEC-15: Safe Decimal arithmetic preserves precision without rounding errors', () => {

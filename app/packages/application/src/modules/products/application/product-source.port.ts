@@ -11,8 +11,19 @@ export interface ProductSearchResult {
   items: readonly NormalizedProductEnvelope[];
 }
 
+export interface ProductCatalogPageResult {
+  readonly items: readonly NormalizedProductEnvelope[];
+  readonly pagination: {
+    readonly page: number;
+    readonly limit: number;
+    readonly totalItems: number;
+    readonly totalPages: number;
+  };
+}
+
 export interface ProductSource {
   readonly adapterName: string;
   getBySku(sku: string): Promise<NormalizedProductEnvelope | null>;
   search(input: ProductSourceSearchInput): Promise<ProductSearchResult>;
+  fetchCatalogPage?(page?: number, limit?: number): Promise<ProductCatalogPageResult>;
 }

@@ -27,6 +27,9 @@ export interface AIContext {
   productFacts: UntrustedContextSection<ProductSnapshot['product']['product']>;
   reviewerInstruction?: UntrustedContextSection<string>;
   previousDraft?: UntrustedContextSection<unknown>;
+  brandGuidance?:TrustedContextSection<unknown>;
+  referenceExamples?:UntrustedContextSection<readonly {sourceId:string;version:number;sourceDigest:string;captionText:string;usage:'STYLE_ONLY'}[]>;
+  postBrief?: UntrustedContextSection<{ brief: string; purpose: string; campaign: unknown }>;
   request: Readonly<{
     contentJobId: string;
     language: ContentJob['language'];

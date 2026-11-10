@@ -25,6 +25,7 @@ export interface VisualAssetRecord {
 
 export interface CreateVisualAssetInput {
   readonly creativeJobId: string;
+  readonly sceneVersionId?: string;
   readonly assetRole: VisualAssetRole;
   readonly mimeType: string;
   readonly width: number;

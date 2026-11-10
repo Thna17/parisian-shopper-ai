@@ -16,6 +16,7 @@ vi.mock('../../products/api/products-api.js', () => ({
 vi.mock('../../content/api/content-api.js', () => ({
   contentApi: {
     getJobs: vi.fn(),
+    getJobById: vi.fn(),
   },
 }));
 
@@ -62,7 +63,7 @@ describe('Creative Wizard Creation Flow (WEB-CREATIVE-13 to WEB-CREATIVE-16)', (
   const sampleContentJobs = {
     items: [
       {
-        id: 'cv-001',
+        id: 'job-001',
         productSnapshotId: 'snap-001',
         brandRuleVersionId: 'rule-001',
         requesterUserId: 'usr-creative-001',
@@ -96,6 +97,10 @@ describe('Creative Wizard Creation Flow (WEB-CREATIVE-13 to WEB-CREATIVE-16)', (
     vi.clearAllMocks();
     vi.mocked(productsApi.getProducts).mockResolvedValue(sampleProducts as any);
     vi.mocked(contentApi.getJobs).mockResolvedValue(sampleContentJobs as any);
+    vi.mocked(contentApi.getJobById).mockResolvedValue({
+      job: sampleContentJobs.items[0],
+      currentVersion: { id: 'version-001' },
+    } as any);
     vi.mocked(creativeApi.getTemplates).mockResolvedValue(sampleTemplates);
   });
 
@@ -122,7 +127,7 @@ describe('Creative Wizard Creation Flow (WEB-CREATIVE-13 to WEB-CREATIVE-16)', (
     await waitFor(() => {
       expect(screen.getByText('Moonlit River Eau de Parfum')).toBeInTheDocument();
       expect(screen.getByText('FIC-PERF-001')).toBeInTheDocument();
-      expect(screen.getByText('$38.00 USD')).toBeInTheDocument();
+      expect(screen.getByText('$38.00')).toBeInTheDocument();
     });
 
     await user.click(screen.getByText('Moonlit River Eau de Parfum'));
@@ -130,11 +135,11 @@ describe('Creative Wizard Creation Flow (WEB-CREATIVE-13 to WEB-CREATIVE-16)', (
 
     // Step 2: Select Source Content Version
     await waitFor(() => {
-      expect(screen.getByText(/Select Source Content Version/i)).toBeInTheDocument();
-      expect(screen.getByText(/Content Job #cv-001/i)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Choose approved copy/i })).toBeInTheDocument();
+      expect(screen.getByText(/Content Job #job-001/i)).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText(/Content Job #cv-001/i));
+    await user.click(screen.getByText(/Content Job #job-001/i));
     await user.click(screen.getByRole('button', { name: /Continue/i }));
 
     // Step 3: Choose Template & Aspect Ratio
@@ -162,7 +167,7 @@ describe('Creative Wizard Creation Flow (WEB-CREATIVE-13 to WEB-CREATIVE-16)', (
       expect(creativeApi.createProject).toHaveBeenCalledWith(
         expect.objectContaining({
           productSnapshotId: 'snap-001',
-          sourceContentVersionId: 'cv-001',
+          sourceContentVersionId: 'version-001',
           templateId: 'EDITORIAL_SPLIT',
           aspectRatio: '1:1',
         }),

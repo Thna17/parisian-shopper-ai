@@ -131,6 +131,9 @@ export interface StoreActionTokenInput {
 }
 
 export interface TelegramWorkflowRepository {
+  postNotificationSent?(eventId: string, identityId: string): Promise<boolean>;
+  acknowledgePostNotification?(eventId: string, identityId: string): Promise<void>;
+  listPostRecipientTelegramUserIds?(postId: string): Promise<readonly string[]>;
   claimInboundUpdate(
     updateId: string,
     telegramUserId: string | null,
@@ -239,11 +242,19 @@ export interface TelegramWorkflowRepository {
     terminal: boolean,
   ): Promise<void>;
   markOutboxProcessed(outboxEventId: string, now: Date): Promise<void>;
+  createPostInteraction?(input: StorePostInteraction): Promise<void>;
+  findPostInteraction?(identityId: string, now: Date): Promise<PostPendingInteraction | null>;
+  claimPostInteraction?(id: string, identityId: string, token: string, now: Date): Promise<boolean>;
+  finishPostInteraction?(id: string, token: string, now: Date): Promise<void>;
+  releasePostInteraction?(id: string, token: string): Promise<void>;
   createPendingInteraction(input: {
     telegramIdentityId: string;
     contentJobId: string;
     contentVersionId: string;
     action: 'EDIT' | 'REJECT';
+    field?: string;
+    intendedAction?: string;
+    payload?: Readonly<Record<string, unknown>>;
     expiresAt: Date;
   }): Promise<void>;
   findActivePendingInteraction(
@@ -254,6 +265,10 @@ export interface TelegramWorkflowRepository {
     contentJobId: string;
     contentVersionId: string;
     action: 'EDIT' | 'REJECT';
+    field?: string;
+    actorUserId?: string;
+    intendedAction?: string;
+    payload?: Readonly<Record<string, unknown>>;
   } | null>;
   completePendingInteraction(id: string, now: Date): Promise<void>;
   cancelPendingInteraction(id: string, now: Date): Promise<void>;
@@ -276,4 +291,30 @@ export interface TelegramWorkflowRepository {
     resourceId?: string;
     metadata?: Readonly<Record<string, unknown>>;
   }): Promise<void>;
+  listActiveApproverTelegramUserIds?(): Promise<readonly string[]>;
+}
+
+export interface PostPendingInteraction {
+  id: string;
+  postId: string;
+  postRevisionId: string;
+  expectedRevision: number;
+  reviewRound: number;
+  actorUserId: string;
+  intendedAction: 'CAPTION_FIELD' | 'FEEDBACK' | 'REQUEST_CHANGES' | 'PROPOSAL';
+  field: string | null;
+  payload: Readonly<Record<string, unknown>>;
+  expiresAt: Date;
+  claimToken: string | null;
+}
+export interface StorePostInteraction {
+  telegramIdentityId: string;
+  postId: string;
+  postRevisionId: string;
+  expectedRevision: number;
+  reviewRound: number;
+  intendedAction: PostPendingInteraction['intendedAction'];
+  field?: string;
+  payload?: Readonly<Record<string, unknown>>;
+  expiresAt: Date;
 }

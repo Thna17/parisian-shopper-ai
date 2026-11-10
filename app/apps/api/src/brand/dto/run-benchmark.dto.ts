@@ -32,6 +32,15 @@ export class TestCaseInputDto {
 
 export class RunBenchmarkDto {
   @ApiProperty({
+    description: 'Identifier of the brand profile being benchmarked',
+    required: false,
+    example: 'prof-v1',
+  })
+  @IsOptional()
+  @IsString()
+  public profileId?: string;
+
+  @ApiProperty({
     description: 'Identifier of the benchmark test dataset partition',
     required: false,
     example: 'dataset-autumn-2026',

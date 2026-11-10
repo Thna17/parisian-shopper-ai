@@ -1,3 +1,8 @@
+import { OperationsPage } from '../../features/operations/pages/OperationsPage.js';
+import { CreativeTemplatesPage } from '../../features/creative/pages/CreativeTemplatesPage.js';
+import { CreativeLibraryPage } from '../../features/creative/pages/CreativeLibraryPage.js';
+import {ProductMarketingPolicyPage} from '../../features/products/pages/ProductMarketingPolicyPage.js';
+import { HiggsfieldConnectionPage } from '../../features/integrations/HiggsfieldConnectionPage.js';
 import React from 'react';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { AppShell } from '../layouts/app-shell.js';
@@ -21,6 +26,7 @@ import { ReviewDetailPage } from '../../features/approvals/pages/ReviewDetailPag
 import { CreativeProjectsPage } from '../../features/creative/pages/CreativeProjectsPage.js';
 import { CreativeWizardPage } from '../../features/creative/pages/CreativeWizardPage.js';
 import { CreativeEditorPage } from '../../features/creative/pages/CreativeEditorPage.js';
+import { HiggsfieldPilotPage } from '../../features/creative/pages/HiggsfieldPilotPage.js';
 import { PublishingDashboardPage } from '../../features/publishing/pages/PublishingDashboardPage.js';
 import { PublishingWizardPage } from '../../features/publishing/pages/PublishingWizardPage.js';
 import { PublicationDetailPage } from '../../features/publishing/pages/PublicationDetailPage.js';
@@ -37,7 +43,17 @@ import { EmployeeDetailPage } from '../../features/admin/pages/EmployeeDetailPag
 import { OrganizationSettingsPage } from '../../features/admin/pages/OrganizationSettingsPage.js';
 import { AdministrativeAuditPage } from '../../features/admin/pages/AdministrativeAuditPage.js';
 import { OnboardingClaimPage } from '../../features/admin/pages/OnboardingClaimPage.js';
+import { BrandGuidancePage } from '../../features/brand/pages/BrandGuidancePage.js';
+import { BrandProfilePage } from '../../features/brand/pages/BrandProfilePage.js';
+import { BrandBenchmarkLabPage } from '../../features/brand/pages/BrandBenchmarkLabPage.js';
+import { BrandDatasetsPage } from '../../features/brand/pages/BrandDatasetsPage.js';
+import { BudgetOverviewPage } from '../../features/budget/pages/BudgetOverviewPage.js';
+import { UsageLedgerPage } from '../../features/budget/pages/UsageLedgerPage.js';
+import { ReconciliationDeskPage } from '../../features/budget/pages/ReconciliationDeskPage.js';
 import { Permission } from '../../types/auth.types.js';
+import { CreatePostPage } from '../../features/posts/pages/CreatePostPage.js';
+import { PostWorkspacePage } from '../../features/posts/pages/PostWorkspacePage.js';
+import { PostsListPage } from '../../features/posts/pages/PostsListPage.js';
 
 export const router = createBrowserRouter([
   {
@@ -63,6 +79,38 @@ export const router = createBrowserRouter([
       {
         index: true,
         element: <OverviewPage />,
+      },
+      {
+        path: 'posts',
+        element: (
+          <RequirePermission permission={Permission.VIEW_OWN_CONTENT}>
+            <PostsListPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: 'posts/new',
+        element: (
+          <RequirePermission permission={Permission.CREATE_CONTENT}>
+            <CreatePostPage />
+          </RequirePermission>
+        ),
+      },
+      ...(['reviews', 'approved', 'all'] as const).map((scope) => ({
+        path: `posts/${scope}`,
+        element: (
+          <RequirePermission permission={Permission.VIEW_OWN_CONTENT}>
+            <PostsListPage scope={scope} />
+          </RequirePermission>
+        ),
+      })),
+      {
+        path: 'posts/:id',
+        element: (
+          <RequirePermission permission={Permission.VIEW_OWN_CONTENT}>
+            <PostWorkspacePage />
+          </RequirePermission>
+        ),
       },
       {
         path: 'products',
@@ -128,6 +176,8 @@ export const router = createBrowserRouter([
           </RequirePermission>
         ),
       },
+      { path: 'creative/library', element: <RequirePermission permission={Permission.VIEW_OWN_CONTENT}><CreativeLibraryPage /></RequirePermission> },
+      { path: 'creative/templates', element: <RequirePermission permission={Permission.VIEW_OWN_CONTENT}><CreativeTemplatesPage /></RequirePermission> },
       {
         path: 'creative',
         element: (
@@ -144,6 +194,18 @@ export const router = createBrowserRouter([
           </RequirePermission>
         ),
       },
+      ...(import.meta.env.DEV
+        ? [
+            {
+              path: 'creative/higgsfield-pilot',
+              element: (
+                <RequirePermission permission={Permission.VIEW_OWN_CONTENT}>
+                  <HiggsfieldPilotPage />
+                </RequirePermission>
+              ),
+            },
+          ]
+        : []),
       {
         path: 'creative/projects/:id',
         element: (
@@ -224,6 +286,7 @@ export const router = createBrowserRouter([
           </RequirePermission>
         ),
       },
+      {path:'operations',element:<RequirePermission permission={Permission.VIEW_OPERATIONAL_ANALYTICS}><OperationsPage/></RequirePermission>},
       {
         path: 'analytics',
         element: (
@@ -273,6 +336,14 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: 'settings/higgsfield',
+        element: (
+          <RequirePermission permission={Permission.ADMIN}>
+            <HiggsfieldConnectionPage />
+          </RequirePermission>
+        ),
+      },
+      {
         path: 'admin',
         element: (
           <RequirePermission permission={Permission.ADMIN}>
@@ -309,6 +380,82 @@ export const router = createBrowserRouter([
         element: (
           <RequirePermission permission={Permission.ADMIN}>
             <AdministrativeAuditPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: 'brand',
+        element: (
+          <RequirePermission permission={Permission.MANAGE_BRAND_PROFILE}>
+            <BrandProfilePage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: 'admin/product-policy',
+        element:<RequirePermission permission={Permission.ADMIN}><ProductMarketingPolicyPage/></RequirePermission>,
+      },
+      {
+        path: 'brand/guidance',
+        element: (
+          <RequirePermission permission={Permission.ADMIN}>
+            <BrandGuidancePage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: 'brand/profile',
+        element: (
+          <RequirePermission permission={Permission.MANAGE_BRAND_PROFILE}>
+            <BrandProfilePage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: 'brand/benchmarks',
+        element: (
+          <RequirePermission permission={Permission.MANAGE_BRAND_PROFILE}>
+            <BrandBenchmarkLabPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: 'brand/datasets',
+        element: (
+          <RequirePermission permission={Permission.MANAGE_BRAND_PROFILE}>
+            <BrandDatasetsPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: 'budget',
+        element: (
+          <RequirePermission permission={Permission.FINANCE_READ}>
+            <BudgetOverviewPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: 'budget/overview',
+        element: (
+          <RequirePermission permission={Permission.FINANCE_READ}>
+            <BudgetOverviewPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: 'budget/ledger',
+        element: (
+          <RequirePermission permission={Permission.FINANCE_READ}>
+            <UsageLedgerPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: 'budget/reconcile',
+        element: (
+          <RequirePermission permission={Permission.FINANCE_WRITE}>
+            <ReconciliationDeskPage />
           </RequirePermission>
         ),
       },

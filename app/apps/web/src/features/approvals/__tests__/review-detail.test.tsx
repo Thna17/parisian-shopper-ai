@@ -178,6 +178,8 @@ describe('Four-Eyes Review Desk Detail (WEB-REVIEW-06 to WEB-REVIEW-12)', () => 
 
     expect(await screen.findByTestId('eligibility-banner-ineligible')).toBeInTheDocument();
     expect(screen.getByText(/Self-Approval Prohibited/i)).toBeInTheDocument();
+    expect(screen.getByText(/second account used by the same person/i)).toBeInTheDocument();
+    expect(screen.getByText(/Caption review only/i)).toBeInTheDocument();
 
     const approveBtn = screen.getByTestId('approve-decision-button');
     expect(approveBtn).toBeDisabled();

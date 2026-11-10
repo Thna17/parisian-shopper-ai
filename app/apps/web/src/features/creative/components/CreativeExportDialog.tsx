@@ -27,7 +27,7 @@ export const CreativeExportDialog: React.FC<CreativeExportDialogProps> = ({
 
   if (!isOpen) return null;
 
-  const isApproved = canExport || jobStatus === 'CREATIVE_APPROVED';
+  const isApproved = canExport;
 
   const handleExecuteExport = async () => {
     setIsExporting(true);

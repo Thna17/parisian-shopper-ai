@@ -279,6 +279,53 @@ describe('ReviseContentUseCase', () => {
   });
 
   describe('changeLanguage', () => {
+    it.each(['KM', 'BILINGUAL'] as const)(
+      'keeps missing Khmer translation incomplete for %s without copying English',
+      async (targetLanguage) => {
+        const { repo, getCreatedVersion } = createMockRepo({
+          ...mockVersion1,
+          structuredOutput: { ...mockVersion1.structuredOutput, khmer_caption: null },
+        });
+        const validate = { execute: jest.fn() };
+        const useCase = new ReviseContentUseCase(
+          repo,
+          validate as unknown as ValidateContentVersionUseCase,
+          permissions,
+        );
+        await expect(
+          useCase.changeLanguage({
+            contentJobId: 'job-c1',
+            contentVersionId: 'ver-1',
+            targetLanguage,
+            actorUserId: 'editor',
+            actorRoles: ['MARKETING_EDITOR'],
+          }),
+        ).rejects.toThrow('translation is missing');
+        expect(getCreatedVersion()).toBeNull();
+        expect(validate.execute).not.toHaveBeenCalled();
+      },
+    );
+    it('does not copy Khmer into an absent English translation', async () => {
+      const { repo, getCreatedVersion } = createMockRepo({
+        ...mockVersion1,
+        structuredOutput: { ...mockVersion1.structuredOutput, english_caption: null },
+      });
+      const useCase = new ReviseContentUseCase(
+        repo,
+        { execute: jest.fn() } as unknown as ValidateContentVersionUseCase,
+        permissions,
+      );
+      await expect(
+        useCase.changeLanguage({
+          contentJobId: 'job-c1',
+          contentVersionId: 'ver-1',
+          targetLanguage: 'EN',
+          actorUserId: 'editor',
+          actorRoles: ['MARKETING_EDITOR'],
+        }),
+      ).rejects.toThrow('translation is missing');
+      expect(getCreatedVersion()).toBeNull();
+    });
     it('creates new version and revalidates when language is updated', async () => {
       const { repo } = createMockRepo();
       const validateExecuteMock = jest.fn(

@@ -1,5 +1,5 @@
 import { useAuth } from '../context/auth-context.js';
-import { type Permission, type RoleCode } from '../../../types/auth.types.js';
+import { Permission, type RoleCode } from '../../../types/auth.types.js';
 
 export interface UsePermissionsResult {
   permissions: readonly Permission[];
@@ -16,11 +16,28 @@ export function usePermissions(): UsePermissionsResult {
   const roles = employee?.roles ?? [];
 
   const hasPermission = (permission: Permission): boolean => {
+    if (permissions.includes(Permission.ADMIN) || roles.includes('ADMIN')) {
+      return true;
+    }
+    if (
+      permission === Permission.FINANCE_READ &&
+      (permissions.includes(Permission.VIEW_AI_COSTS) ||
+        permissions.includes(Permission.FINANCE_READ))
+    ) {
+      return true;
+    }
+    if (
+      permission === Permission.FINANCE_WRITE &&
+      (permissions.includes(Permission.MANAGE_AI_BUDGETS) ||
+        permissions.includes(Permission.FINANCE_WRITE))
+    ) {
+      return true;
+    }
     return permissions.includes(permission);
   };
 
   const hasAnyPermission = (targetPermissions: readonly Permission[]): boolean => {
-    return targetPermissions.some((p) => permissions.includes(p));
+    return targetPermissions.some((p) => hasPermission(p));
   };
 
   const hasAllPermissions = (targetPermissions: readonly Permission[]): boolean => {

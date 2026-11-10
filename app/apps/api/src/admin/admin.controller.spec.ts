@@ -45,7 +45,7 @@ describe('AdminController', () => {
   const mockAdminUser: SanitizedEmployeeDto = {
     id: 'admin-uuid-111',
     displayName: 'Thna Chan',
-    roles: [RoleCode.ADMIN],
+    roles: ['ADMIN'],
     status: 'ACTIVE',
     permissions: ['ADMIN'] as any,
   };
@@ -54,7 +54,7 @@ describe('AdminController', () => {
     id: 'emp-uuid-222',
     displayName: 'Aurelie Moreau',
     status: 'ACTIVE',
-    roles: [RoleCode.MARKETING_EDITOR],
+    roles: ['MARKETING_EDITOR'],
     createdAt: new Date('2026-01-01'),
     updatedAt: new Date('2026-01-02'),
     disabledAt: null,
@@ -67,43 +67,43 @@ describe('AdminController', () => {
   beforeEach(() => {
     mockListEmployeesUseCase = {
       execute: jest.fn(),
-    } as unknown as jest.Mocked<ListEmployeesUseCase>;
+    } as any;
     mockGetEmployeeDetailUseCase = {
       execute: jest.fn(),
-    } as unknown as jest.Mocked<GetEmployeeDetailUseCase>;
+    } as any;
     mockCreateEmployeeUseCase = {
       execute: jest.fn(),
-    } as unknown as jest.Mocked<CreateEmployeeUseCase>;
+    } as any;
     mockUpdateEmployeeProfileUseCase = {
       execute: jest.fn(),
-    } as unknown as jest.Mocked<UpdateEmployeeProfileUseCase>;
+    } as any;
     mockUpdateEmployeeRolesUseCase = {
       execute: jest.fn(),
-    } as unknown as jest.Mocked<UpdateEmployeeRolesUseCase>;
+    } as any;
     mockSuspendEmployeeUseCase = {
       execute: jest.fn(),
-    } as unknown as jest.Mocked<SuspendEmployeeUseCase>;
+    } as any;
     mockReactivateEmployeeUseCase = {
       execute: jest.fn(),
-    } as unknown as jest.Mocked<ReactivateEmployeeUseCase>;
+    } as any;
     mockListEmployeeSessionsUseCase = {
       execute: jest.fn(),
-    } as unknown as jest.Mocked<ListEmployeeSessionsUseCase>;
+    } as any;
     mockRevokeEmployeeSessionsUseCase = {
       execute: jest.fn(),
-    } as unknown as jest.Mocked<RevokeEmployeeSessionsUseCase>;
+    } as any;
     mockCreateOnboardingTokenUseCase = {
       execute: jest.fn(),
-    } as unknown as jest.Mocked<CreateOnboardingTokenUseCase>;
+    } as any;
     mockGetSystemSettingsUseCase = {
       execute: jest.fn(),
-    } as unknown as jest.Mocked<GetSystemSettingsUseCase>;
+    } as any;
     mockUpdateSystemSettingsUseCase = {
       execute: jest.fn(),
-    } as unknown as jest.Mocked<UpdateSystemSettingsUseCase>;
+    } as any;
     mockListAdminAuditLogsUseCase = {
       execute: jest.fn(),
-    } as unknown as jest.Mocked<ListAdminAuditLogsUseCase>;
+    } as any;
 
     controller = new AdminController(
       mockListEmployeesUseCase,

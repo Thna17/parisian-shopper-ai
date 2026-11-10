@@ -1,3 +1,5 @@
+import { ProductsModule } from '../products/products.module.js';
+import { PublicationProductGuard } from './application/publication-product.guard.js';
 import { Module } from '@nestjs/common';
 import { CreatePublicationUseCase } from './application/create-publication.use-case.js';
 import { ConfirmPublicationUseCase } from './application/confirm-publication.use-case.js';
@@ -9,7 +11,9 @@ import { ListEligibleAssetsUseCase } from './application/list-eligible-assets.us
 import { ListDestinationsUseCase } from './application/list-destinations.use-case.js';
 
 @Module({
+  imports: [ProductsModule],
   providers: [
+    PublicationProductGuard,
     CreatePublicationUseCase,
     ConfirmPublicationUseCase,
     RetryPublicationUseCase,
@@ -20,6 +24,7 @@ import { ListDestinationsUseCase } from './application/list-destinations.use-cas
     ListDestinationsUseCase,
   ],
   exports: [
+    PublicationProductGuard,
     CreatePublicationUseCase,
     ConfirmPublicationUseCase,
     RetryPublicationUseCase,

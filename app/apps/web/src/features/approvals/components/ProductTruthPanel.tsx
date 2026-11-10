@@ -11,16 +11,16 @@ export const ProductTruthPanel: React.FC<ProductTruthPanelProps> = ({ product, c
   return (
     <div
       data-testid="product-truth-panel"
-      className="rounded-xl border border-amber-500/20 bg-gradient-to-b from-amber-500/5 to-transparent p-5 space-y-4"
+      className="rounded-xl border border-amber-200 bg-amber-50 p-5 space-y-4"
     >
       <div className="flex items-center justify-between border-b border-white/5 pb-3">
         <div className="flex items-center gap-2">
           <Database className="h-4 w-4 text-amber-400" />
-          <h3 className="text-xs font-semibold tracking-wider text-amber-400 uppercase">
+          <h3 className="text-xs font-semibold tracking-wider text-amber-900 uppercase">
             Product Catalog Truth (Immutable Reference)
           </h3>
         </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-medium">
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-amber-300 text-amber-950 text-xs font-medium">
           <DollarSign className="h-3.5 w-3.5 text-amber-400" />
           <span>MSRP: ${product.priceUsd.toFixed(2)} USD</span>
         </div>
@@ -36,19 +36,19 @@ export const ProductTruthPanel: React.FC<ProductTruthPanelProps> = ({ product, c
         )}
         <div className="flex-1 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-mono text-zinc-400 bg-white/5 px-2 py-0.5 rounded">
+            <span className="text-xs font-mono text-zinc-700 bg-white px-2 py-0.5 rounded">
               {product.sku}
             </span>
-            <span className="text-xs text-zinc-400">{product.brand}</span>
+            <span className="text-xs text-zinc-700">{product.brand}</span>
             {product.category && (
               <span className="text-xs text-zinc-500 uppercase tracking-wider">
                 • {product.category}
               </span>
             )}
           </div>
-          <h4 className="text-base font-medium text-white">{product.productName}</h4>
+          <h4 className="text-base font-medium text-zinc-950">{product.productName}</h4>
           {product.description && (
-            <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed">
+            <p className="text-xs text-zinc-700 line-clamp-2 leading-relaxed">
               {product.description}
             </p>
           )}
@@ -56,34 +56,34 @@ export const ProductTruthPanel: React.FC<ProductTruthPanelProps> = ({ product, c
       </div>
 
       {product.fragranceNotes && (
-        <div className="rounded-lg bg-black/30 p-3 border border-white/5 grid grid-cols-3 gap-2 text-xs">
+        <div className="rounded-lg bg-white p-3 border border-amber-200 grid grid-cols-3 gap-2 text-xs">
           <div>
             <span className="text-zinc-500 block text-[10px] uppercase tracking-wider">
               Top Notes
             </span>
-            <span className="text-zinc-300">{product.fragranceNotes.top.join(', ')}</span>
+            <span className="text-zinc-800">{product.fragranceNotes.top.join(', ')}</span>
           </div>
           <div>
             <span className="text-zinc-500 block text-[10px] uppercase tracking-wider">
               Heart Notes
             </span>
-            <span className="text-zinc-300">{product.fragranceNotes.heart.join(', ')}</span>
+            <span className="text-zinc-800">{product.fragranceNotes.heart.join(', ')}</span>
           </div>
           <div>
             <span className="text-zinc-500 block text-[10px] uppercase tracking-wider">
               Base Notes
             </span>
-            <span className="text-zinc-300">{product.fragranceNotes.base.join(', ')}</span>
+            <span className="text-zinc-800">{product.fragranceNotes.base.join(', ')}</span>
           </div>
         </div>
       )}
 
       {campaign && (
-        <div className="flex items-center justify-between text-xs pt-2 border-t border-white/5 text-zinc-400">
+        <div className="flex items-center justify-between text-xs pt-2 border-t border-amber-200 text-zinc-700">
           <div className="flex items-center gap-1.5">
             <Tag className="h-3.5 w-3.5 text-zinc-500" />
             <span>
-              Campaign: <strong className="text-zinc-200">{campaign.name}</strong> ({campaign.code})
+              Campaign: <strong className="text-zinc-900">{campaign.name}</strong> ({campaign.code})
             </span>
           </div>
           {product.productUrl && (

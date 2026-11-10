@@ -99,11 +99,13 @@ export function GenerationProgressCard({
     );
   }
 
+  if (latestAttempt?.status !== 'SUCCEEDED') return <></>;
+
   return (
     <div className="bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/40 rounded-xl px-4 py-3 mb-6 flex items-center justify-between text-xs">
       <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-200 font-medium">
         <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-        AI Generation Lease Succeeded
+        Marketing copy generated
       </div>
       {latestAttempt && (
         <div className="text-neutral-500 dark:text-neutral-400 flex items-center gap-3">

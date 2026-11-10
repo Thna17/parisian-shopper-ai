@@ -25,15 +25,15 @@ export const ReviewEligibilityBanner: React.FC<ReviewEligibilityBannerProps> = (
     return (
       <div
         data-testid="eligibility-banner-eligible"
-        className="flex items-start gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-200"
+        className="flex items-start gap-3 rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-emerald-950"
       >
         <ShieldCheck className="h-5 w-5 shrink-0 text-emerald-400 mt-0.5" />
         <div>
-          <h4 className="text-sm font-semibold text-emerald-300">Four-Eyes Eligible Reviewer</h4>
-          <p className="text-xs text-emerald-300/80 mt-0.5">
-            You are independent from the job requester{' '}
-            {requesterDisplayName ? `(${requesterDisplayName})` : ''} and revision authors. You are
-            authorized to approve or reject this exact version.
+          <h4 className="text-sm font-semibold text-emerald-900">Four-Eyes Eligible Reviewer</h4>
+          <p className="text-xs text-emerald-900 mt-0.5">
+            This account is eligible to review this version. The reviewer must be a different person
+            from the requester {requesterDisplayName ? `(${requesterDisplayName})` : ''} and anyone
+            who edited it; using a second account yourself is not an independent review.
           </p>
         </div>
       </div>
@@ -43,14 +43,14 @@ export const ReviewEligibilityBanner: React.FC<ReviewEligibilityBannerProps> = (
   return (
     <div
       data-testid="eligibility-banner-ineligible"
-      className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-amber-200"
+      className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950"
     >
       <ShieldAlert className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
       <div className="space-y-1.5 flex-1">
-        <h4 className="text-sm font-semibold text-amber-300">
+        <h4 className="text-sm font-semibold text-amber-950">
           Four-Eyes Approval Policy Restriction
         </h4>
-        <ul className="text-xs text-amber-300/90 space-y-1">
+        <ul className="text-xs text-amber-950 space-y-1">
           {selfRequested && (
             <li className="flex items-center gap-1.5">
               <UserX className="h-3.5 w-3.5 text-amber-400 shrink-0" />
@@ -106,6 +106,12 @@ export const ReviewEligibilityBanner: React.FC<ReviewEligibilityBannerProps> = (
             </li>
           )}
         </ul>
+        {(selfRequested || selfAuthored || missingPermission) && (
+          <p className="pt-2 text-xs">
+            Ask an authorized colleague who did not create or edit this caption to review it. A
+            second account used by the same person is not an independent review.
+          </p>
+        )}
       </div>
     </div>
   );

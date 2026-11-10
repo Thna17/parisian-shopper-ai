@@ -371,7 +371,7 @@ export function formatWizardStep(details: WizardStepDetails): string {
       lines.push('Choose a content goal for this campaign:');
       break;
     case 3:
-      lines.push('Choose copy and poster language:');
+      lines.push('Choose Caption and poster language:');
       break;
     case 4:
       lines.push('Choose target channel and format:');
@@ -400,7 +400,7 @@ export type GenerationProgressStep =
 
 export const GENERATION_PROGRESS_STEPS: { id: GenerationProgressStep; label: string }[] = [
   { id: 'PREPARING_FACTS', label: 'Preparing verified product facts' },
-  { id: 'WRITING_COPY', label: 'Writing copy' },
+  { id: 'WRITING_COPY', label: 'Writing Caption' },
   { id: 'VALIDATING_CLAIMS', label: 'Validating claims' },
   { id: 'CREATING_BACKGROUND', label: 'Creating background' },
   { id: 'COMPOSITING_PRODUCT', label: 'Compositing product' },
@@ -417,16 +417,19 @@ export function formatProgressCard(
 ): string {
   const prefix = options?.demoMode ? '[DEMO] ' : '';
   const lines: string[] = [
-    `${prefix}⏳ *Generating Poster & Copy* (\`#${shortReference(jobId)}\`)`,
+    `${prefix}⏳ *Preparing legacy Caption* (\`#${shortReference(jobId)}\`)`,
     '',
     `*Product:* ${productName}`,
     '',
   ];
 
-  const currentIndex = GENERATION_PROGRESS_STEPS.findIndex((s) => s.id === currentStep);
+  const steps = GENERATION_PROGRESS_STEPS.filter((s) =>
+    ['PREPARING_FACTS', 'WRITING_COPY', 'VALIDATING_CLAIMS', 'READY_FOR_REVIEW'].includes(s.id),
+  );
+  const currentIndex = steps.findIndex((s) => s.id === currentStep);
 
-  for (let i = 0; i < GENERATION_PROGRESS_STEPS.length; i++) {
-    const step = GENERATION_PROGRESS_STEPS[i]!;
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i]!;
     if (i < currentIndex) {
       lines.push(`✅ ${step.label}`);
     } else if (i === currentIndex) {

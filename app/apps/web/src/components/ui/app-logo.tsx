@@ -32,7 +32,7 @@ export const AppLogo: React.FC<AppLogoProps> = ({
             Parisian Shopper AI
           </span>
           <span className="text-[10px] text-app-muted uppercase tracking-[0.14em] font-semibold mt-0.5 whitespace-nowrap">
-            Luxury Retail Marketing
+            Creative Operations
           </span>
         </div>
       )}

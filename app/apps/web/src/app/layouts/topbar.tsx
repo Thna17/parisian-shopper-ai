@@ -1,78 +1,154 @@
-import React from 'react';
-import { Menu, LogOut, CheckCircle } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Menu, Search, Plus, Moon, Sun, LayoutDashboard, Image, Layers } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../features/auth/context/auth-context.js';
+import { usePermissions } from '../../features/auth/hooks/use-permissions.js';
 import { Avatar } from '../../components/ui/avatar.js';
-import { Badge } from '../../components/ui/badge.js';
-import { Button } from '../../components/ui/button.js';
-
+import { Permission } from '../../types/auth.types.js';
+import { workspacePageLabel } from './workspace-navigation.js';
 export interface TopbarProps {
+  readonly mobileMenuOpen?: boolean;
   readonly onToggleMobileMenu: () => void;
 }
-
-const ROLE_HIERARCHY = ['ADMIN', 'MARKETING_APPROVER', 'MARKETING_EDITOR', 'VIEWER'] as const;
-
-function getPrimaryDisplayRole(roles?: readonly string[]): string {
-  if (!roles || roles.length === 0) return 'Staff';
-  for (const r of ROLE_HIERARCHY) {
-    if (roles.includes(r)) return r === 'ADMIN' ? 'Administrator' : r.replace(/_/g, ' ');
-  }
-  return roles[0]?.replace(/_/g, ' ') ?? 'Staff';
-}
-
-export const Topbar: React.FC<TopbarProps> = ({ onToggleMobileMenu }) => {
-  const { employee, logout, isLoggingOut } = useAuth();
-  const displayRole = getPrimaryDisplayRole(employee?.roles);
-
+export const WorkspaceBar: React.FC = () => {
+  const { hasPermission } = usePermissions();
+  const [dark, setDark] = useState(() => {
+    try {
+      return localStorage.getItem('parisian:workspace-theme') === 'dark';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    try {
+      localStorage.setItem('parisian:workspace-theme', dark ? 'dark' : 'light');
+    } catch {
+      /* Preferences are optional. */
+    }
+  }, [dark]);
   return (
-    <header className="h-16 px-4 sm:px-6 bg-app-surface border-b border-app-border flex items-center justify-between shrink-0 select-none z-10">
-      <div className="flex items-center gap-3">
+    <div className="workspace-bar flex h-[48px] shrink-0 items-center justify-between gap-4 bg-[#192e35] px-4 text-[#dfe7e6] sm:px-6">
+      <div className="flex min-w-0 items-center gap-6">
+        <Link
+          to="/"
+          className="flex shrink-0 items-center gap-2 text-[11px] font-bold uppercase tracking-[.04em]"
+        >
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#c8ac73] font-serif text-lg text-[#243746]">
+            P
+          </span>
+          Parisian Shopper AI
+        </Link>
+        <nav
+          aria-label="Workspace shortcuts"
+          className="hidden items-center gap-6 border-l border-white/20 pl-6 text-xs md:flex"
+        >
+          <Link to="/" className="flex items-center gap-2">
+            <LayoutDashboard className="h-3.5 w-3.5" />
+            Overview
+          </Link>
+          {hasPermission(Permission.VIEW_OWN_CONTENT) && (
+            <>
+              <Link to="/creative" className="flex items-center gap-2">
+                <Image className="h-3.5 w-3.5" />
+                Creative Studio
+              </Link>
+              <Link to="/posts" className="flex items-center gap-2">
+                <Layers className="h-3.5 w-3.5" />
+                Your posts
+              </Link>
+            </>
+          )}
+        </nav>
+      </div>
+      <button
+        type="button"
+        aria-label={dark ? 'Use light theme' : 'Use dark theme'}
+        onClick={() => setDark((value) => !value)}
+        className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-white/15 bg-white/5"
+      >
+        {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      </button>
+    </div>
+  );
+};
+export const Topbar: React.FC<TopbarProps> = ({ onToggleMobileMenu, mobileMenuOpen = false }) => {
+  const { employee } = useAuth();
+  const { hasPermission } = usePermissions();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [search, setSearch] = useState('');
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const handler = (event: KeyboardEvent): void => {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.key === 'k' &&
+        hasPermission(Permission.VIEW_PRODUCTS)
+      ) {
+        event.preventDefault();
+        input.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [hasPermission]);
+  return (
+    <header className="flex h-[68px] shrink-0 items-center justify-between gap-3 border-b border-app-border bg-app-surface px-4 sm:px-8">
+      <div className="flex min-w-0 items-center gap-3">
         <button
           type="button"
           onClick={onToggleMobileMenu}
           aria-label="Open mobile navigation menu"
-          className="lg:hidden p-2 rounded-lg text-app-muted hover:text-app-primary hover:bg-app-surface-subtle focus-visible:outline-2 focus-visible:outline-gold-500"
+          aria-expanded={mobileMenuOpen}
+          aria-haspopup="dialog"
+          className="min-h-11 min-w-11 rounded-lg p-2 text-app-muted lg:hidden"
         >
-          <Menu className="w-5 h-5" />
+          <Menu className="h-5 w-5" />
         </button>
-
-        <div className="hidden sm:flex items-center gap-2">
-          <Badge variant="good" dot className="font-medium text-[11px]">
-            API Connected
-          </Badge>
-          <span className="text-xs text-app-muted font-mono">v1.0-prod</span>
-        </div>
+        <p className="truncate text-xs">
+          <span className="hidden text-app-muted sm:inline">
+            Workspace <span className="px-3">/</span>
+          </span>
+          <strong className="font-semibold">{workspacePageLabel(location.pathname)}</strong>
+        </p>
       </div>
-
-      <div className="flex items-center gap-4">
-        <div className="hidden md:flex items-center gap-2 text-xs text-app-muted">
-          <CheckCircle className="w-3.5 h-3.5 text-status-good" />
-          <span>Four-Eyes Governed</span>
-        </div>
-
-        <div className="h-4 w-px bg-app-border hidden sm:block" />
-
-        <div className="flex items-center gap-3">
-          <Avatar name={employee?.displayName} size="sm" />
-          <div className="hidden sm:flex flex-col text-left">
-            <span className="text-xs font-semibold text-app-primary leading-tight">
-              {employee?.displayName ?? 'Employee'}
-            </span>
-            <span className="text-[10px] text-app-muted leading-tight font-medium">
-              {displayRole}
-            </span>
-          </div>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={logout}
-            isLoading={isLoggingOut}
-            icon={<LogOut className="w-3.5 h-3.5" />}
-            className="text-xs text-app-muted hover:text-status-bad hover:bg-status-bad/10"
+      <div className="flex items-center gap-3 sm:gap-4">
+        {hasPermission(Permission.VIEW_PRODUCTS) && (
+          <form
+            role="search"
+            className="hidden items-center gap-2 rounded-lg border border-app-border bg-app-bg px-3 py-2 md:flex"
+            onSubmit={(event) => {
+              event.preventDefault();
+              navigate(
+                '/products' + (search.trim() ? '?q=' + encodeURIComponent(search.trim()) : ''),
+              );
+            }}
           >
-            <span className="hidden sm:inline">Sign Out</span>
-          </Button>
-        </div>
+            <Search aria-hidden="true" className="h-3.5 w-3.5 text-app-muted" />
+            <input
+              ref={input}
+              aria-label="Search products in workspace"
+              placeholder="Search products"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="w-32 bg-transparent text-xs outline-none xl:w-44"
+            />
+            <kbd className="text-[10px] text-app-muted">⌘ K</kbd>
+          </form>
+        )}
+        {hasPermission(Permission.CREATE_CONTENT) && (
+          <Link
+            to="/posts/new"
+            className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-lg bg-[#243746] px-3 text-xs font-semibold text-white sm:px-4"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Create New</span>
+          </Link>
+        )}
+        <span title={employee?.displayName ?? 'Employee'}>
+          <Avatar name={employee?.displayName} size="sm" />
+        </span>
       </div>
     </header>
   );

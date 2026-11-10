@@ -2,7 +2,7 @@ import { type PosterSpec } from '../domain/poster-spec.js';
 import { type PosterLayoutManifest } from '../domain/poster-templates.js';
 
 export const POSTER_COMPOSITOR = Symbol('POSTER_COMPOSITOR');
-export const POSTER_COMPOSITOR_VERSION = 'ps-poster-compositor-v2';
+export const POSTER_COMPOSITOR_VERSION = 'ps-poster-compositor-v3';
 
 export interface RenderPosterInput {
   readonly creativeJobId: string;

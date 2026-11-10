@@ -1,3 +1,4 @@
+import { hasApprovedCurrentPromotion } from '../../products/domain/promotion-eligibility.js';
 import { type NormalizedProduct } from '../../products/domain/product.schema.js';
 import { ContentGenerationError } from './content-errors.js';
 import { type ContentType } from './content.js';
@@ -72,13 +73,20 @@ export class PromotionStrategy extends BaseStrategy {
       this.missing('discount');
     }
     const now = this.now().toISOString();
-    if (now < product.discount.starts_at || now > product.discount.ends_at) {
+    if (now < product.discount.starts_at || now >= product.discount.ends_at) {
       throw new ContentGenerationError({
         code: 'MISSING_REQUIRED_PRODUCT_DATA',
         publicMessage: 'The product does not have a source-controlled active promotion.',
         details: { contentType: this.contentType, field: 'discount' },
       });
     }
+    if (!hasApprovedCurrentPromotion(product, this.now()))
+      throw new ContentGenerationError({
+        code: 'MISSING_REQUIRED_PRODUCT_DATA',
+        publicMessage:
+          'This promotion needs explicit source approval and valid promotional prices before it can be used. Choose Product spotlight.',
+        details: { contentType: this.contentType, field: 'discount' },
+      });
   }
 }
 

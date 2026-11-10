@@ -37,11 +37,12 @@ export const SidebarItem: React.FC<SidebarItemProps> = ({
   return (
     <NavLink
       to={to}
+      end={to === '/posts' || to === '/' || to === '/creative'}
       onClick={onClick}
       className={({ isActive }) =>
-        `flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-all duration-150 group relative select-none ${
+        `flex min-h-11 items-center gap-3 px-3 py-2.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700 rounded-lg text-xs font-medium transition-all duration-150 group relative select-none ${
           isActive
-            ? 'bg-navy-900 text-white shadow-subtle'
+            ? 'bg-[#f5f2ec] text-[#243746] font-semibold'
             : 'text-app-muted hover:text-app-primary hover:bg-app-surface-subtle'
         }`
       }
@@ -49,7 +50,7 @@ export const SidebarItem: React.FC<SidebarItemProps> = ({
       {({ isActive }) => (
         <>
           <span
-            className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#D4BD87]' : 'text-app-muted group-hover:text-app-primary'}`}
+            className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#243746]' : 'text-app-muted group-hover:text-app-primary'}`}
           >
             {icon}
           </span>
@@ -67,7 +68,7 @@ export const SidebarItem: React.FC<SidebarItemProps> = ({
           )}
           {isActive && (
             <span
-              className="absolute right-2 w-1.5 h-1.5 rounded-full bg-gold-400"
+              className="absolute left-0 h-6 w-[3px] rounded-full bg-gold-500"
               aria-hidden="true"
             />
           )}

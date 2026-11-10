@@ -9,6 +9,8 @@ import {
   type PersistedValidationFinding,
   type PersistedValidationResult,
   type StoreActionTokenInput,
+  type StorePostInteraction,
+  type PostPendingInteraction,
   type TelegramActionTokenRecord,
   type TelegramActor,
   type TelegramCreateFlow,
@@ -143,10 +145,20 @@ export class PrismaTelegramWorkflowRepository implements TelegramWorkflowReposit
     updateType: string,
   ): Promise<boolean> {
     try {
+      const parsedUpdateId = /^\d+$/.test(updateId)
+        ? BigInt(updateId)
+        : this.deterministicStringHashBigInt(updateId);
+      const parsedUserId =
+        telegramUserId === null
+          ? null
+          : /^\d+$/.test(telegramUserId)
+            ? BigInt(telegramUserId)
+            : this.deterministicStringHashBigInt(telegramUserId);
+
       await this.prisma.inboundTelegramUpdate.create({
         data: {
-          telegramUpdateId: BigInt(updateId),
-          telegramUserId: telegramUserId === null ? null : BigInt(telegramUserId),
+          telegramUpdateId: parsedUpdateId,
+          telegramUserId: parsedUserId,
           updateType,
         },
       });
@@ -155,6 +167,73 @@ export class PrismaTelegramWorkflowRepository implements TelegramWorkflowReposit
       if (isUniqueViolation(error)) return false;
       throw error;
     }
+  }
+
+  private deterministicStringHashBigInt(value: string): bigint {
+    let hash = 0n;
+    for (let i = 0; i < value.length; i++) {
+      hash = (hash * 31n + BigInt(value.charCodeAt(i))) & 0x7fffffffffffffffn;
+    }
+    return hash;
+  }
+
+  public async listActiveApproverTelegramUserIds(): Promise<readonly string[]> {
+    const records = await this.prisma.telegramIdentity.findMany({
+      where: {
+        disabledAt: null,
+        user: {
+          status: 'ACTIVE',
+          roles: {
+            some: {
+              revokedAt: null,
+              role: {
+                code: { in: ['MARKETING_APPROVER', 'ADMIN'] },
+              },
+            },
+          },
+        },
+      },
+      select: { telegramUserId: true },
+    });
+    return records.map((r) => r.telegramUserId.toString());
+  }
+
+  public async postNotificationSent(eventId: string, identityId: string): Promise<boolean> {
+    const delivery = await this.prisma.postTelegramDelivery.findUnique({
+      where: {
+        outboxEventId_telegramIdentityId: {
+          outboxEventId: eventId,
+          telegramIdentityId: identityId,
+        },
+      },
+    });
+    return Boolean(delivery?.sentAt);
+  }
+  public async acknowledgePostNotification(eventId: string, identityId: string): Promise<void> {
+    await this.prisma.postTelegramDelivery.upsert({
+      where: {
+        outboxEventId_telegramIdentityId: {
+          outboxEventId: eventId,
+          telegramIdentityId: identityId,
+        },
+      },
+      create: { outboxEventId: eventId, telegramIdentityId: identityId, sentAt: new Date() },
+      update: { sentAt: new Date() },
+    });
+  }
+  public async listPostRecipientTelegramUserIds(postId: string): Promise<readonly string[]> {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: { creatorUserId: true, status: true },
+    });
+    if (!post) return [];
+    const identities = await this.prisma.telegramIdentity.findMany({
+      where: { disabledAt: null, userId: post.creatorUserId, user: { status: 'ACTIVE' } },
+      select: { telegramUserId: true },
+    });
+    const reviewers =
+      post.status === 'UNDER_REVIEW' ? await this.listActiveApproverTelegramUserIds() : [];
+    return [...new Set([...identities.map((i) => i.telegramUserId.toString()), ...reviewers])];
   }
 
   public async resolveActor(profile: TelegramUserProfile): Promise<TelegramActor | null> {
@@ -351,7 +430,7 @@ export class PrismaTelegramWorkflowRepository implements TelegramWorkflowReposit
         action: input.action,
         resourceId: input.resourceId,
         singleUse: input.singleUse,
-        expiresAt: input.expiresAt,
+        expiresAt: input.expiresAt ?? new Date(Date.now() + 86400_000),
         metadata: input.metadata === undefined ? Prisma.DbNull : toJson(input.metadata),
       })),
     });
@@ -614,11 +693,115 @@ export class PrismaTelegramWorkflowRepository implements TelegramWorkflowReposit
     });
   }
 
+  public async createPostInteraction(input: StorePostInteraction): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      // Serialize replacement of an identity's pending prompt, including concurrent clicks.
+      await tx.$queryRaw`SELECT id FROM telegram_identities WHERE id = ${input.telegramIdentityId}::uuid FOR UPDATE`;
+      const identity = await tx.telegramIdentity.findUniqueOrThrow({
+        where: { id: input.telegramIdentityId },
+      });
+      await tx.telegramPendingReviewInteraction.updateMany({
+        where: {
+          telegramIdentityId: input.telegramIdentityId,
+          completedAt: null,
+          cancelledAt: null,
+        },
+        data: { cancelledAt: new Date() },
+      });
+      await tx.telegramPendingReviewInteraction.create({
+        data: {
+          telegramIdentityId: input.telegramIdentityId,
+          actorUserId: identity.userId,
+          postId: input.postId,
+          postRevisionId: input.postRevisionId,
+          expectedRevision: input.expectedRevision,
+          reviewRound: input.reviewRound,
+          action: 'EDIT',
+          intendedAction: input.intendedAction,
+          field: input.field ?? null,
+          payload: (input.payload ?? {}) as Prisma.InputJsonValue,
+          expiresAt: input.expiresAt,
+        },
+      });
+    });
+  }
+  public async findPostInteraction(
+    identityId: string,
+    now: Date,
+  ): Promise<PostPendingInteraction | null> {
+    const row = await this.prisma.telegramPendingReviewInteraction.findFirst({
+      where: {
+        telegramIdentityId: identityId,
+        postId: { not: null },
+        completedAt: null,
+        cancelledAt: null,
+        expiresAt: { gt: now },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (
+      !row?.postId ||
+      !row.postRevisionId ||
+      !row.actorUserId ||
+      !row.expectedRevision ||
+      !row.intendedAction
+    )
+      return null;
+    return {
+      id: row.id,
+      postId: row.postId,
+      postRevisionId: row.postRevisionId,
+      expectedRevision: row.expectedRevision,
+      reviewRound: row.reviewRound ?? 0,
+      actorUserId: row.actorUserId,
+      intendedAction: row.intendedAction as PostPendingInteraction['intendedAction'],
+      field: row.field,
+      payload: (row.payload ?? {}) as Record<string, unknown>,
+      expiresAt: row.expiresAt,
+      claimToken: row.claimToken,
+    };
+  }
+  public async claimPostInteraction(
+    id: string,
+    identityId: string,
+    token: string,
+    now: Date,
+  ): Promise<boolean> {
+    const result = await this.prisma.telegramPendingReviewInteraction.updateMany({
+      where: {
+        id,
+        telegramIdentityId: identityId,
+        postId: { not: null },
+        completedAt: null,
+        cancelledAt: null,
+        expiresAt: { gt: now },
+        OR: [{ claimedUntil: null }, { claimedUntil: { lt: now } }],
+      },
+      data: { claimToken: token, claimedUntil: new Date(now.getTime() + 60000) },
+    });
+    return result.count === 1;
+  }
+  public async finishPostInteraction(id: string, token: string, now: Date): Promise<void> {
+    await this.prisma.telegramPendingReviewInteraction.updateMany({
+      where: { id, claimToken: token },
+      data: { completedAt: now, claimToken: null, claimedUntil: null },
+    });
+  }
+  public async releasePostInteraction(id: string, token: string): Promise<void> {
+    await this.prisma.telegramPendingReviewInteraction.updateMany({
+      where: { id, claimToken: token },
+      data: { claimToken: null, claimedUntil: null },
+    });
+  }
+
   public async createPendingInteraction(input: {
     telegramIdentityId: string;
     contentJobId: string;
     contentVersionId: string;
     action: 'EDIT' | 'REJECT';
+    field?: string;
+    intendedAction?: string;
+    payload?: Readonly<Record<string, unknown>>;
     expiresAt: Date;
   }): Promise<void> {
     await this.prisma.telegramPendingReviewInteraction.updateMany({
@@ -632,13 +815,20 @@ export class PrismaTelegramWorkflowRepository implements TelegramWorkflowReposit
       },
     });
 
+    const identity = await this.prisma.telegramIdentity.findUniqueOrThrow({
+      where: { id: input.telegramIdentityId },
+    });
     await this.prisma.telegramPendingReviewInteraction.create({
       data: {
         telegramIdentityId: input.telegramIdentityId,
         contentJobId: input.contentJobId,
         contentVersionId: input.contentVersionId,
         action: input.action,
-        expiresAt: input.expiresAt,
+        field: input.field ?? null,
+        intendedAction: input.intendedAction ?? input.action,
+        actorUserId: identity.userId,
+        payload: (input.payload ?? {}) as Prisma.InputJsonValue,
+        expiresAt: input.expiresAt ?? new Date(Date.now() + 86400_000),
       },
     });
   }
@@ -651,10 +841,14 @@ export class PrismaTelegramWorkflowRepository implements TelegramWorkflowReposit
     contentJobId: string;
     contentVersionId: string;
     action: 'EDIT' | 'REJECT';
+    field?: string;
+    actorUserId?: string;
+    intendedAction?: string;
   } | null> {
     const record = await this.prisma.telegramPendingReviewInteraction.findFirst({
       where: {
         telegramIdentityId,
+        postId: null,
         completedAt: null,
         cancelledAt: null,
         expiresAt: { gt: now },
@@ -664,8 +858,11 @@ export class PrismaTelegramWorkflowRepository implements TelegramWorkflowReposit
     if (record === null) return null;
     return {
       id: record.id,
-      contentJobId: record.contentJobId,
-      contentVersionId: record.contentVersionId,
+      contentJobId: record.contentJobId!,
+      contentVersionId: record.contentVersionId!,
+      ...(record.field ? { field: record.field } : {}),
+      ...(record.actorUserId ? { actorUserId: record.actorUserId } : {}),
+      ...(record.intendedAction ? { intendedAction: record.intendedAction } : {}),
       action: record.action,
     };
   }
@@ -873,7 +1070,8 @@ function normalizeWorkflowMessageType(raw?: string): TelegramWorkflowMessageType
 }
 
 function accessFilter(actor: TelegramActor): Prisma.ContentJobWhereInput {
-  return hasAnyRolePermission(actor.roles, Permission.VIEW_ALL_CONTENT)
+  return hasAnyRolePermission(actor.roles, Permission.VIEW_ALL_CONTENT) ||
+    hasAnyRolePermission(actor.roles, Permission.APPROVE_CONTENT)
     ? {}
     : { requesterUserId: actor.internalUserId };
 }

@@ -33,3 +33,12 @@ export * from './budget/prisma-usage-ledger.repository.js';
 export * from './budget/prisma-budget-policy.repository.js';
 export * from './budget/prisma-provider-pricing.repository.js';
 export * from './budget/prisma-provider-capability.repository.js';
+export * from './posts/prisma-post.repository.js';
+
+export * from './posts/prisma-post-generation.repository.js';
+
+export * from './posts/prisma-post-caption.repository.js';
+
+export * from './brand/prisma-brand-guidance.repository.js';
+
+export * from './product-snapshot/prisma-product-marketing-history.repository.js';

@@ -36,6 +36,8 @@ export class CreativeGenerationWorker implements OnModuleInit {
         connection: createBullMqConnection(client),
         concurrency: 2, // Default: 2 parallel jobs to manage libvips memory overhead
         lockDuration: 60_000, // 60 seconds lock duration
+        // A worker crash does not prove that the provider did not charge.
+        maxStalledCount: 0,
       },
     );
     this.registry.register(QueueName.CREATIVE_GENERATION, worker);
@@ -99,21 +101,14 @@ export class CreativeGenerationWorker implements OnModuleInit {
           failedAt: completedAt.toISOString(),
           durationMs,
           attemptsMade: job.attemptsMade,
-          isDeadLetter: (job.attemptsMade ?? 0) >= 2,
+          isDeadLetter: true,
         },
       );
 
-      // Non-recoverable validation/not-eligible errors should not be continuously retried
+      // Even previously queued jobs may have retries configured. A timeout or
+      // validation failure after dispatch must not trigger another paid call.
       const errorMessage = error instanceof Error ? error.message : String(error);
-      if (
-        errorMessage.includes('not eligible') ||
-        errorMessage.includes('not found') ||
-        errorMessage.includes('Invalid target canvas dimensions')
-      ) {
-        throw new UnrecoverableError(errorMessage);
-      }
-
-      throw error;
+      throw new UnrecoverableError(errorMessage);
     }
   }
 }

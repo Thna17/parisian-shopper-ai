@@ -21,6 +21,7 @@ import {
 import { z, ZodError } from 'zod';
 
 export interface CodexCliTextProviderOptions {
+  allowDevelopmentFallback?: boolean;
   model?: string | undefined;
   timeoutMs?: number | undefined;
   workingDirectory?: string | undefined;
@@ -31,11 +32,13 @@ export class CodexCliTextProvider implements AITextProvider {
   public readonly providerName = 'codex_cli';
   public readonly model: string;
   private readonly runner: CodexCliRunner;
+  private readonly allowDevelopmentFallback: boolean;
   private readonly timeoutMs?: number | undefined;
   private readonly workingDirectory?: string | undefined;
   private readonly outputJsonSchema: Record<string, unknown>;
 
   public constructor(options: CodexCliTextProviderOptions = {}) {
+    this.allowDevelopmentFallback = options.allowDevelopmentFallback ?? true;
     this.model = options.model ?? 'codex-cli-default';
     if (options.timeoutMs !== undefined) {
       this.timeoutMs = options.timeoutMs;
@@ -108,7 +111,9 @@ export class CodexCliTextProvider implements AITextProvider {
       };
     } catch (error) {
       if (
+        this.allowDevelopmentFallback &&
         process.env.NODE_ENV !== 'production' &&
+        process.env.NODE_ENV !== 'test' &&
         (error instanceof CodexCliUsageLimitedError ||
           error instanceof CodexCliNotAuthenticatedError ||
           error instanceof CodexCliNotInstalledError ||
@@ -125,6 +130,7 @@ export class CodexCliTextProvider implements AITextProvider {
     const trustedPolicy = {
       systemRules: context.systemRules.data,
       brandRules: context.brandRules.data,
+      brandGuidance: context.brandGuidance?.data,
       contentStrategy: context.contentStrategy.data,
       outputRequirements: {
         targetLanguage: context.request.language,
@@ -135,6 +141,8 @@ export class CodexCliTextProvider implements AITextProvider {
 
     const untrustedData = {
       productFacts: context.productFacts.data,
+      referenceExamples: context.referenceExamples?.data,
+      ...(context.postBrief ? { postBrief: context.postBrief.data } : {}),
       ...(context.reviewerInstruction !== undefined
         ? { reviewerInstruction: context.reviewerInstruction.data }
         : {}),

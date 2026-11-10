@@ -6,6 +6,7 @@ import {
   type NormalizedProductEnvelope,
 } from '../domain/product.schema.js';
 import {
+  type ProductCatalogPageResult,
   type ProductSearchResult,
   type ProductSource,
   type ProductSourceSearchInput,
@@ -40,6 +41,22 @@ export class MockProductSource implements ProductSource {
       .slice(0, validated.limit)
       .map(copy);
     return Promise.resolve({ items });
+  }
+
+  public fetchCatalogPage(page = 1, limit = 50): Promise<ProductCatalogPageResult> {
+    const validLimit = Math.max(1, limit);
+    const start = (Math.max(1, page) - 1) * validLimit;
+    const items = this.products.slice(start, start + validLimit).map(copy);
+    const totalPages = Math.max(1, Math.ceil(this.products.length / validLimit));
+    return Promise.resolve({
+      items,
+      pagination: {
+        page: Math.max(1, page),
+        limit: validLimit,
+        totalItems: this.products.length,
+        totalPages,
+      },
+    });
   }
 }
 

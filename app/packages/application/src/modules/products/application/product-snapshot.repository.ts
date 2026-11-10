@@ -5,7 +5,7 @@ import {
 } from './product-snapshot-hash.js';
 
 export const PRODUCT_SNAPSHOT_REPOSITORY = Symbol('PRODUCT_SNAPSHOT_REPOSITORY');
-export const PRODUCT_NORMALIZER_VERSION = 'phase-1b-v1';
+export const PRODUCT_NORMALIZER_VERSION = 'phase-1b-v2';
 
 export interface ProductSnapshot {
   id: string;

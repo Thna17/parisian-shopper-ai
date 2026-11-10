@@ -93,6 +93,14 @@ export class ValidateCreativeProjectUseCase {
     const safeMargins = version.safeMargins;
 
     const findings: CreativeValidationFinding[] = [];
+    if (layersToValidate.length === 0) {
+      findings.push({
+        code: 'GATE_EMPTY_SCENE',
+        severity: 'BLOCKING',
+        message: 'The scene has no layers to validate.',
+        field: 'layers',
+      });
+    }
 
     // 1. Safe Margins Gate
     for (const layer of layersToValidate) {

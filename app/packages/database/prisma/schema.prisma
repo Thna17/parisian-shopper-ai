@@ -225,12 +225,18 @@ enum ExportEncoding {
 }
 
 model User {
-  id          String     @id @default(uuid()) @db.Uuid
-  displayName String     @map("display_name") @db.VarChar(200)
-  status      UserStatus @default(ACTIVE)
-  disabledAt  DateTime?  @map("disabled_at") @db.Timestamptz(3)
-  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  brandProfileApprovals BrandProfileApproval[]
+  brandSourceReviews BrandSourceReview[]
+  captionBrandApprovals PostCaptionBrandApproval[]
+  createdPosts          Post[]                     @relation("PostCreator")
+  postRevisions         PostRevision[]             @relation("PostAuthor")
+  postEvents            PostEvent[]                @relation("PostActor")
+  id                    String                     @id @default(uuid()) @db.Uuid
+  displayName           String                     @map("display_name") @db.VarChar(200)
+  status                UserStatus                 @default(ACTIVE)
+  disabledAt            DateTime?                  @map("disabled_at") @db.Timestamptz(3)
+  createdAt             DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   roles                       UserRole[]                   @relation("UserRoles")
   roleAssignments             UserRole[]                   @relation("RoleAssignedBy")
@@ -360,20 +366,21 @@ model SystemSetting {
 }
 
 model OutboxEvent {
-  id             String    @id @default(uuid()) @db.Uuid
-  topic          String    @db.VarChar(160)
-  schemaVersion  Int       @default(1) @map("schema_version")
-  idempotencyKey String    @unique(map: "outbox_events_idempotency_key_key") @map("idempotency_key") @db.VarChar(200)
-  aggregateType  String?   @map("aggregate_type") @db.VarChar(100)
-  aggregateId    String?   @map("aggregate_id") @db.VarChar(100)
-  payload        Json      @db.JsonB
-  occurredAt     DateTime  @map("occurred_at") @db.Timestamptz(3)
-  availableAt    DateTime  @map("available_at") @db.Timestamptz(3)
-  claimedAt      DateTime? @map("claimed_at") @db.Timestamptz(3)
-  processedAt    DateTime? @map("processed_at") @db.Timestamptz(3)
-  attemptCount   Int       @default(0) @map("attempt_count")
-  lastErrorCode  String?   @map("last_error_code") @db.VarChar(100)
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  postDeliveries PostTelegramDelivery[]
+  id             String                 @id @default(uuid()) @db.Uuid
+  topic          String                 @db.VarChar(160)
+  schemaVersion  Int                    @default(1) @map("schema_version")
+  idempotencyKey String                 @unique(map: "outbox_events_idempotency_key_key") @map("idempotency_key") @db.VarChar(200)
+  aggregateType  String?                @map("aggregate_type") @db.VarChar(100)
+  aggregateId    String?                @map("aggregate_id") @db.VarChar(100)
+  payload        Json                   @db.JsonB
+  occurredAt     DateTime               @map("occurred_at") @db.Timestamptz(3)
+  availableAt    DateTime               @map("available_at") @db.Timestamptz(3)
+  claimedAt      DateTime?              @map("claimed_at") @db.Timestamptz(3)
+  processedAt    DateTime?              @map("processed_at") @db.Timestamptz(3)
+  attemptCount   Int                    @default(0) @map("attempt_count")
+  lastErrorCode  String?                @map("last_error_code") @db.VarChar(100)
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
 
   telegramDeliveries TelegramNotificationDelivery[]
 
@@ -383,6 +390,7 @@ model OutboxEvent {
 }
 
 model ProductSnapshot {
+  postRevisions       PostRevision[]
   id                  String                 @id @default(uuid()) @db.Uuid
   sku                 String                 @db.VarChar(64)
   productName         String                 @map("product_name") @db.VarChar(300)
@@ -435,6 +443,7 @@ model ProductSnapshot {
 }
 
 model FreshnessPolicyVersion {
+  marketingRules Json? @map("marketing_rules") @db.JsonB
   id                            String   @id @default(uuid()) @db.Uuid
   policyId                      String   @map("policy_id") @db.VarChar(100)
   version                       String   @db.VarChar(50)
@@ -497,19 +506,20 @@ model ProductFreshnessAssessment {
 }
 
 model BrandRuleVersion {
-  id                String          @id @default(uuid()) @db.Uuid
-  name              String          @db.VarChar(160)
+  captionApprovals  PostCaptionBrandApproval[]
+  id                String                     @id @default(uuid()) @db.Uuid
+  name              String                     @db.VarChar(160)
   version           Int
   status            BrandRuleStatus
-  languageRules     Json            @map("language_rules") @db.JsonB
-  toneRules         Json            @map("tone_rules") @db.JsonB
-  ctaRules          Json            @map("cta_rules") @db.JsonB
-  promotionRules    Json            @map("promotion_rules") @db.JsonB
-  perfumeClaimRules Json            @map("perfume_claim_rules") @db.JsonB
-  platformRules     Json            @map("platform_rules") @db.JsonB
-  visualGuidance    Json            @map("visual_guidance") @db.JsonB
-  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  activatedAt       DateTime?       @map("activated_at") @db.Timestamptz(3)
+  languageRules     Json                       @map("language_rules") @db.JsonB
+  toneRules         Json                       @map("tone_rules") @db.JsonB
+  ctaRules          Json                       @map("cta_rules") @db.JsonB
+  promotionRules    Json                       @map("promotion_rules") @db.JsonB
+  perfumeClaimRules Json                       @map("perfume_claim_rules") @db.JsonB
+  platformRules     Json                       @map("platform_rules") @db.JsonB
+  visualGuidance    Json                       @map("visual_guidance") @db.JsonB
+  createdAt         DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  activatedAt       DateTime?                  @map("activated_at") @db.Timestamptz(3)
 
   contentJobs     ContentJob[]
   contentVersions ContentVersion[]
@@ -554,14 +564,15 @@ model ContentJob {
 }
 
 model TelegramIdentity {
-  id               String    @id @default(uuid()) @db.Uuid
-  telegramUserId   BigInt    @unique(map: "telegram_identities_telegram_user_id_key") @map("telegram_user_id")
-  userId           String    @map("user_id") @db.Uuid
-  telegramUsername String?   @map("telegram_username") @db.VarChar(64)
-  displayName      String?   @map("display_name") @db.VarChar(200)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  lastSeenAt       DateTime? @map("last_seen_at") @db.Timestamptz(3)
-  disabledAt       DateTime? @map("disabled_at") @db.Timestamptz(3)
+  postDeliveries   PostTelegramDelivery[]
+  id               String                 @id @default(uuid()) @db.Uuid
+  telegramUserId   BigInt                 @unique(map: "telegram_identities_telegram_user_id_key") @map("telegram_user_id")
+  userId           String                 @map("user_id") @db.Uuid
+  telegramUsername String?                @map("telegram_username") @db.VarChar(64)
+  displayName      String?                @map("display_name") @db.VarChar(200)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt       DateTime?              @map("last_seen_at") @db.Timestamptz(3)
+  disabledAt       DateTime?              @map("disabled_at") @db.Timestamptz(3)
 
   user                      User                               @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_identities_user_id_fkey")
   createFlows               TelegramCreateFlow[]
@@ -740,19 +751,20 @@ model GenerationAttempt {
 }
 
 model ContentVersion {
-  id                  String   @id @default(uuid()) @db.Uuid
-  contentJobId        String   @map("content_job_id") @db.Uuid
-  versionNumber       Int      @map("version_number")
-  brandRuleVersionId  String   @map("brand_rule_version_id") @db.Uuid
-  productSnapshotId   String   @map("product_snapshot_id") @db.Uuid
-  generationAttemptId String   @unique(map: "content_versions_generation_attempt_id_key") @map("generation_attempt_id") @db.Uuid
-  revisionRequestId   String?  @map("revision_request_id") @db.Uuid
-  provider            String   @db.VarChar(100)
-  model               String   @db.VarChar(200)
-  promptVersion       String   @map("prompt_version") @db.VarChar(100)
-  structuredOutput    Json     @map("structured_output") @db.JsonB
-  providerMetadata    Json?    @map("provider_metadata") @db.JsonB
-  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  postRevisions       PostRevision[]
+  id                  String         @id @default(uuid()) @db.Uuid
+  contentJobId        String         @map("content_job_id") @db.Uuid
+  versionNumber       Int            @map("version_number")
+  brandRuleVersionId  String         @map("brand_rule_version_id") @db.Uuid
+  productSnapshotId   String         @map("product_snapshot_id") @db.Uuid
+  generationAttemptId String         @unique(map: "content_versions_generation_attempt_id_key") @map("generation_attempt_id") @db.Uuid
+  revisionRequestId   String?        @map("revision_request_id") @db.Uuid
+  provider            String         @db.VarChar(100)
+  model               String         @db.VarChar(200)
+  promptVersion       String         @map("prompt_version") @db.VarChar(100)
+  structuredOutput    Json           @map("structured_output") @db.JsonB
+  providerMetadata    Json?          @map("provider_metadata") @db.JsonB
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
 
   contentJob                ContentJob                         @relation(fields: [contentJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_content_job_id_fkey")
   brandRuleVersion          BrandRuleVersion                   @relation(fields: [brandRuleVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "content_versions_brand_rule_version_id_fkey")
@@ -860,17 +872,27 @@ model ApprovalEvent {
 model TelegramPendingReviewInteraction {
   id                 String              @id @default(uuid()) @db.Uuid
   telegramIdentityId String              @map("telegram_identity_id") @db.Uuid
-  contentJobId       String              @map("content_job_id") @db.Uuid
-  contentVersionId   String              @map("content_version_id") @db.Uuid
+  contentJobId       String?             @map("content_job_id") @db.Uuid
+  contentVersionId   String?             @map("content_version_id") @db.Uuid
   action             PendingReviewAction
+  field String? @db.VarChar(40)
+  intendedAction String? @map("intended_action") @db.VarChar(40)
+  payload Json? @db.JsonB
+  actorUserId String? @map("actor_user_id") @db.Uuid
+  postId String? @map("post_id") @db.Uuid
+  postRevisionId String? @map("post_revision_id") @db.Uuid
+  expectedRevision Int? @map("expected_revision")
+  reviewRound Int? @map("review_round")
+  claimToken String? @map("claim_token") @db.Uuid
+  claimedUntil DateTime? @map("claimed_until") @db.Timestamptz(3)
   expiresAt          DateTime            @map("expires_at") @db.Timestamptz(3)
   completedAt        DateTime?           @map("completed_at") @db.Timestamptz(3)
   cancelledAt        DateTime?           @map("cancelled_at") @db.Timestamptz(3)
   createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
 
   telegramIdentity TelegramIdentity @relation(fields: [telegramIdentityId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_pending_review_interactions_identity_id_fkey")
-  contentJob       ContentJob       @relation(fields: [contentJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_pending_review_interactions_job_id_fkey")
-  contentVersion   ContentVersion   @relation(fields: [contentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_pending_review_interactions_version_id_fkey")
+  contentJob       ContentJob?      @relation(fields: [contentJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_pending_review_interactions_job_id_fkey")
+  contentVersion   ContentVersion?  @relation(fields: [contentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "telegram_pending_review_interactions_version_id_fkey")
 
   @@index([telegramIdentityId, expiresAt], map: "telegram_pending_review_interactions_identity_expires_idx")
   @@map("telegram_pending_review_interactions")
@@ -907,24 +929,27 @@ model CreativeJob {
 }
 
 model VisualAsset {
-  id                       String          @id @default(uuid()) @db.Uuid
-  creativeJobId            String          @map("creative_job_id") @db.Uuid
-  versionNumber            Int             @map("version_number")
-  assetRole                VisualAssetRole @default(COMPOSITED_CREATIVE) @map("asset_role")
-  mimeType                 String          @map("mime_type") @db.VarChar(50)
+  postRevisions            PostRevision[]
+  sceneVersionId           String?               @map("scene_version_id") @db.Uuid
+  sceneVersion             CreativeSceneVersion? @relation(fields: [sceneVersionId], references: [id], onDelete: Restrict)
+  id                       String                @id @default(uuid()) @db.Uuid
+  creativeJobId            String                @map("creative_job_id") @db.Uuid
+  versionNumber            Int                   @map("version_number")
+  assetRole                VisualAssetRole       @default(COMPOSITED_CREATIVE) @map("asset_role")
+  mimeType                 String                @map("mime_type") @db.VarChar(50)
   width                    Int
   height                   Int
-  byteSize                 Int             @map("byte_size")
-  sha256                   String          @db.Char(64)
-  storageKey               String          @map("storage_key") @db.VarChar(300)
-  provider                 String?         @db.VarChar(100)
-  model                    String?         @db.VarChar(200)
+  byteSize                 Int                   @map("byte_size")
+  sha256                   String                @db.Char(64)
+  storageKey               String                @map("storage_key") @db.VarChar(300)
+  provider                 String?               @db.VarChar(100)
+  model                    String?               @db.VarChar(200)
   seed                     BigInt?
-  promptVersion            String?         @map("prompt_version") @db.VarChar(100)
-  creativeBriefVersion     String?         @map("creative_brief_version") @db.VarChar(100)
-  sourceProductAssetDigest String          @map("source_product_asset_digest") @db.Char(64)
-  backgroundAssetDigest    String?         @map("background_asset_digest") @db.Char(64)
-  createdAt                DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  promptVersion            String?               @map("prompt_version") @db.VarChar(100)
+  creativeBriefVersion     String?               @map("creative_brief_version") @db.VarChar(100)
+  sourceProductAssetDigest String                @map("source_product_asset_digest") @db.Char(64)
+  backgroundAssetDigest    String?               @map("background_asset_digest") @db.Char(64)
+  createdAt                DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
 
   creativeJob               CreativeJob                        @relation(fields: [creativeJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "visual_assets_creative_job_id_fkey")
   validationResults         VisualValidationResult[]
@@ -1038,9 +1063,9 @@ model CreativeExport {
   exportedByUserId String         @map("exported_by_user_id") @db.Uuid
   createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  creativeJob    CreativeJob @relation(fields: [creativeJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_exports_creative_job_id_fkey")
-  visualAsset    VisualAsset @relation(fields: [visualAssetId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_exports_visual_asset_id_fkey")
-  exportedByUser User        @relation("UserCreativeExports", fields: [exportedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_exports_exported_by_user_id_fkey")
+  creativeJob    CreativeJob   @relation(fields: [creativeJobId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_exports_creative_job_id_fkey")
+  visualAsset    VisualAsset   @relation(fields: [visualAssetId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_exports_visual_asset_id_fkey")
+  exportedByUser User          @relation("UserCreativeExports", fields: [exportedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_exports_exported_by_user_id_fkey")
   publications   Publication[]
 
   @@unique([visualAssetId, format, encoding], map: "creative_exports_asset_format_encoding_key")
@@ -1067,28 +1092,30 @@ model CreativeScene {
 }
 
 model CreativeSceneVersion {
-  id                     String   @id @default(uuid()) @db.Uuid
-  sceneId                String   @map("scene_id") @db.Uuid
-  versionNumber          Int      @map("version_number")
-  parentVersionId        String?  @map("parent_version_id") @db.Uuid
-  aspectRatio            String   @map("aspect_ratio") @db.VarChar(20)
+  postRevisions          PostRevision[]
+  renderedAssets         VisualAsset[]
+  id                     String         @id @default(uuid()) @db.Uuid
+  sceneId                String         @map("scene_id") @db.Uuid
+  versionNumber          Int            @map("version_number")
+  parentVersionId        String?        @map("parent_version_id") @db.Uuid
+  aspectRatio            String         @map("aspect_ratio") @db.VarChar(20)
   width                  Int
   height                 Int
-  templateId             String   @map("template_id") @db.VarChar(100)
-  templateVersion        String   @map("template_version") @db.VarChar(50)
-  stylePresetId          String?  @map("style_preset_id") @db.VarChar(100)
-  language               String   @default("EN") @db.VarChar(20)
-  safeMargins            Json     @map("safe_margins") @db.JsonB
-  brandProfileVersionId  String   @map("brand_profile_version_id") @db.Uuid
-  sourceContentVersionId String   @map("source_content_version_id") @db.Uuid
-  productSnapshotId      String   @map("product_snapshot_id") @db.Uuid
-  sceneHash              String   @map("scene_hash") @db.Char(64)
-  dependencyHash         String   @map("dependency_hash") @db.Char(64)
-  changeReason           String?  @map("change_reason") @db.VarChar(500)
-  operationCode          String?  @map("operation_code") @db.VarChar(50)
-  requestedByUserId      String?  @map("requested_by_user_id") @db.Uuid
-  metadata               Json?    @db.JsonB
-  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  templateId             String         @map("template_id") @db.VarChar(100)
+  templateVersion        String         @map("template_version") @db.VarChar(50)
+  stylePresetId          String?        @map("style_preset_id") @db.VarChar(100)
+  language               String         @default("EN") @db.VarChar(20)
+  safeMargins            Json           @map("safe_margins") @db.JsonB
+  brandProfileVersionId  String         @map("brand_profile_version_id") @db.Uuid
+  sourceContentVersionId String         @map("source_content_version_id") @db.Uuid
+  productSnapshotId      String         @map("product_snapshot_id") @db.Uuid
+  sceneHash              String         @map("scene_hash") @db.Char(64)
+  dependencyHash         String         @map("dependency_hash") @db.Char(64)
+  changeReason           String?        @map("change_reason") @db.VarChar(500)
+  operationCode          String?        @map("operation_code") @db.VarChar(50)
+  requestedByUserId      String?        @map("requested_by_user_id") @db.Uuid
+  metadata               Json?          @db.JsonB
+  createdAt              DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
 
   scene                CreativeScene            @relation(fields: [sceneId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_scene_versions_scene_id_fkey")
   parentVersion        CreativeSceneVersion?    @relation("SceneVersionAncestry", fields: [parentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "creative_scene_versions_parent_version_id_fkey")
@@ -1400,17 +1427,18 @@ enum CampaignStatus {
 }
 
 model Campaign {
-  id          String         @id @default(uuid()) @db.Uuid
-  code        String         @unique(map: "campaigns_code_key") @db.VarChar(64)
-  name        String         @db.VarChar(200)
-  objective   String         @db.VarChar(500)
-  description String?        @db.VarChar(2000)
-  status      CampaignStatus @default(DRAFT)
-  startDate   DateTime?      @map("start_date") @db.Timestamptz(3)
-  endDate     DateTime?      @map("end_date") @db.Timestamptz(3)
-  createdById String         @map("created_by_id") @db.Uuid
-  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  postRevisions PostRevision[]
+  id            String         @id @default(uuid()) @db.Uuid
+  code          String         @unique(map: "campaigns_code_key") @db.VarChar(64)
+  name          String         @db.VarChar(200)
+  objective     String         @db.VarChar(500)
+  description   String?        @db.VarChar(2000)
+  status        CampaignStatus @default(DRAFT)
+  startDate     DateTime?      @map("start_date") @db.Timestamptz(3)
+  endDate       DateTime?      @map("end_date") @db.Timestamptz(3)
+  createdById   String         @map("created_by_id") @db.Uuid
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   createdBy    User              @relation("UserCreatedCampaigns", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "campaigns_created_by_id_fkey")
   products     CampaignProduct[]
@@ -1462,26 +1490,26 @@ enum PublicationChannel {
 }
 
 model Publication {
-  id                     String            @id @default(uuid()) @db.Uuid
-  contentVersionId       String            @map("content_version_id") @db.Uuid
-  creativeExportId       String?           @map("creative_export_id") @db.Uuid
-  destinationChannel     PublicationChannel @map("destination_channel")
-  destinationAccountId   String?           @map("destination_account_id") @db.VarChar(120)
-  requestedByUserId      String            @map("requested_by_user_id") @db.Uuid
-  status                 PublicationStatus @default(DRAFT)
-  idempotencyKey         String            @unique(map: "publications_idempotency_key") @map("idempotency_key") @db.VarChar(200)
-  campaignId             String?           @map("campaign_id") @db.Uuid
-  scheduledAt            DateTime?         @map("scheduled_at") @db.Timestamptz(3)
-  publishedAt            DateTime?         @map("published_at") @db.Timestamptz(3)
-  externalPublicationId  String?           @map("external_publication_id") @db.VarChar(300)
-  cancellationReason     String?           @map("cancellation_reason") @db.VarChar(500)
-  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt              DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                    String             @id @default(uuid()) @db.Uuid
+  contentVersionId      String             @map("content_version_id") @db.Uuid
+  creativeExportId      String?            @map("creative_export_id") @db.Uuid
+  destinationChannel    PublicationChannel @map("destination_channel")
+  destinationAccountId  String?            @map("destination_account_id") @db.VarChar(120)
+  requestedByUserId     String             @map("requested_by_user_id") @db.Uuid
+  status                PublicationStatus  @default(DRAFT)
+  idempotencyKey        String             @unique(map: "publications_idempotency_key") @map("idempotency_key") @db.VarChar(200)
+  campaignId            String?            @map("campaign_id") @db.Uuid
+  scheduledAt           DateTime?          @map("scheduled_at") @db.Timestamptz(3)
+  publishedAt           DateTime?          @map("published_at") @db.Timestamptz(3)
+  externalPublicationId String?            @map("external_publication_id") @db.VarChar(300)
+  cancellationReason    String?            @map("cancellation_reason") @db.VarChar(500)
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  contentVersion  ContentVersion      @relation(fields: [contentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "publications_content_version_id_fkey")
-  creativeExport  CreativeExport?     @relation(fields: [creativeExportId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "publications_creative_export_id_fkey")
-  requestedByUser User                @relation("UserRequestedPublications", fields: [requestedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "publications_requested_by_user_id_fkey")
-  campaign        Campaign?           @relation(fields: [campaignId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "publications_campaign_id_fkey")
+  contentVersion  ContentVersion       @relation(fields: [contentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "publications_content_version_id_fkey")
+  creativeExport  CreativeExport?      @relation(fields: [creativeExportId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "publications_creative_export_id_fkey")
+  requestedByUser User                 @relation("UserRequestedPublications", fields: [requestedByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "publications_requested_by_user_id_fkey")
+  campaign        Campaign?            @relation(fields: [campaignId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "publications_campaign_id_fkey")
   attempts        PublicationAttempt[]
 
   @@index([status, createdAt], map: "publications_status_created_at_idx")
@@ -1718,8 +1746,8 @@ model UsageReservation {
   closedAt              DateTime?                 @map("closed_at") @db.Timestamptz(3)
   version               Int                       @default(1) @map("version")
 
-  attempts              ProviderAttempt[]
-  ledgerEntries         UsageLedgerEntry[]
+  attempts      ProviderAttempt[]
+  ledgerEntries UsageLedgerEntry[]
 
   @@index([state, expiresAt], map: "usage_reservations_state_expires_idx")
   @@index([budgetPolicyVersionId, createdAt], map: "usage_reservations_policy_created_idx")
@@ -1757,8 +1785,8 @@ model ProviderAttempt {
   createdAt            DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  reservation          UsageReservation       @relation(fields: [reservationId], references: [id], onDelete: Cascade, map: "provider_attempts_reservation_id_fkey")
-  ledgerEntries        UsageLedgerEntry[]
+  reservation   UsageReservation   @relation(fields: [reservationId], references: [id], onDelete: Cascade, map: "provider_attempts_reservation_id_fkey")
+  ledgerEntries UsageLedgerEntry[]
 
   @@unique([reservationId, attemptNumber], map: "provider_attempts_reservation_attempt_key")
   @@index([operationalOutcome, createdAt], map: "provider_attempts_outcome_created_idx")
@@ -1768,32 +1796,32 @@ model ProviderAttempt {
 }
 
 model UsageLedgerEntry {
-  id                         String              @id @default(uuid()) @db.Uuid
-  entryType                  LedgerEntryType     @map("entry_type")
-  reservationId              String              @map("reservation_id") @db.Uuid
-  attemptId                  String?             @map("attempt_id") @db.Uuid
-  settlementKey              String              @unique(map: "usage_ledger_entries_settlement_key") @map("settlement_key") @db.VarChar(200)
-  amount                     Decimal             @map("amount") @db.Decimal(12, 4)
-  currency                   String              @default("USD") @db.VarChar(10)
-  costKnowledge              CostKnowledgeState  @default(ESTIMATED) @map("cost_knowledge")
-  pricingVersionId           String?             @map("pricing_version_id") @db.VarChar(100)
-  exchangeRate               Decimal?            @map("exchange_rate") @db.Decimal(12, 6)
-  exchangeRateSource         String?             @map("exchange_rate_source") @db.VarChar(100)
-  exchangeRateSourceRecordId String?             @map("exchange_rate_source_record_id") @db.VarChar(100)
-  exchangeRateEffectiveAt    DateTime?           @map("exchange_rate_effective_at") @db.Timestamptz(3)
-  baseCurrency               String?             @map("base_currency") @db.VarChar(10)
-  quoteCurrency              String?             @map("quote_currency") @db.VarChar(10)
-  recordedAt                 DateTime            @default(now()) @map("recorded_at") @db.Timestamptz(3)
-  reconciliationRef          String?             @map("reconciliation_ref") @db.VarChar(255)
-  correctionOfEntryId        String?             @map("correction_of_entry_id") @db.Uuid
-  actorUserId                String?             @map("actor_user_id") @db.Uuid
-  systemComponent            String              @default("usage-ledger-worker") @map("system_component") @db.VarChar(100)
-  createdAt                  DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  id                         String             @id @default(uuid()) @db.Uuid
+  entryType                  LedgerEntryType    @map("entry_type")
+  reservationId              String             @map("reservation_id") @db.Uuid
+  attemptId                  String?            @map("attempt_id") @db.Uuid
+  settlementKey              String             @unique(map: "usage_ledger_entries_settlement_key") @map("settlement_key") @db.VarChar(200)
+  amount                     Decimal            @map("amount") @db.Decimal(12, 4)
+  currency                   String             @default("USD") @db.VarChar(10)
+  costKnowledge              CostKnowledgeState @default(ESTIMATED) @map("cost_knowledge")
+  pricingVersionId           String?            @map("pricing_version_id") @db.VarChar(100)
+  exchangeRate               Decimal?           @map("exchange_rate") @db.Decimal(12, 6)
+  exchangeRateSource         String?            @map("exchange_rate_source") @db.VarChar(100)
+  exchangeRateSourceRecordId String?            @map("exchange_rate_source_record_id") @db.VarChar(100)
+  exchangeRateEffectiveAt    DateTime?          @map("exchange_rate_effective_at") @db.Timestamptz(3)
+  baseCurrency               String?            @map("base_currency") @db.VarChar(10)
+  quoteCurrency              String?            @map("quote_currency") @db.VarChar(10)
+  recordedAt                 DateTime           @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  reconciliationRef          String?            @map("reconciliation_ref") @db.VarChar(255)
+  correctionOfEntryId        String?            @map("correction_of_entry_id") @db.Uuid
+  actorUserId                String?            @map("actor_user_id") @db.Uuid
+  systemComponent            String             @default("usage-ledger-worker") @map("system_component") @db.VarChar(100)
+  createdAt                  DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  reservation                UsageReservation    @relation(fields: [reservationId], references: [id], onDelete: Restrict, map: "usage_ledger_entries_reservation_id_fkey")
-  attempt                    ProviderAttempt?    @relation(fields: [attemptId], references: [id], onDelete: SetNull, map: "usage_ledger_entries_attempt_id_fkey")
-  correctionOf               UsageLedgerEntry?   @relation("LedgerEntryCorrections", fields: [correctionOfEntryId], references: [id], onDelete: SetNull, map: "usage_ledger_entries_correction_id_fkey")
-  corrections                UsageLedgerEntry[]  @relation("LedgerEntryCorrections")
+  reservation  UsageReservation   @relation(fields: [reservationId], references: [id], onDelete: Restrict, map: "usage_ledger_entries_reservation_id_fkey")
+  attempt      ProviderAttempt?   @relation(fields: [attemptId], references: [id], onDelete: SetNull, map: "usage_ledger_entries_attempt_id_fkey")
+  correctionOf UsageLedgerEntry?  @relation("LedgerEntryCorrections", fields: [correctionOfEntryId], references: [id], onDelete: SetNull, map: "usage_ledger_entries_correction_id_fkey")
+  corrections  UsageLedgerEntry[] @relation("LedgerEntryCorrections")
 
   @@index([entryType, recordedAt], map: "usage_ledger_entries_type_recorded_idx")
   @@index([reservationId], map: "usage_ledger_entries_reservation_idx")
@@ -1848,6 +1876,10 @@ model ProviderCapabilityRegistration {
 }
 
 model BrandProfileVersion {
+  guidance Json? @db.JsonB
+  guidanceRuleVersionId String? @map("guidance_rule_version_id") @db.Uuid
+  guidanceDatasetVersionId String? @map("guidance_dataset_version_id") @db.Uuid
+  businessApprovals BrandProfileApproval[]
   id                   String             @id @default(uuid()) @db.Uuid
   versionNumber        Int                @map("version_number")
   name                 String             @db.VarChar(160)
@@ -1872,6 +1904,10 @@ model BrandProfileVersion {
 }
 
 model BrandSourceArchive {
+  sourceUrl String? @map("source_url") @db.VarChar(2048)
+  referenceGroupId String? @map("reference_group_id") @db.Uuid
+  referenceVersion Int @default(1) @map("reference_version")
+  reviewEvents BrandSourceReview[]
   id                   String            @id @default(uuid()) @db.Uuid
   sourceSystem         BrandSourceSystem @map("source_system")
   externalPostId       String?           @map("external_post_id") @db.VarChar(120)
@@ -1888,10 +1924,12 @@ model BrandSourceArchive {
 
   @@index([sourceSystem, createdAt], map: "brand_source_archives_system_created_at_idx")
   @@index([sha256Hex], map: "brand_source_archives_sha256_idx")
+  @@unique([referenceGroupId,referenceVersion], map:"brand_reference_version_key")
   @@map("brand_source_archives")
 }
 
 model BrandDatasetVersion {
+  sourceArchiveIds String[] @default([]) @map("source_archive_ids")
   id               String             @id @default(uuid()) @db.Uuid
   name             String             @db.VarChar(160)
   versionString    String             @unique @map("version_string") @db.VarChar(60)
@@ -1929,3 +1967,228 @@ model BrandFeedbackRecord {
   @@map("brand_feedback_records")
 }
 
+// Staff post aggregate. Revisions and events are append-only through the repository.
+enum PostStatus {
+  REJECTED
+  DRAFT
+  UNDER_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+}
+
+model Post {
+  captionAttempts PostCaptionAttempt[]
+  requestKey      String?              @map("request_key") @db.VarChar(160)
+  requestHash     String?              @map("request_hash") @db.Char(64)
+  reviewRound     Int                  @default(0) @map("review_round")
+  id              String               @id @default(uuid()) @db.Uuid
+  creatorUserId   String               @map("creator_user_id") @db.Uuid
+  status          PostStatus           @default(DRAFT)
+  revisionNumber  Int                  @default(1) @map("revision_number")
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  creator         User                 @relation("PostCreator", fields: [creatorUserId], references: [id], onDelete: Restrict)
+  revisions       PostRevision[]
+  generations     PostGeneration[]
+  events          PostEvent[]
+
+  @@unique([creatorUserId, requestKey], map: "posts_creator_request_key")
+  @@index([creatorUserId, updatedAt])
+  @@index([status, updatedAt])
+  @@map("posts")
+}
+
+model PostGeneration {
+  estimatedCredits Decimal? @map("estimated_credits") @db.Decimal(19, 8)
+  actualCredits    Decimal? @map("actual_credits") @db.Decimal(19, 8)
+  creditQuote      Json?    @map("credit_quote") @db.JsonB
+
+  authorization        Json?          @db.JsonB
+  id                   String         @id @default(uuid()) @db.Uuid
+  postId               String         @map("post_id") @db.Uuid
+  sourceRevisionId     String         @unique @map("source_revision_id") @db.Uuid
+  sourceRevisionNumber Int            @map("source_revision_number")
+  status               String         @default("QUEUED") @db.VarChar(30)
+  provider             String         @db.VarChar(30)
+  model                String         @db.VarChar(100)
+  settings             Json           @db.JsonB
+  prompt               String         @db.Text
+  references           Json           @db.JsonB
+  caption              Json?          @db.JsonB
+  provenance           Json?          @db.JsonB
+  requestId            String?        @map("request_id") @db.VarChar(200)
+  estimatedCostUsd     Decimal?       @map("estimated_cost_usd") @db.Decimal(19, 8)
+  actualCostUsd        Decimal?       @map("actual_cost_usd") @db.Decimal(19, 8)
+  backgroundKey        String?        @map("background_key") @db.Text
+  imageKey             String?        @map("image_key") @db.Text
+  imageSha256          String?        @map("image_sha256") @db.Char(64)
+  error                String?        @db.Text
+  claimToken           String?        @map("claim_token") @db.Uuid
+  leaseUntil           DateTime?      @map("lease_until") @db.Timestamptz(3)
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  post                 Post           @relation(fields: [postId], references: [id], onDelete: Restrict)
+  sourceRevision       PostRevision   @relation("GenerationSource", fields: [sourceRevisionId], references: [id], onDelete: Restrict)
+  outputRevisions      PostRevision[] @relation("GenerationOutput")
+
+  @@index([status, leaseUntil])
+  @@map("post_generations")
+}
+
+model PostRevision {
+  brandSnapshot Json? @map("brand_snapshot") @db.JsonB
+  captionSourceAttempts PostCaptionAttempt[]  @relation("CaptionSource")
+  captionGenerationId   String?               @map("caption_generation_id") @db.Uuid
+  captionGeneration     PostCaptionAttempt?   @relation("CaptionResult", fields: [captionGenerationId], references: [id], onDelete: Restrict)
+  captionProvenance     Json?                 @map("caption_provenance") @db.JsonB
+  creationPlan          Json?                 @map("creation_plan") @db.JsonB
+  campaignSnapshot      Json?                 @map("campaign_snapshot") @db.JsonB
+  captionDraft          Json?                 @map("caption_draft") @db.JsonB
+  captionValidation     Json?                 @map("caption_validation") @db.JsonB
+  id                    String                @id @default(uuid()) @db.Uuid
+  postId                String                @map("post_id") @db.Uuid
+  revisionNumber        Int                   @map("revision_number")
+  authorUserId          String                @map("author_user_id") @db.Uuid
+  productSnapshotId     String                @map("product_snapshot_id") @db.Uuid
+  campaignId            String?               @map("campaign_id") @db.Uuid
+  brief                 String                @default("") @db.VarChar(2000)
+  channel               ContentPlatform
+  language              ContentLanguage
+  generationId          String?               @map("generation_id") @db.Uuid
+  generation            PostGeneration?       @relation("GenerationOutput", fields: [generationId], references: [id], onDelete: Restrict)
+  requestedGeneration   PostGeneration?       @relation("GenerationSource")
+  captionVersionId      String?               @map("caption_version_id") @db.Uuid
+  posterVersionId       String?               @map("poster_version_id") @db.Uuid
+  visualAssetId         String?               @map("visual_asset_id") @db.Uuid
+  createdAt             DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  post                  Post                  @relation(fields: [postId], references: [id], onDelete: Restrict)
+  author                User                  @relation("PostAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+  productSnapshot       ProductSnapshot       @relation(fields: [productSnapshotId], references: [id], onDelete: Restrict)
+  campaign              Campaign?             @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  captionVersion        ContentVersion?       @relation(fields: [captionVersionId], references: [id], onDelete: Restrict)
+  posterVersion         CreativeSceneVersion? @relation(fields: [posterVersionId], references: [id], onDelete: Restrict)
+  visualAsset           VisualAsset?          @relation(fields: [visualAssetId], references: [id], onDelete: Restrict)
+  events                PostEvent[]
+
+  @@unique([postId, revisionNumber])
+  @@map("post_revisions")
+}
+
+model PostEvent {
+  validationSnapshot Json?        @map("validation_snapshot") @db.JsonB
+  reviewRound        Int?         @map("review_round")
+  id                 String       @id @default(uuid()) @db.Uuid
+  postId             String       @map("post_id") @db.Uuid
+  revisionId         String       @map("revision_id") @db.Uuid
+  actorUserId        String       @map("actor_user_id") @db.Uuid
+  action             String       @db.VarChar(50)
+  comment            String?      @db.VarChar(1000)
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  post               Post         @relation(fields: [postId], references: [id], onDelete: Restrict)
+  revision           PostRevision @relation(fields: [revisionId], references: [id], onDelete: Restrict)
+  actor              User         @relation("PostActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([postId, createdAt])
+  @@map("post_events")
+}
+
+model HiggsfieldMcpConnection {
+  id             String   @id @default("business") @db.VarChar(40)
+  encryptedState String?  @map("encrypted_state") @db.Text
+  status         String   @default("DISCONNECTED") @db.VarChar(30)
+  epoch          Int      @default(1)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("higgsfield_mcp_connections")
+}
+
+model HiggsfieldMcpAudit {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String   @map("actor_user_id") @db.Uuid
+  action      String   @db.VarChar(60)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("higgsfield_mcp_audit")
+}
+
+model PostTelegramDelivery {
+  outboxEventId      String           @map("outbox_event_id") @db.Uuid
+  telegramIdentityId String           @map("telegram_identity_id") @db.Uuid
+  sentAt             DateTime?        @map("sent_at") @db.Timestamptz(3)
+  event              OutboxEvent      @relation(fields: [outboxEventId], references: [id], onDelete: Restrict)
+  identity           TelegramIdentity @relation(fields: [telegramIdentityId], references: [id], onDelete: Restrict)
+
+  @@id([outboxEventId, telegramIdentityId])
+  @@map("post_telegram_deliveries")
+}
+
+model PostCaptionBrandApproval {
+  id                 String           @id @default(uuid()) @db.Uuid
+  brandRuleVersionId String           @map("brand_rule_version_id") @db.Uuid
+  rulesDigest        String           @map("rules_digest") @db.Char(64)
+  rulesSnapshot      Json             @map("rules_snapshot") @db.JsonB
+  approvedByUserId   String           @map("approved_by_user_id") @db.Uuid
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  brand              BrandRuleVersion @relation(fields: [brandRuleVersionId], references: [id], onDelete: Restrict)
+  approver           User             @relation(fields: [approvedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([brandRuleVersionId, rulesDigest], map: "post_caption_brand_digest_key")
+  @@map("post_caption_brand_approvals")
+}
+
+model PostCaptionAttempt {
+  id                   String         @id @default(uuid()) @db.Uuid
+  postId               String         @map("post_id") @db.Uuid
+  sourceRevisionId     String         @unique @map("source_revision_id") @db.Uuid
+  sourceRevisionNumber Int            @map("source_revision_number")
+  requesterUserId      String         @map("requester_user_id") @db.Uuid
+  brandRuleVersionId   String?        @map("brand_rule_version_id") @db.Uuid
+  brandRuleDigest      String?        @map("brand_rule_digest") @db.Char(64)
+  method               String         @db.VarChar(20)
+  status               String         @default("QUEUED") @db.VarChar(30)
+  provider             String         @db.VarChar(40)
+  model                String         @db.VarChar(200)
+  context              Json?
+  output               Json?
+  validation           Json?
+  provenance           Json?
+  providerRequestId    String?        @map("provider_request_id") @db.VarChar(200)
+  error                String?        @db.Text
+  deadline             DateTime       @db.Timestamptz(3)
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  post                 Post           @relation(fields: [postId], references: [id], onDelete: Restrict)
+  sourceRevision       PostRevision   @relation("CaptionSource", fields: [sourceRevisionId], references: [id], onDelete: Restrict)
+  resultRevisions      PostRevision[] @relation("CaptionResult")
+
+  @@index([postId, status])
+  @@map("post_caption_attempts")
+}
+
+model BrandProfileApproval {
+ id String @id @default(uuid()) @db.Uuid
+ profileId String @map("profile_id") @db.Uuid
+ digest String @db.Char(64)
+ snapshot Json @db.JsonB
+ actorUserId String @map("actor_user_id") @db.Uuid
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ actor User @relation(fields:[actorUserId],references:[id],onDelete:Restrict)
+ profile BrandProfileVersion @relation(fields:[profileId],references:[id],onDelete:Restrict)
+ @@unique([profileId,digest],map:"brand_profile_approval_digest_key")
+ @@map("brand_profile_approvals")
+}
+model BrandSourceReview {
+ id String @id @default(uuid()) @db.Uuid
+ sourceId String @map("source_id") @db.Uuid
+ sourceDigest String @map("source_digest") @db.Char(64)
+ decision String @db.VarChar(20)
+ notes String @db.VarChar(1000)
+ mediaSnapshot Json @map("media_snapshot") @db.JsonB
+ actorUserId String @map("actor_user_id") @db.Uuid
+ sequence Int
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ actor User @relation(fields:[actorUserId],references:[id],onDelete:Restrict)
+ source BrandSourceArchive @relation(fields:[sourceId],references:[id],onDelete:Restrict)
+ @@unique([sourceId,sequence])
+ @@map("brand_source_reviews")
+}

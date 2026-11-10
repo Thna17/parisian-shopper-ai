@@ -18,7 +18,7 @@ export interface OpenAITextProviderOptions {
 }
 
 export class OpenAITextProvider implements AITextProvider {
-  public readonly providerName = 'openai';
+  public readonly providerName: string = 'openai';
   public readonly model: string;
   private readonly client: OpenAI;
 
@@ -74,11 +74,15 @@ function toProviderInput(context: AIContext): OpenAI.Responses.ResponseInput {
   const trusted = JSON.stringify({
     systemRules: context.systemRules,
     brandRules: context.brandRules,
+    brandGuidance: context.brandGuidance,
     contentStrategy: context.contentStrategy,
-    request: context.request,
+    request: { ...context.request, campaignContext: undefined },
   });
   const untrusted = JSON.stringify({
     productFacts: context.productFacts,
+    postBrief: context.postBrief,
+    referenceExamples: context.referenceExamples,
+    campaignContext: context.request.campaignContext,
     reviewerInstruction: context.reviewerInstruction,
     previousDraft: context.previousDraft,
   });

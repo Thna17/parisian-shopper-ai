@@ -1,3 +1,4 @@
+import type { PublicationProductGuard } from './publication-product.guard.js';
 /* eslint-disable @typescript-eslint/unbound-method */
 import { describe, expect, it, jest } from '@jest/globals';
 import { Permission } from '../../auth/domain/permissions.js';
@@ -591,5 +592,47 @@ describe('Publishing Application Use Cases', () => {
       expect(manualExport?.enabled).toBe(true);
       expect(manualExport?.connected).toBe(true);
     });
+  });
+  it('rechecks product facts before manual release and blocks stale content before recording a publishing attempt', async () => {
+    const repo = createMockPublishingRepo();
+    const guard = {
+      check: jest
+        .fn<PublicationProductGuard['check']>()
+        .mockRejectedValue(new Error('Price changed; new review required')),
+    } as unknown as PublicationProductGuard;
+    const confirm = new ConfirmPublicationUseCase(repo, guard);
+    await expect(
+      confirm.execute({
+        publicationId: 'pub-001',
+        actingUserId: 'usr-001',
+        permissions: [Permission.PUBLISH_CREATIVE],
+      }),
+    ).rejects.toThrow(/new review/);
+    expect(guard.check).toHaveBeenCalledWith('ver-001', 'PUBLISH', {
+      id: 'usr-001',
+      permissions: [Permission.PUBLISH_CREATIVE],
+    });
+    expect(repo.createAttempt).not.toHaveBeenCalled();
+    expect(repo.updateStatus).not.toHaveBeenCalled();
+  });
+  it('rechecks product facts before a failed publication can be queued again', async () => {
+    const repo = createMockPublishingRepo();
+    repo.findById.mockResolvedValue({
+      ...dummyPublicationDetail,
+      status: PublicationStatus.FAILED,
+    });
+    const guard = {
+      check: jest
+        .fn<PublicationProductGuard['check']>()
+        .mockRejectedValue(new Error('Source unavailable')),
+    } as unknown as PublicationProductGuard;
+    await expect(
+      new RetryPublicationUseCase(repo, guard).execute({
+        publicationId: 'pub-001',
+        actingUserId: 'usr-001',
+        permissions: [Permission.PUBLISH_CREATIVE],
+      }),
+    ).rejects.toThrow(/unavailable/);
+    expect(repo.updateStatus).not.toHaveBeenCalled();
   });
 });
