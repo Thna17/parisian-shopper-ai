@@ -18,7 +18,7 @@ export interface OpenAITextProviderOptions {
 }
 
 export class OpenAITextProvider implements AITextProvider {
-  public readonly providerName = 'openai';
+  public readonly providerName: string = 'openai';
   public readonly model: string;
   private readonly client: OpenAI;
 

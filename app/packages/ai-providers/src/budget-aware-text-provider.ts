@@ -13,11 +13,11 @@ import { type ApplicationLogger } from '@parisian-shopper/common';
 import { OpenAITextProvider } from './openai-text-provider.js';
 
 export class BudgetAwareTextProvider extends OpenAITextProvider implements AITextProvider {
-  public override readonly providerName = 'openai' as const;
+  public override readonly providerName: string;
   public override readonly model: string;
 
   public constructor(
-    private readonly liveProvider: OpenAITextProvider,
+    private readonly liveProvider: AITextProvider,
     private readonly fallbackProvider: FakeAITextProvider = new FakeAITextProvider(),
     private readonly reserveBudgetUseCase?: ReserveBudgetUseCase,
     private readonly circuitBreaker?: CircuitBreakerService,
@@ -41,11 +41,11 @@ export class BudgetAwareTextProvider extends OpenAITextProvider implements AITex
     // 1. Circuit Breaker Pre-flight
     if (this.circuitBreaker) {
       try {
-        this.circuitBreaker.assertHealthy('openai', 'TEXT');
+        this.circuitBreaker.assertHealthy(this.providerName, 'TEXT');
       } catch (cbErr) {
         this.budgetLogger?.warn?.(
-          `Circuit breaker OPEN for openai TEXT, failing closed on live paid dispatch and falling back to deterministic generator: ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
-          { provider: 'openai', modality: 'TEXT' },
+          `Circuit breaker OPEN for ${this.providerName} TEXT, failing closed on live paid dispatch and falling back to deterministic generator: ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
+          { provider: this.providerName, modality: 'TEXT' },
         );
         return this.fallbackProvider.generate(context, signal);
       }
@@ -57,7 +57,7 @@ export class BudgetAwareTextProvider extends OpenAITextProvider implements AITex
       try {
         const res = await this.reserveBudgetUseCase.execute({
           idempotencyKey: randomUUID(),
-          providerId: 'openai',
+          providerId: this.providerName,
           modelId: this.liveProvider.model,
           estimatedCost: 0.03, // $0.030 USD
           currency: 'USD',
@@ -68,17 +68,17 @@ export class BudgetAwareTextProvider extends OpenAITextProvider implements AITex
         // Spend exceeds monthly cap ($20.00 USD), daily cap, or hard cap policy.
         // Fail closed immediately on live paid dispatch and fallback to deterministic generator!
         this.budgetLogger?.warn?.(
-          `Budget reservation rejected for openai TEXT (${budgetErr instanceof Error ? budgetErr.message : String(budgetErr)}). Failing closed on live paid dispatch and falling back to deterministic FakeAITextProvider without interrupting staff workflows.`,
-          { provider: 'openai', modality: 'TEXT', error: String(budgetErr) },
+          `Budget reservation rejected for ${this.providerName} TEXT (${budgetErr instanceof Error ? budgetErr.message : String(budgetErr)}). Failing closed on live paid dispatch and falling back to deterministic FakeAITextProvider without interrupting staff workflows.`,
+          { provider: this.providerName, modality: 'TEXT', error: String(budgetErr) },
         );
         return this.fallbackProvider.generate(context, signal);
       }
     }
 
-    // 3. Live Paid Dispatch to OpenAI
+    // 3. Live Paid Dispatch
     try {
       const result = await this.liveProvider.generate(context, signal);
-      this.circuitBreaker?.recordSuccess('openai', 'TEXT');
+      this.circuitBreaker?.recordSuccess(this.providerName, 'TEXT');
 
       if (this.settleReservationUseCase && reservationId) {
         const tokens = result.usage?.totalTokens ?? 1500;
@@ -103,20 +103,20 @@ export class BudgetAwareTextProvider extends OpenAITextProvider implements AITex
 
       return result;
     } catch (dispatchErr) {
-      this.circuitBreaker?.recordFailure('openai', 'TEXT');
+      this.circuitBreaker?.recordFailure(this.providerName, 'TEXT');
 
       if (this.cancelReservationUseCase && reservationId) {
         await this.cancelReservationUseCase
           .execute({
             reservationId,
-            reason: `OpenAI live dispatch failed: ${dispatchErr instanceof Error ? dispatchErr.message : String(dispatchErr)}`,
+            reason: `${this.providerName} live dispatch failed: ${dispatchErr instanceof Error ? dispatchErr.message : String(dispatchErr)}`,
             actorUserId: '00000000-0000-0000-0000-000000000000',
           })
           .catch(() => undefined);
       }
 
       this.budgetLogger?.warn?.(
-        `Live OpenAI text dispatch failed: ${dispatchErr instanceof Error ? dispatchErr.message : String(dispatchErr)}. Falling back to deterministic FakeAITextProvider.`,
+        `Live ${this.providerName} text dispatch failed: ${dispatchErr instanceof Error ? dispatchErr.message : String(dispatchErr)}. Falling back to deterministic FakeAITextProvider.`,
       );
       return this.fallbackProvider.generate(context, signal);
     }

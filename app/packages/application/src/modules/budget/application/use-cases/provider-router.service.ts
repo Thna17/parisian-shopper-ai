@@ -74,7 +74,7 @@ export class ProviderRouterService {
    */
   public async selectProvider(request: RouteProviderRequest): Promise<RouteProviderResult> {
     const policy = await this.budgetPolicyRepo.getActivePolicy();
-    const allowedProviders = policy?.allowedProviders ?? ['openai', 'codex_cli', 'fake'];
+    const allowedProviders = policy?.allowedProviders ?? ['openai', 'codex_cli', 'fake', 'deepseek'];
     const allowedFallbacks = policy?.allowedFallbacks ?? ['codex_cli', 'fake'];
 
     const env = request.environment ?? 'DEVELOPMENT';

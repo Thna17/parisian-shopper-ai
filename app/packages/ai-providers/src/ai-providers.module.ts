@@ -18,6 +18,7 @@ import { AppConfigService, FeatureFlag, FeatureFlagService } from '@parisian-sho
 
 import { BudgetAwareTextProvider } from './budget-aware-text-provider.js';
 import { CodexCliTextProvider } from './codex-cli-text-provider.js';
+import { DeepSeekTextProvider } from './deepseek-text-provider.js';
 import { OpenAITextProvider } from './openai-text-provider.js';
 
 @Global()
@@ -42,6 +43,16 @@ import { OpenAITextProvider } from './openai-text-provider.js';
             timeoutMs: config.codexCli.textTimeoutMs,
             allowDevelopmentFallback: false,
           });
+        if (config.ai.provider === 'deepseek') {
+          const apiKey = config.ai.deepseekApiKey || config.ai.openaiApiKey;
+          if (!apiKey) return unavailable('unconfigured');
+          return new DeepSeekTextProvider({
+            apiKey,
+            model: config.ai.deepseekModel,
+            timeoutMs: config.ai.requestTimeoutMs,
+            ...(config.ai.deepseekBaseUrl ? { baseUrl: config.ai.deepseekBaseUrl } : {}),
+          });
+        }
         if (!config.ai.openaiApiKey || !config.ai.openaiModel) return unavailable('unconfigured');
         return new OpenAITextProvider({
           apiKey: config.ai.openaiApiKey,
@@ -89,6 +100,37 @@ import { OpenAITextProvider } from './openai-text-provider.js';
           return new CodexCliTextProvider({
             timeoutMs: config.codexCli.textTimeoutMs,
           });
+        }
+        if (config.ai.provider === 'deepseek') {
+          const apiKey = config.ai.deepseekApiKey || config.ai.openaiApiKey;
+          if (!apiKey)
+            return {
+              providerName: 'unconfigured',
+              model: 'unconfigured',
+              generate: () =>
+                Promise.reject(
+                  new Error(
+                    'DEEPSEEK_API_KEY is required. Ask an administrator to configure the text provider.',
+                  ),
+                ),
+            };
+
+          const liveProvider = new DeepSeekTextProvider({
+            apiKey,
+            model: config.ai.deepseekModel,
+            timeoutMs: config.ai.requestTimeoutMs,
+            ...(config.ai.deepseekBaseUrl ? { baseUrl: config.ai.deepseekBaseUrl } : {}),
+          });
+
+          return new BudgetAwareTextProvider(
+            liveProvider,
+            new FakeAITextProvider(),
+            reserveBudgetUseCase,
+            circuitBreaker,
+            settleReservationUseCase,
+            cancelReservationUseCase,
+            logger,
+          );
         }
         const apiKey = config.ai.openaiApiKey;
         const model = config.ai.openaiModel;

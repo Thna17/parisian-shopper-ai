@@ -24,6 +24,9 @@ export interface AIConfig {
   openaiApiKey?: string;
   openaiModel?: string;
   baseUrl?: string;
+  deepseekApiKey?: string;
+  deepseekModel?: string;
+  deepseekBaseUrl?: string;
   requestTimeoutMs: number;
   attemptStaleAfterMs: number;
   maxRetries: number;
@@ -178,6 +181,12 @@ export class AppConfigService {
     const openaiApiKey = this.config.get('OPENAI_API_KEY', { infer: true });
     const openaiModel = this.config.get('OPENAI_MODEL', { infer: true });
     const baseUrl = this.config.get('AI_BASE_URL', { infer: true });
+    const deepseekApiKey =
+      this.config.get('DEEPSEEK_API_KEY', { infer: true }) ?? openaiApiKey;
+    const deepseekModel =
+      this.config.get('DEEPSEEK_MODEL', { infer: true }) ?? 'deepseek-chat';
+    const deepseekBaseUrl =
+      this.config.get('DEEPSEEK_BASE_URL', { infer: true }) ?? 'https://api.deepseek.com';
     return {
       provider: this.config.get('AI_PROVIDER', { infer: true }),
       requestTimeoutMs: this.config.get('AI_REQUEST_TIMEOUT_MS', { infer: true }),
@@ -186,6 +195,9 @@ export class AppConfigService {
       ...(openaiApiKey === undefined ? {} : { openaiApiKey }),
       ...(openaiModel === undefined ? {} : { openaiModel }),
       ...(baseUrl === undefined ? {} : { baseUrl }),
+      ...(deepseekApiKey === undefined ? {} : { deepseekApiKey }),
+      ...(deepseekModel === undefined ? {} : { deepseekModel }),
+      ...(deepseekBaseUrl === undefined ? {} : { deepseekBaseUrl }),
     };
   }
 

@@ -68,12 +68,18 @@ export const environmentSchema = z
       .string()
       .min(16)
       .default('parisian-shopper-four-eyes-secret-production-key'),
-    AI_PROVIDER: z.enum(['fake', 'openai', 'codex_cli']).default('fake'),
+    AI_PROVIDER: z.enum(['fake', 'openai', 'codex_cli', 'deepseek']).default('fake'),
     OPENAI_API_KEY: optionalSecret,
     OPENAI_MODEL: z.preprocess(
       (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
       z.string().trim().min(1).max(200).optional(),
     ),
+    DEEPSEEK_API_KEY: optionalSecret,
+    DEEPSEEK_MODEL: z.preprocess(
+      (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+      z.string().trim().min(1).max(200).default('deepseek-chat'),
+    ),
+    DEEPSEEK_BASE_URL: optionalUrl.default('https://api.deepseek.com'),
     AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
     AI_ATTEMPT_STALE_AFTER_MS: z.coerce.number().int().min(2_000).max(300_000).default(35_000),
     AI_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
@@ -224,6 +230,19 @@ export const environmentSchema = z
         code: 'custom',
         path: ['OPENAI_MODEL'],
         message: 'OPENAI_MODEL is required when AI text generation uses OpenAI',
+      });
+    }
+
+    if (
+      environment.FEATURE_AI_TEXT_GENERATION &&
+      environment.AI_PROVIDER === 'deepseek' &&
+      environment.DEEPSEEK_API_KEY === undefined &&
+      environment.OPENAI_API_KEY === undefined
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['DEEPSEEK_API_KEY'],
+        message: 'DEEPSEEK_API_KEY is required when AI text generation uses DeepSeek',
       });
     }
 

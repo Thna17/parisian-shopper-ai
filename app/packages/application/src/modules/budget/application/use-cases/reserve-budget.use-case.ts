@@ -61,7 +61,7 @@ export class ReserveBudgetUseCase {
         enforceHardCap: true,
         maxDailyRetries: 3,
         reservationTtlSeconds: 300,
-        allowedProviders: ['openai', 'codex_cli', 'fake'],
+        allowedProviders: ['openai', 'codex_cli', 'fake', 'deepseek'],
         allowedFallbacks: ['codex_cli', 'fake'],
         createdById: input.userId ?? '00000000-0000-0000-0000-000000000000',
       });

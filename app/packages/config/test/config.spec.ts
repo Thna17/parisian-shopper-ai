@@ -61,6 +61,28 @@ describe('configuration validation', () => {
     ).toThrow(/OPENAI_API_KEY is required|OPENAI_MODEL is required/);
   });
 
+  it('requires a DeepSeek key when enabled with the DeepSeek provider', () => {
+    expect(() =>
+      validateEnvironment({
+        ...minimumEnvironment,
+        FEATURE_AI_TEXT_GENERATION: 'true',
+        AI_PROVIDER: 'deepseek',
+      }),
+    ).toThrow(/DEEPSEEK_API_KEY is required/);
+  });
+
+  it('accepts DeepSeek configuration when key is provided', () => {
+    const config = validateEnvironment({
+      ...minimumEnvironment,
+      FEATURE_AI_TEXT_GENERATION: 'true',
+      AI_PROVIDER: 'deepseek',
+      DEEPSEEK_API_KEY: 'sk-test-deepseek-key',
+    });
+    expect(config.AI_PROVIDER).toBe('deepseek');
+    expect(config.DEEPSEEK_MODEL).toBe('deepseek-chat');
+    expect(config.DEEPSEEK_BASE_URL).toBe('https://api.deepseek.com');
+  });
+
   it('does not silently use fake AI in production', () => {
     expect(() =>
       validateEnvironment({
